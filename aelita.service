@@ -1,0 +1,14 @@
+[Unit]
+Description=Aelita CI frontend
+After=network.target
+
+[Service]
+Type=simple
+User=aelita
+ExecStart=/opt/aelita/aelita /opt/aelita/config.toml
+WorkingDirectory=/opt/aelita/
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target
+
