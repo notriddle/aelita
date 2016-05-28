@@ -6,6 +6,7 @@
  */
 
 pub mod github;
+mod comments;
 
 use pipeline::{GetPipelineId, PipelineId};
 use std::cmp::Eq;

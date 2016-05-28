@@ -14,6 +14,9 @@
 # Port to listen for websockets
 listen = "localhost:6000"
 
+# User account to listen for commands on
+user = "AelitaBot"
+
 # Web address that the Github API is on; this is needed for Github Enterprise
 #host = "https://api.github.com"
 
@@ -77,15 +80,17 @@ jenkins = { token = "MY_BUILD_TOKEN" }
 
 # These are the options that can be configured for Github. If you use it,
 # remove the `github = {}` part
-#[projects.containers.github]
+#[projects.MY_PROJECT.github]
+
 # The owner of the project
 #owner = "MY_OWNER_OR_ORGANIZATON"
+
 # The project's repo. It defaults to the project's name
 #repo = "MY_PROJECT"
 
 # These are the options that can be configured for Git. If you use it,
 # remove the `git = {}` part
-#[projects.containers.git]
+#[projects.MY_PROJECT.git]
 
 # The place to download this project
 # WARNING: This is not looked up using the API, so it needs to be specified
@@ -105,7 +110,7 @@ jenkins = { token = "MY_BUILD_TOKEN" }
 
 # These are the options that can be configured for Jenkinr. If you use it,
 # remove the `jenkins = {}` part
-#[projects.containers.jenkins]
+#[projects.MY_PROJECT.jenkins]
 
 # The Jenkins job name; this defaults to the project name
 #name = "MY_PROJECT"

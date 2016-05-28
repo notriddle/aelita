@@ -192,6 +192,10 @@ impl GithubCompatibleSetup {
                 github_config.get("token"),
                 "Invalid [config.github] section: no authorization token"
             ).as_string(),
+            expect_opt!(
+                github_config.get("user"),
+                "Invalid [config.github] section: no bot username"
+            ).as_string(),
         );
         for (i, (name, def)) in projects.iter().enumerate() {
             let def = expect_opt!(
