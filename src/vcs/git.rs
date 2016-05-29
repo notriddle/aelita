@@ -152,36 +152,31 @@ impl Worker {
     ) -> Result<Commit, GitError> {
         try!(self.setup_dir(repo));
         try_cmd!(Command::new(&self.executable)
-            .arg("-C")
-            .arg(&repo.path)
+            .current_dir(&repo.path)
             .arg("fetch")
             .arg("origin")
             .arg(&repo.master_branch)
             .arg(remote)
             .output());
         try_cmd!(Command::new(&self.executable)
-            .arg("-C")
-            .arg(&repo.path)
+            .current_dir(&repo.path)
             .arg("checkout")
             .arg(format!("origin/{}", repo.master_branch))
             .output());
         try_cmd!(Command::new(&self.executable)
-            .arg("-C")
-            .arg(&repo.path)
+            .current_dir(&repo.path)
             .arg("branch")
             .arg("-f")
             .arg(&repo.staging_branch)
             .arg(format!("origin/{}", repo.master_branch))
             .output());
         try_cmd!(Command::new(&self.executable)
-            .arg("-C")
-            .arg(&repo.path)
+            .current_dir(&repo.path)
             .arg("checkout")
             .arg(&repo.staging_branch)
             .output());
         try_cmd!(Command::new(&self.executable)
-            .arg("-C")
-            .arg(&repo.path)
+            .current_dir(&repo.path)
             .arg("merge")
             .arg("--no-ff")
             .arg("-m")
@@ -189,8 +184,7 @@ impl Worker {
             .arg(&pull_commit.to_string())
             .output());
         try_cmd!(Command::new(&self.executable)
-            .arg("-C")
-            .arg(&repo.path)
+            .current_dir(&repo.path)
             .arg("push")
             .arg("-f")
             .arg("origin")
@@ -212,8 +206,7 @@ impl Worker {
     ) -> Result<(), GitError> {
         try!(self.setup_dir(repo));
         try_cmd!(Command::new(&self.executable)
-            .arg("-C")
-            .arg(&repo.path)
+            .current_dir(&repo.path)
             .arg("push")
             .arg("-f")
             .arg("origin")
@@ -228,8 +221,7 @@ impl Worker {
                 .arg(&repo.path)
                 .output());
             try_cmd!(Command::new(&self.executable)
-                .arg("-C")
-                .arg(&repo.path)
+                .current_dir(&repo.path)
                 .arg("remote")
                 .arg("add")
                 .arg("origin")
@@ -237,8 +229,7 @@ impl Worker {
                 .output());
         } else {
             try!(Command::new(&self.executable)
-                .arg("-C")
-                .arg(&repo.path)
+                .current_dir(&repo.path)
                 .arg("merge")
                 .arg("--abort")
                 .output());
