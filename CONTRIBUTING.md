@@ -17,7 +17,7 @@ Architecture
 ------------
 
   * A "pipeline" is a queue of approved pull requests,
-    and the state of one that is currently being tested. \
+    and the state of one that is currently being tested.
     ![Each pull request, to be tested,
     gets merged, tested, then finally master is fast-forwarded to the
     aforementioned merge commit]
@@ -32,7 +32,7 @@ Architecture
     as does the Git backend itself.
     Jenkins, in contrast, associates each pipeline with a job.
   * This data structure is set up by main based on the contents of a config
-    file. \
+    file.
     ![Pipelines are owned by the main thread directly, as are the workers.
     Pipelines borrow the corresponding workers]
     (https://raw.githubusercontent.com/AelitaBot/aelita/0a4f867052fd0464855620570d65688ec06df8cc/ownership.png)
