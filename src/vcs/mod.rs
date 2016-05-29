@@ -22,7 +22,8 @@ pub enum Event<C: Commit> {
 }
 
 /// A reviewable changeset
-pub trait Commit: Clone + Debug + Display + Eq + FromStr + Into<String> + PartialEq + Send {
+pub trait Commit: Clone + Debug + Display + Eq + FromStr + Into<String> +
+                  PartialEq + Send {
     // This trait intentionally defines no methods of its own
 }
 

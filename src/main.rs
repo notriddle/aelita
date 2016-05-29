@@ -105,13 +105,19 @@ fn main() {
     }
 }
 
-fn run_workers<S: CompatibleSetup>(config: &toml::Table, config_projects: &toml::Table) -> !
-    where <<S as CompatibleSetup>::C as FromStr>::Err: Error,
+fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
+    where S: CompatibleSetup,
+          <<S as CompatibleSetup>::C as FromStr>::Err: Error,
           <<S as CompatibleSetup>::P as FromStr>::Err: Error
 {
-    let mut db = db::sqlite::SqliteDb::open(config.get("db").map(|file| file.as_string()).unwrap_or_else(|| "db.sqlite".to_owned())).expect("open up db");
+    let mut db = db::sqlite::SqliteDb::open(
+        config.get("db")
+            .map(|file| file.as_string())
+            .unwrap_or_else(|| "db.sqlite".to_owned())
+    ).expect("open up db");
     let workers = S::setup_workers(config, config_projects);
-    let (mut pipelines, cis, uis, vcss) = workers.start(config, config_projects);
+    let (mut pipelines, cis, uis, vcss) =
+        workers.start(config, config_projects);
     use std::sync::mpsc::{Select, Handle};
     debug!(
         "Created {} pipelines, {} CIs, {} UIs, and {} VCSs",
@@ -168,14 +174,26 @@ fn run_workers<S: CompatibleSetup>(config: &toml::Table, config_projects: &toml:
 }
 
 struct GithubCompatibleSetup {
-    github: Option<WorkerThread<ui::Event<git::Commit, github::Pr>, ui::Message<github::Pr>>>,
-    jenkins: Option<WorkerThread<ci::Event<git::Commit>, ci::Message<git::Commit>>>,
-    git: Option<WorkerThread<vcs::Event<git::Commit>, vcs::Message<git::Commit>>>,
+    github: Option<WorkerThread<
+        ui::Event<git::Commit, github::Pr>,
+        ui::Message<github::Pr>,
+    >>,
+    jenkins: Option<WorkerThread<
+        ci::Event<git::Commit>,
+        ci::Message<git::Commit>,
+    >>,
+    git: Option<WorkerThread<
+        vcs::Event<git::Commit>,
+        vcs::Message<git::Commit>,
+    >>,
 }
 
 impl GithubCompatibleSetup {
 
-    fn setup_github(config: &toml::Table, projects: &toml::Table) -> Option<github::Worker> {
+    fn setup_github(
+        config: &toml::Table,
+        projects: &toml::Table,
+    ) -> Option<github::Worker> {
         let github_config = try_opt!(config.get("github").map(|github_config| {
             expect_opt!(
                 github_config.as_table(),
@@ -187,7 +205,9 @@ impl GithubCompatibleSetup {
                 github_config.get("listen"),
                 "Invalid [config.github] section: no webhook listen address"
             ).as_string(),
-            github_config.get("host").map(|x|x.as_string()).unwrap_or_else(|| "https://api.github.com".to_owned()),
+            github_config.get("host")
+                .map(|x|x.as_string())
+                .unwrap_or_else(|| "https://api.github.com".to_owned()),
             expect_opt!(
                 github_config.get("token"),
                 "Invalid [config.github] section: no authorization token"
@@ -203,14 +223,18 @@ impl GithubCompatibleSetup {
                 "[project] declarations must be tables"
             );
             if let Some(github_def) = def.get("github").map(|github_def| {
-                expect_opt!(github_def.as_table(), "[project.github] must be a table")
+                expect_opt!(
+                    github_def.as_table(),
+                    "[project.github] must be a table"
+                )
             }) {
                 github.add_pipeline(PipelineId(i as i32), github::Repo{
                     owner: github_def.get("owner")
                         .unwrap_or_else(|| {
                             expect_opt!(
                                 github_config.get("owner"),
-                                "No [config.github.owner] or [project.github.owner]"
+                                "No [config.github.owner] or
+                                [project.github.owner]"
                             )
                         })
                         .as_string(),
@@ -222,17 +246,23 @@ impl GithubCompatibleSetup {
         Some(github)
     }
 
-    fn setup_jenkins(config: &toml::Table, config_projects: &toml::Table) -> Option<jenkins::Worker<git::Commit>> {
-        let jenkins_config = try_opt!(config.get("jenkins").map(|jenkins_config| {
-            expect_opt!(
-                jenkins_config.as_table(),
-                "Invalid [config.jenkins] section: must be a table"
-            )
-        }));
+    fn setup_jenkins(
+        config: &toml::Table,
+        config_projects: &toml::Table,
+    ) -> Option<jenkins::Worker<git::Commit>> {
+        let jenkins_config = try_opt!(
+            config.get("jenkins")
+                .map(|jenkins_config| {
+                    expect_opt!(
+                        jenkins_config.as_table(),
+                        "Invalid [config.jenkins] section: must be a table"
+                    )
+                })
+        );
         let mut jenkins = jenkins::Worker::new(
             expect_opt!(
                 jenkins_config.get("listen"),
-                "Invalid [config.jenkins] section: no notification listen address"
+                "Invalid [config.jenkins] section: no listen address"
             ).as_string(),
             expect_opt!(
                 jenkins_config.get("host"),
@@ -251,14 +281,17 @@ impl GithubCompatibleSetup {
                 "[project] declarations must be tables"
             );
             if let Some(jenkins_def) = def.get("jenkins").map(|jenkins_def| {
-                expect_opt!(jenkins_def.as_table(), "[project.jenkins] must be a table")
+                expect_opt!(
+                    jenkins_def.as_table(),
+                    "[project.jenkins] must be a table"
+                )
             }) {
                 jenkins.add_pipeline(PipelineId(i as i32), jenkins::Job{
                     name: jenkins_def.get("job").map(|r| r.as_string())
                         .unwrap_or_else(|| name.to_owned()),
                     token: expect_opt!(
                         jenkins_def.get("token"),
-                        "Invalid [project.jenkins] subsection: no token specified"
+                        "Invalid [project.jenkins]: no token specified"
                     ).as_string(),
                 });
             }
@@ -266,7 +299,10 @@ impl GithubCompatibleSetup {
         Some(jenkins)
     }
 
-    fn setup_git(config: &toml::Table, config_projects: &toml::Table) -> Option<git::Worker> {
+    fn setup_git(
+        config: &toml::Table,
+        config_projects: &toml::Table,
+    ) -> Option<git::Worker> {
         let git_config = config.get("git").map(|git_config| {
             expect_opt!(
                 git_config.as_table(),
@@ -320,21 +356,36 @@ impl GithubCompatibleSetup {
                     .and_then(|git_def| git_def.get("origin"))
                     .map(|o| o.as_string())
                     .unwrap_or_else(|| {
-                        let gdo = github_def.and_then(|github_def| github_def.get("owner"));
-                        let gco = github_config.and_then(|github_config| github_config.get("owner"));
+                        let gdo = github_def.and_then(
+                            |github_def| github_def.get("owner")
+                        );
+                        let gco = github_config.and_then(
+                            |github_config| github_config.get("owner")
+                        );
                         let owner = gdo.unwrap_or_else(|| expect_opt!(
-                            gco, "Invalid [project.git] section: no origin, and cannot infer from GitHub settings"
+                            gco,
+                            "Invalid [project.git] section: no origin"
                         ));
-                        let gdr = github_def.and_then(|github_def| github_def.get("repo"));
-                        let gcr = github_config.and_then(|github_config| github_config.get("repo"));
-                        let repo = gdr.and(gcr).map(|r| r.as_string()).unwrap_or_else(|| name.to_owned());
+                        let gdr = github_def.and_then(
+                            |github_def| github_def.get("repo")
+                        );
+                        let gcr = github_config.and_then(
+                            |github_config| github_config.get("repo")
+                        );
+                        let repo = gdr.and(gcr)
+                            .map(|r| r.as_string())
+                            .unwrap_or_else(|| name.to_owned());
                         format!("git@github.com:{}/{}.git", owner, repo)
                     }),
                 master_branch: git_def
-                    .and_then(|git_def| git_def.get("master_branch").map(|m| m.as_string()))
+                    .and_then(|git_def| {
+                        git_def.get("master_branch").map(|m| m.as_string())
+                    })
                     .unwrap_or_else(|| "master".to_owned()),
                 staging_branch: git_def
-                    .and_then(|git_def| git_def.get("staging_branch").map(|m| m.as_string()))
+                    .and_then(|git_def| {
+                        git_def.get("staging_branch").map(|m| m.as_string())
+                    })
                     .unwrap_or_else(|| "staging".to_owned()),
             });
         }
@@ -346,18 +397,34 @@ impl GithubCompatibleSetup {
 impl CompatibleSetup for GithubCompatibleSetup {
     type C = git::Commit;
     type P = github::Pr;
-    fn setup_workers(config: &toml::Table, config_projects: &toml::Table) -> Self {
+    fn setup_workers(config: &toml::Table, projects: &toml::Table) -> Self {
         GithubCompatibleSetup{
-            github: GithubCompatibleSetup::setup_github(config, config_projects).map(|w| WorkerThread::start(w)),
-            git: GithubCompatibleSetup::setup_git(config, config_projects).map(|w| WorkerThread::start(w)),
-            jenkins: GithubCompatibleSetup::setup_jenkins(config, config_projects).map(|w| WorkerThread::start(w)),
+            github: GithubCompatibleSetup::setup_github(config, projects)
+                .map(|w| WorkerThread::start(w)),
+            git: GithubCompatibleSetup::setup_git(config, projects)
+                .map(|w| WorkerThread::start(w)),
+            jenkins: GithubCompatibleSetup::setup_jenkins(config, projects)
+                .map(|w| WorkerThread::start(w)),
         }
     }
     fn start<'a>(&'a self, _config: &toml::Table, projects: &toml::Table)
         -> (
-            Vec<Pipeline<'a, Self::C, Self::P, WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>, WorkerThread<ui::Event<Self::C, Self::P>, ui::Message<Self::P>>, WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>>>,
+            Vec<Pipeline<
+                'a,
+                Self::C,
+                Self::P,
+                WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>,
+                WorkerThread<
+                    ui::Event<Self::C, Self::P>,
+                    ui::Message<Self::P>
+                >,
+                WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>
+            >>,
             Vec<&'a WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>>,
-            Vec<&'a WorkerThread<ui::Event<Self::C, Self::P>, ui::Message<Self::P>>>,
+            Vec<&'a WorkerThread<
+                ui::Event<Self::C, Self::P>,
+                ui::Message<Self::P>,
+            >>,
             Vec<&'a WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>>,
         )
     {
@@ -409,9 +476,22 @@ trait CompatibleSetup {
     fn setup_workers(config: &toml::Table, projects: &toml::Table) -> Self;
     fn start<'a>(&'a self, config: &toml::Table, projects: &toml::Table)
         -> (
-            Vec<Pipeline<'a, Self::C, Self::P, WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>, WorkerThread<ui::Event<Self::C, Self::P>, ui::Message<Self::P>>, WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>>>,
+            Vec<Pipeline<
+                'a,
+                Self::C,
+                Self::P,
+                WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>,
+                WorkerThread<
+                    ui::Event<Self::C, Self::P>,
+                    ui::Message<Self::P>,
+                >,
+                WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>
+            >>,
             Vec<&'a WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>>,
-            Vec<&'a WorkerThread<ui::Event<Self::C, Self::P>, ui::Message<Self::P>>>,
+            Vec<&'a WorkerThread<
+                ui::Event<Self::C, Self::P>,
+                ui::Message<Self::P>,
+            >>,
             Vec<&'a WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>>,
         );
 }

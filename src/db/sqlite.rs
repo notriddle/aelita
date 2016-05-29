@@ -65,10 +65,17 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
             INSERT INTO queue (pr, pipeline_id, pull_commit, message)
             VALUES (?, ?, ?, ?);
         "###;
-        self.conn.execute(sql, &[&pr.into(), &pipeline_id.0, &commit.into(), &message])
-            .expect("Push-to-queue");
+        self.conn.execute(sql, &[
+            &pr.into(),
+            &pipeline_id.0,
+            &commit.into(),
+            &message,
+        ]).expect("Push-to-queue");
     }
-    fn pop_queue(&mut self, pipeline_id: PipelineId) -> Option<QueueEntry<C, P>> {
+    fn pop_queue(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Option<QueueEntry<C, P>> {
         let trans = self.conn
             .transaction()
             .expect("Start pop-from-queue transaction");
@@ -126,7 +133,10 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
             &canceled,
         ]).expect("Put running");
     }
-    fn take_running(&mut self, pipeline_id: PipelineId) -> Option<RunningEntry<C, P>> {
+    fn take_running(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Option<RunningEntry<C, P>> {
         let trans = self.conn.transaction()
             .expect("Start take-running transaction");
         let sql = r###"
@@ -140,8 +150,11 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
             let mut rows = stmt
                 .query_map(&[&pipeline_id.0], |row| RunningEntry {
                     pr: P::from_str(&row.get::<_, String>(0)[..]).unwrap(),
-                    pull_commit: C::from_str(&row.get::<_, String>(1)[..]).unwrap(),
-                    merge_commit: row.get::<_, Option<String>>(2).map(|v| C::from_str(&v).unwrap()),
+                    pull_commit: C::from_str(&row.get::<_, String>(1)[..])
+                        .unwrap(),
+                    merge_commit: row.get::<_, Option<String>>(2).map(
+                        |v| C::from_str(&v).unwrap()
+                    ),
                     message: row.get(3),
                     canceled: row.get(4),
                 }).expect("Get running entry");
@@ -154,7 +167,10 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
         trans.commit().expect("Commit take-running transaction");
         entry
     }
-    fn peek_running(&mut self, pipeline_id: PipelineId) -> Option<RunningEntry<C, P>> {
+    fn peek_running(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Option<RunningEntry<C, P>> {
         let sql = r###"
             SELECT pr, pull_commit, merge_commit, message, canceled
             FROM running
@@ -165,8 +181,11 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
         let mut rows = stmt
             .query_map(&[&pipeline_id.0], |row| RunningEntry {
                 pr: P::from_str(&row.get::<_, String>(0)[..]).unwrap(),
-                pull_commit: C::from_str(&row.get::<_, String>(1)[..]).unwrap(),
-                merge_commit: row.get::<_, Option<String>>(2).map(|v| C::from_str(&v).unwrap()),
+                pull_commit: C::from_str(&row.get::<_, String>(1)[..])
+                    .unwrap(),
+                merge_commit: row.get::<_, Option<String>>(2).map(
+                    |v| C::from_str(&v).unwrap()
+                ),
                 message: row.get(3),
                 canceled: row.get(4),
             })

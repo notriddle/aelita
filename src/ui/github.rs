@@ -64,7 +64,7 @@ impl Worker {
         }
     }
     pub fn add_pipeline(&mut self, pipeline_id: PipelineId, repo: Repo) {
-        let teams_with_write = if self.repo_is_org(&repo).expect("Check if team") {
+        let teams_with_write = if self.repo_is_org(&repo).expect("if org") {
             Some(self.get_all_teams_with_write(&repo).expect("Get team info"))
         } else {
             None
@@ -182,7 +182,8 @@ impl Worker {
         &mut self,
         send_event: Sender<ui::Event<Commit, Pr>>,
     ) {
-        let mut listener = HttpListener::new(&self.listen[..]).expect("webhook");
+        let mut listener = HttpListener::new(&self.listen[..])
+            .expect("webhook");
         while let Ok(mut stream) = listener.accept() {
             let addr = stream.peer_addr()
                 .expect("webhook client address");
@@ -221,7 +222,10 @@ impl Worker {
                 if let Ok(desc) = json_from_reader::<_, CommentDesc>(req) {
                     *res.status_mut() = StatusCode::NoContent;
                     if let Err(e) = res.send(&[]) {
-                        warn!("Failed to send response to Github comment: {:?}", e);
+                        warn!(
+                            "Failed to send response to Github comment: {:?}",
+                            e,
+                        );
                     }
                     if !desc.comment.body.contains(&self.user_ident) {
                         info!("Comment does not mention me; do nothing");
@@ -237,7 +241,10 @@ impl Worker {
                     warn!("Got invalid comment");
                     *res.status_mut() = StatusCode::BadRequest;
                     if let Err(e) = res.send(&[]) {
-                        warn!("Failed to send response to Github bad comment: {:?}", e);
+                        warn!(
+                            "Failed to send response to bad comment: {:?}",
+                            e,
+                        );
                     }
                 }
             }
@@ -256,7 +263,10 @@ impl Worker {
             e => {
                 *res.status_mut() = StatusCode::BadRequest;
                 if let Err(e) = res.send(&[]) {
-                    warn!("Failed to send response to Github unknown: {:?}", e);
+                    warn!(
+                        "Failed to send response to Github unknown: {:?}",
+                        e,
+                    );
                 }
                 warn!(
                     "Got Unknown Event {}",
@@ -287,14 +297,23 @@ impl Worker {
             }
         };
         let user = &desc.comment.user.login;
-        let allowed = self.user_has_write(user, &repo, repo_config).unwrap_or_else(|e| {
-            warn!("Failed to check if {} has permission: {:?}", user, e);
-            false
-        });
+        let body = &desc.comment.body;
+        let allowed = self.user_has_write(user, &repo, repo_config)
+            .unwrap_or_else(|e| {
+                warn!("Failed to check if {} has permission: {:?}", user, e);
+                false
+            });
         if !allowed {
             info!("Got mentioned by not-permitted user");
-        } else if let Some(command) = comments::parse(&desc.comment.body, user) {
-            self.handle_comment_command(send_event, command, &desc.issue, &repo, repo_config, &pr);
+        } else if let Some(command) = comments::parse(&body, user) {
+            self.handle_comment_command(
+                send_event,
+                command,
+                &desc.issue,
+                &repo,
+                repo_config,
+                &pr,
+            );
         } else {
             info!("Pull request comment is not a command");
         }
@@ -311,7 +330,14 @@ impl Worker {
     ) {
         match command {
             comments::Command::Approved(user) => {
-                self.handle_approved_pr(send_event, issue, repo, repo_config, pr, user);
+                self.handle_approved_pr(
+                    send_event,
+                    issue,
+                    repo,
+                    repo_config,
+                    pr,
+                    user,
+                );
             }
             comments::Command::Canceled => {
                 self.handle_canceled_pr(send_event, repo_config, pr);
@@ -375,7 +401,8 @@ impl Worker {
     ) {
         match msg {
             ui::Message::SendResult(pipeline_id, pr, status) => {
-                if let Err(e) = self.send_result_to_pr(pipeline_id, pr, status) {
+                let result = self.send_result_to_pr(pipeline_id, pr, status);
+                if let Err(e) = result {
                     warn!("Failed to send {:?} to pr {}: {:?}", status, pr, e)
                 }
             }
@@ -454,7 +481,8 @@ impl Worker {
                 ui::Status::Success => "Success",
                 ui::Status::Failure => "Build failed",
                 ui::Status::Unmergeable => "Merge conflict!",
-                ui::Status::Unmoveable => "Internal error: fast-forward master",
+                ui::Status::Unmoveable =>
+                    "Internal error while fast-forward master",
             }.to_owned(),
         };
         let resp = try!(self.authed_request(Method::Post, &url)
@@ -526,7 +554,10 @@ impl Worker {
                 "User" => false,
                 "Organization" => true,
                 _ => {
-                    warn!("Unknown owner type: {}", repo_desc.owner.owner_type);
+                    warn!(
+                        "Unknown owner type: {}",
+                        repo_desc.owner.owner_type,
+                    );
                     false
                 }
             })
@@ -555,7 +586,10 @@ impl Worker {
                     }
                     "pull" => {}
                     _ => {
-                        warn!("Got unknown team permission type: {}", team.permission);
+                        warn!(
+                            "Got unknown team permission type: {}",
+                            team.permission,
+                        );
                     }
                 }
             }
@@ -570,7 +604,10 @@ impl Worker {
         url: U
     ) -> RequestBuilder {
         let mut headers = Headers::new();
-        headers.set_raw("Accept", vec![b"application/vnd.github.v3+json".to_vec()]);
+        headers.set_raw(
+            "Accept",
+            vec![b"application/vnd.github.v3+json".to_vec()],
+        );
         headers.set_raw("Authorization", vec![self.authorization.clone()]);
         headers.set_raw("User-Agent", vec![b"aelita (hyper/0.9)".to_vec()]);
         self.client.request(method, url)

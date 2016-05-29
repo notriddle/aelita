@@ -35,7 +35,8 @@ pub enum Status {
 }
 
 /// A series of reviewable changesets and other messages
-pub trait Pr: Clone + Debug + Display + Eq + FromStr + Into<String> + PartialEq + Send {
+pub trait Pr: Clone + Debug + Display + Eq + FromStr + Into<String> +
+              PartialEq + Send {
     fn remote(&self) -> String;
 }
 

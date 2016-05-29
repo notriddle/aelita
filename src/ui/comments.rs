@@ -5,9 +5,12 @@
 use regex::Regex;
 
 lazy_static!{
-    static ref REVIEW_BEHALF: Regex = Regex::new(r#"\br=(\w+)\b"#).expect("r= is a valid regex");
-    static ref REVIEW_SELF: Regex = Regex::new(r#"\br\+(\W|$)"#).expect("r+ is a valid regex");
-    static ref CANCEL_SELF: Regex = Regex::new(r#"\br-(\W|$)"#).expect("r- is a valid regex");
+    static ref REVIEW_BEHALF: Regex = Regex::new(r#"\br=(\w+)\b"#)
+        .expect("r= is a valid regex");
+    static ref REVIEW_SELF: Regex = Regex::new(r#"\br\+(\W|$)"#)
+        .expect("r+ is a valid regex");
+    static ref CANCEL_SELF: Regex = Regex::new(r#"\br-(\W|$)"#)
+        .expect("r- is a valid regex");
 }
 
 fn parse_approved_behalf(body: &str) -> Option<&str> {
@@ -50,7 +53,10 @@ mod test {
         assert_eq!(parse("r+", "luser"), Some(Command::Approved("luser")));
     }
     #[test] fn test_comment_body_on_behalf() {
-        assert_eq!(parse("r=genius", "luser"), Some(Command::Approved("genius")));
+        assert_eq!(
+            parse("r=genius", "luser"),
+            Some(Command::Approved("genius"))
+        );
     }
     #[test] fn test_comment_cancel() {
         assert_eq!(parse("r-", "luser"), Some(Command::Canceled));
@@ -71,10 +77,16 @@ mod test {
         assert_eq!(parse("r+a=q", "luser"), None);
     }
     #[test] fn test_comment_approved_space_back() {
-        assert_eq!(parse("r+ is not a license to kill", "luser"), Some(Command::Approved("luser")));
+        assert_eq!(
+            parse("r+ is not a license to kill", "luser"),
+            Some(Command::Approved("luser"))
+        );
     }
     #[test] fn test_comment_approved_behalf_word_boundary_back() {
-        assert_eq!(parse("r=genius, thanks!", "luser"), Some(Command::Approved("genius")));
+        assert_eq!(
+            parse("r=genius, thanks!", "luser"),
+            Some(Command::Approved("genius"))
+        );
     }
     #[test] fn test_comment_approved_behalf_empty() {
         assert_eq!(parse("r= ", "luser"), None);

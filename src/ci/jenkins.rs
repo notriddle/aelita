@@ -60,7 +60,9 @@ impl<C: Commit + 'static> Clone for Worker<C> {
     }
 }
 
-impl<C: Commit + 'static> pipeline::Worker<ci::Event<C>, ci::Message<C>> for Worker<C> {
+impl<C> pipeline::Worker<ci::Event<C>, ci::Message<C>> for Worker<C>
+    where C: Commit + 'static
+{
     fn run(
         &mut self,
         recv_msg: Receiver<ci::Message<C>>,

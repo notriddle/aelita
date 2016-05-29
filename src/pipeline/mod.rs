@@ -40,7 +40,8 @@ pub trait Ci<C: Commit> {
 
 impl<C: Commit> Ci<C> for WorkerThread<ci::Event<C>, ci::Message<C>> {
     fn start_build(&self, pipeline_id: PipelineId, commit: C) {
-        self.send_msg.send(ci::Message::StartBuild(pipeline_id, commit)).unwrap();
+        self.send_msg.send(ci::Message::StartBuild(pipeline_id, commit))
+            .unwrap();
     }
 }
 
@@ -48,23 +49,41 @@ pub trait Ui<C: Commit, P: Pr> {
     fn send_result(&self, pipeline_id: PipelineId, pr: P, status: ui::Status);
 }
 
-impl<C: Commit, P: Pr> Ui<C, P> for WorkerThread<ui::Event<C, P>, ui::Message<P>> {
+impl<C, P> Ui<C, P> for WorkerThread<ui::Event<C, P>, ui::Message<P>>
+where C: Commit,
+      P: Pr
+{
     fn send_result(&self, pipeline_id: PipelineId, pr: P, status: ui::Status) {
-        self.send_msg.send(ui::Message::SendResult(pipeline_id, pr, status)).unwrap();
+        self.send_msg.send(ui::Message::SendResult(pipeline_id, pr, status))
+            .unwrap();
     }
 }
 
 pub trait Vcs<C: Commit> {
-    fn merge_to_staging(&self, pipeline_id: PipelineId, pull_commit: C, message: String, remote: String);
-    fn move_staging_to_master(&self, pipeline_id: PipelineId, merge_commit: C);
+    fn merge_to_staging(&self, PipelineId, C, String, String);
+    fn move_staging_to_master(&self, PipelineId, C);
 }
 
 impl<C: Commit> Vcs<C> for WorkerThread<vcs::Event<C>, vcs::Message<C>> {
-    fn merge_to_staging(&self, pipeline_id: PipelineId, pull_commit: C, message: String, remote: String) {
-        self.send_msg.send(vcs::Message::MergeToStaging(pipeline_id, pull_commit, message, remote)).unwrap();
+    fn merge_to_staging(
+        &self,
+        pipeline_id: PipelineId,
+        pull_commit: C,
+        message: String,
+        remote: String
+    ) {
+        self.send_msg.send(vcs::Message::MergeToStaging(
+            pipeline_id, pull_commit, message, remote
+        )).unwrap();
     }
-    fn move_staging_to_master(&self, pipeline_id: PipelineId, merge_commit: C) {
-        self.send_msg.send(vcs::Message::MoveStagingToMaster(pipeline_id, merge_commit)).unwrap();
+    fn move_staging_to_master(
+        &self,
+        pipeline_id: PipelineId,
+        merge_commit: C
+    ) {
+        self.send_msg.send(vcs::Message::MoveStagingToMaster(
+            pipeline_id, merge_commit
+        )).unwrap();
     }
 }
 
@@ -125,7 +144,12 @@ where C: Commit + 'static,
       U: Ui<C, P> + 'cntx,
       V: Vcs<C> + 'cntx
 {
-    pub fn new(id: PipelineId, ci: &'cntx B, ui: &'cntx U, vcs: &'cntx V) -> Self {
+    pub fn new(
+        id: PipelineId,
+        ci: &'cntx B,
+        ui: &'cntx U,
+        vcs: &'cntx V,
+    ) -> Self {
         Pipeline {
             _commit: PhantomData,
             _pr: PhantomData,
@@ -135,9 +159,18 @@ where C: Commit + 'static,
             vcs: vcs,
         }
     }
-    pub fn handle_event<D: Db<C, P>>(&mut self, db: &mut D, event: Event<C, P>) {
+    pub fn handle_event<D: Db<C, P>>(
+        &mut self,
+        db: &mut D,
+        event: Event<C, P>,
+    ) {
         match event {
-            Event::UiEvent(ui::Event::Approved(pipeline_id, pr, commit, message)) => {
+            Event::UiEvent(ui::Event::Approved(
+                pipeline_id,
+                pr,
+                commit,
+                message,
+            )) => {
                 assert_eq!(&pipeline_id, &self.id);
                 db.cancel_by_pr(self.id, &pr);
                 db.push_queue(self.id, QueueEntry{
@@ -180,7 +213,10 @@ where C: Commit + 'static,
                     panic!("VCS merged event with no queued PR");
                 }
             },
-            Event::VcsEvent(vcs::Event::FailedMergeToStaging(pipeline_id, pull_commit)) => {
+            Event::VcsEvent(vcs::Event::FailedMergeToStaging(
+                pipeline_id,
+                pull_commit,
+            )) => {
                 assert_eq!(&pipeline_id, &self.id);
                 if let Some(running) = db.take_running(self.id) {
                     if running.pull_commit != pull_commit {
@@ -200,12 +236,15 @@ where C: Commit + 'static,
                     panic!("VCS merged event with no queued PR");
                 }
             },
-            Event::CiEvent(ci::Event::BuildFailed(pipeline_id, built_commit)) => {
+            Event::CiEvent(ci::Event::BuildFailed(
+                pipeline_id,
+                built_commit,
+            )) => {
                 assert_eq!(&pipeline_id, &self.id);
                 if let Some(running) = db.take_running(self.id) {
                     if let Some(merged_commit) = running.merge_commit {
                         if merged_commit != built_commit {
-                            panic!("Finished building a different commit")
+                            panic!("Finished building a different commit");
                         } else if running.canceled {
                             // Drop it on the floor. It's canceled.
                         } else {
@@ -222,7 +261,10 @@ where C: Commit + 'static,
                     panic!("VCS merged event with no queued PR");
                 }
             },
-            Event::CiEvent(ci::Event::BuildSucceeded(pipeline_id, built_commit)) => {
+            Event::CiEvent(ci::Event::BuildSucceeded(
+                pipeline_id,
+                built_commit,
+            )) => {
                 assert_eq!(&pipeline_id, &self.id);
                 if let Some(running) = db.peek_running(self.id) {
                     if let Some(merged_commit) = running.merge_commit {
@@ -230,8 +272,12 @@ where C: Commit + 'static,
                             panic!("Finished building a different commit")
                         } else if running.canceled {
                             // Canceled; drop on the floor.
-                            let running2 = db.take_running(self.id).expect("Just peeked");
-                            assert_eq!(running2.merge_commit, Some(merged_commit));
+                            let running2 = db.take_running(self.id)
+                                .expect("Just peeked");
+                            assert_eq!(
+                                running2.merge_commit,
+                                Some(merged_commit)
+                            );
                         } else {
                             self.vcs.move_staging_to_master(
                                 self.id,
@@ -245,7 +291,10 @@ where C: Commit + 'static,
                     panic!("VCS merged event with no queued PR");
                 }
             },
-            Event::VcsEvent(vcs::Event::FailedMoveToMaster(pipeline_id, merge_commit)) => {
+            Event::VcsEvent(vcs::Event::FailedMoveToMaster(
+                pipeline_id,
+                merge_commit,
+            )) => {
                 assert_eq!(&pipeline_id, &self.id);
                 if let Some(running) = db.take_running(self.id) {
                     if let Some(running_merge_commit) = running.merge_commit {
@@ -267,7 +316,10 @@ where C: Commit + 'static,
                     panic!("VCS move event with no queued PR");
                 }
             },
-            Event::VcsEvent(vcs::Event::MovedToMaster(pipeline_id, merge_commit)) => {
+            Event::VcsEvent(vcs::Event::MovedToMaster(
+                pipeline_id,
+                merge_commit,
+            )) => {
                 assert_eq!(&pipeline_id, &self.id);
                 if let Some(running) = db.take_running(self.id) {
                     if let Some(running_merge_commit) = running.merge_commit {
@@ -458,8 +510,8 @@ impl Vcs<MemoryCommit> for RefCell<MemoryVcs> {
     ) {
         self.borrow_mut().staging = Some(pull_commit)
     }
-    fn move_staging_to_master(&self, _: PipelineId, merge_commit: MemoryCommit) {
-        self.borrow_mut().master = Some(merge_commit)
+    fn move_staging_to_master(&self, _: PipelineId, commit: MemoryCommit) {
+        self.borrow_mut().master = Some(commit)
     }
 }
 
@@ -479,7 +531,13 @@ impl Ci<MemoryCommit> for RefCell<MemoryCi> {
     }
 }
 
-fn handle_event(ui: &mut RefCell<MemoryUi>, vcs: &mut RefCell<MemoryVcs>, ci: &mut RefCell<MemoryCi>, db: &mut MemoryDb<MemoryCommit, MemoryPr>, event: Event<MemoryCommit, MemoryPr>) {
+fn handle_event(
+    ui: &mut RefCell<MemoryUi>,
+    vcs: &mut RefCell<MemoryVcs>,
+    ci: &mut RefCell<MemoryCi>,
+    db: &mut MemoryDb<MemoryCommit, MemoryPr>,
+    event: Event<MemoryCommit, MemoryPr>,
+) {
     Pipeline{
         _pr: PhantomData,
         _commit: PhantomData,

@@ -76,7 +76,9 @@ impl Worker {
         send_event: &mut Sender<vcs::Event<Commit>>
     ) {
         match msg {
-            vcs::Message::MergeToStaging(pipeline_id, pull_commit, message, remote) => {
+            vcs::Message::MergeToStaging(
+                pipeline_id, pull_commit, message, remote
+            ) => {
                 let repo = match self.repos.get(&pipeline_id) {
                     Some(repo) => repo,
                     None => {
@@ -85,7 +87,9 @@ impl Worker {
                     }
                 };
                 info!("Merging {} ...", pull_commit);
-                match self.merge_to_staging(repo, pull_commit, &message, &remote) {
+                match self.merge_to_staging(
+                    repo, pull_commit, &message, &remote
+                ) {
                     Err(e) => {
                         warn!(
                             "Failed to merge {} to staging: {:?}",

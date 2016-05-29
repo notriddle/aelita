@@ -23,7 +23,7 @@ user = "AelitaBot"
 # Global default owner account for repositories
 # This is based on the observation that most organizations and individuals who
 # deploy aelita will own all their repos. It is not required to be specified
-# here, but if it is not specified it will need to be specified for all projects
+# here, but if it is not specified it will need to be given for all projects
 owner = "MY_USER_OR_ORGANIZATON"
 
 # Personal access token; get it in the user account section on GitHub's website
