@@ -477,12 +477,12 @@ impl Worker {
         );
         let comment = PostCommentComment {
             body: match status {
-                ui::Status::InProgress => "Testing PR ...",
-                ui::Status::Success => "Success",
-                ui::Status::Failure => "Build failed",
-                ui::Status::Unmergeable => "Merge conflict!",
+                ui::Status::InProgress => ":hourglass: Testing PR ...",
+                ui::Status::Success => ":+1: Success",
+                ui::Status::Failure => ":-1: Build failed",
+                ui::Status::Unmergeable => ":x: Merge conflict!",
                 ui::Status::Unmoveable =>
-                    "Internal error while fast-forward master",
+                    ":scream: Internal error while fast-forward master",
             }.to_owned(),
         };
         let resp = try!(self.authed_request(Method::Post, &url)
