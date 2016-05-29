@@ -145,7 +145,16 @@ struct PingDesc {
 struct TeamDesc {
     slug: String,
     id: u32,
-    permission: String,
+}
+#[derive(Serialize, Deserialize)]
+struct TeamRepoDesc {
+    permissions: TeamRepoPermissions,
+}
+#[derive(Serialize, Deserialize)]
+struct TeamRepoPermissions {
+    admin: bool,
+    push: bool,
+    pull: bool,
 }
 #[derive(Deserialize, Serialize)]
 struct PrBranchDesc {
@@ -155,6 +164,11 @@ struct PrBranchDesc {
 struct PrDesc {
     number: u32,
     head: PrBranchDesc,
+}
+
+enum AcceptType {
+    Regular,
+    Repository,
 }
 
 impl pipeline::Worker<ui::Event<Commit, Pr>, ui::Message<Pr>> for Worker {
@@ -416,6 +430,7 @@ impl Worker {
         repo_config: &RepoConfig,
     ) -> Result<bool, GithubRequestError> {
         if let Some(ref teams_with_write) = repo_config.teams_with_write {
+            info!("Using teams permission check");
             let mut allowed = false;
             for team in teams_with_write {
                 if try!(self.user_is_member_of(user, *team)) {
@@ -425,6 +440,7 @@ impl Worker {
             }
             Ok(allowed)
         } else {
+            info!("Using users permission check");
             self.user_is_collaborator_for(user, repo)
         }
     }
@@ -441,7 +457,13 @@ impl Worker {
             repo.repo,
             pr
         );
-        let resp = try!(self.authed_request(Method::Get, &url).send());
+        let resp = try!(
+            self.authed_request(
+                Method::Get,
+                AcceptType::Regular,
+                &url
+            ).send()
+        );
         if !resp.status.is_success() {
             return Err(GithubRequestError::HttpStatus(resp.status))
         }
@@ -485,9 +507,10 @@ impl Worker {
                     "Internal error while fast-forward master",
             }.to_owned(),
         };
-        let resp = try!(self.authed_request(Method::Post, &url)
-            .body(&*try!(json_to_vec(&comment)))
-            .send());
+        let comment_body = try!(json_to_vec(&comment));
+        let req = self.authed_request(Method::Post, AcceptType::Regular, &url)
+            .body(&*comment_body);
+        let resp = try!(req.send());
         if !resp.status.is_success() {
             return Err(GithubRequestError::HttpStatus(resp.status))
         }
@@ -505,7 +528,13 @@ impl Worker {
             team,
             user,
         );
-        let resp = try!(self.authed_request(Method::Get, &url).send());
+        let resp = try!(
+            self.authed_request(
+                Method::Get,
+                AcceptType::Regular,
+                &url
+            ).send()
+        );
         if resp.status == StatusCode::NotFound {
             Ok(false)
         } else if resp.status.is_success() {
@@ -527,7 +556,13 @@ impl Worker {
             repo.repo,
             user,
         );
-        let resp = try!(self.authed_request(Method::Get, &url).send());
+        let resp = try!(
+            self.authed_request(
+                Method::Get,
+                AcceptType::Regular,
+                &url
+            ).send()
+        );
         if resp.status == StatusCode::NotFound {
             Ok(false)
         } else if resp.status.is_success() {
@@ -547,7 +582,13 @@ impl Worker {
             repo.owner,
             repo.repo,
         );
-        let resp = try!(self.authed_request(Method::Get, &url).send());
+        let resp = try!(
+            self.authed_request(
+                Method::Get,
+                AcceptType::Regular,
+                &url
+            ).send()
+        );
         if resp.status.is_success() {
             let repo_desc = try!(json_from_reader::<_, RepositoryDesc>(resp));
             Ok(match &repo_desc.owner.owner_type[..] {
@@ -575,22 +616,36 @@ impl Worker {
             self.host,
             repo.owner,
         );
-        let resp = try!(self.authed_request(Method::Get, &url).send());
+        let resp = try!(
+            self.authed_request(
+                Method::Get,
+                AcceptType::Regular,
+                &url
+            ).send()
+        );
         if resp.status.is_success() {
             let all_teams = try!(json_from_reader::<_, Vec<TeamDesc>>(resp));
             let mut writing_teams = HashSet::new();
             for team in all_teams {
-                match &team.permission[..] {
-                    "admin" | "push" => {
-                        writing_teams.insert(team.id);
-                    }
-                    "pull" => {}
-                    _ => {
-                        warn!(
-                            "Got unknown team permission type: {}",
-                            team.permission,
-                        );
-                    }
+                let url = format!(
+                    "{}/teams/{}/repos/{}/{}",
+                    self.host,
+                    team.id,
+                    repo.owner,
+                    repo.repo
+                );
+                let resp = try!(
+                    self.authed_request(
+                        Method::Get,
+                        AcceptType::Repository,
+                        &url
+                    ).send()
+                );
+                let team_repo = try!(json_from_reader::<_, TeamRepoDesc>(
+                    resp
+                ));
+                if team_repo.permissions.admin || team_repo.permissions.push {
+                    writing_teams.insert(team.id);
                 }
             }
             Ok(writing_teams)
@@ -601,12 +656,18 @@ impl Worker {
     fn authed_request<U: IntoUrl>(
         &self,
         method: Method,
+        accept_type: AcceptType,
         url: U
     ) -> RequestBuilder {
         let mut headers = Headers::new();
+        let accept_type: &'static [u8] = match accept_type {
+            AcceptType::Regular => b"application/vnd.github.v3+json",
+            AcceptType::Repository =>
+                b"application/vnd.github.v3.repository+json",
+        };
         headers.set_raw(
             "Accept",
-            vec![b"application/vnd.github.v3+json".to_vec()],
+            vec![accept_type.to_vec()],
         );
         headers.set_raw("Authorization", vec![self.authorization.clone()]);
         headers.set_raw("User-Agent", vec![b"aelita (hyper/0.9)".to_vec()]);
