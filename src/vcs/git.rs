@@ -25,15 +25,21 @@ pub struct Repo {
 pub struct Worker {
     repos: HashMap<PipelineId, Repo>,
     executable: String,
+    name: String,
+    email: String,
 }
 
 impl Worker {
     pub fn new(
         executable: String,
+        name: String,
+        email: String,
     ) -> Worker {
         Worker{
             repos: HashMap::new(),
             executable: executable,
+            name: name,
+            email: email,
         }
     }
     pub fn add_pipeline(&mut self, pipeline_id: PipelineId, repo: Repo) {
@@ -226,6 +232,20 @@ impl Worker {
                 .arg("add")
                 .arg("origin")
                 .arg(&repo.origin)
+                .output());
+            try_cmd!(Command::new(&self.executable)
+                .current_dir(&repo.path)
+                .arg("config")
+                .arg("--local")
+                .arg("user.name")
+                .arg(&self.name)
+                .output());
+            try_cmd!(Command::new(&self.executable)
+                .current_dir(&repo.path)
+                .arg("config")
+                .arg("--local")
+                .arg("user.email")
+                .arg(&self.email)
                 .output());
         } else {
             try!(Command::new(&self.executable)

@@ -39,6 +39,14 @@ token = "MY_PERSONAL_ACCESS_TOKEN"
 # Base directory for all git checkouts
 #path = "./cache/"
 
+# Git committer name for the merge commit
+# Defaults to the Github username
+#name = "aelita-mergebot"
+
+# Git committer email for the merge commit
+# Defaults to the Github username @github.com
+#email = "aelita-mergebot@github.com"
+
 # Jenkins configuration. Not required if you're not using jenkins
 [config.jenkins]
 

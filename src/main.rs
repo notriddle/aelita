@@ -319,7 +319,25 @@ impl GithubCompatibleSetup {
         let mut git = git::Worker::new(
             git_config.and_then(|git_config| git_config.get("executable"))
                 .map(|e| e.as_string())
-                .unwrap_or_else(|| "git".to_owned())
+                .unwrap_or_else(|| "git".to_owned()),
+            git_config
+                .and_then(|git_config| git_config.get("name"))
+                .or_else(|| {
+                    github_config.and_then(|gc| gc.get("user"))
+                })
+                .expect("Invalid [config.git] section: no name")
+                .to_string(),
+            git_config
+                .and_then(|git_config| git_config.get("email"))
+                .map(|o| o.as_string())
+                .or_else(|| {
+                    github_config.and_then(|gc| {
+                        Some(format!(
+                            "{}@github.com",
+                            try_opt!(gc.get("user")).as_string()
+                        ))
+                    })
+                }).expect("Invalid [config.git] section: no email"),
         );
         let base_path =
             git_config.and_then(|git_config| git_config.get("path"))
