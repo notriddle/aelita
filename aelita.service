@@ -5,6 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=aelita
+#Environment="RUST_LOG=aelita=debug"
 ExecStart=/opt/aelita/aelita /opt/aelita/config.toml
 WorkingDirectory=/opt/aelita/
 Restart=on-abort
