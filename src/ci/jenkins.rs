@@ -98,7 +98,6 @@ impl<C: Commit + 'static> Worker<C> {
             }
             #[derive(Deserialize, Serialize)]
             struct ResultBuildDesc {
-                name: String,
                 phase: String,
                 status: String,
                 scm: ResultBuildScmDesc,
@@ -132,7 +131,7 @@ impl<C: Commit + 'static> Worker<C> {
             let pipeline_id = {
                 let mut pipeline_id = None;
                 for (p, job) in &self.jobs {
-                    if &job.name == &desc.build.name {
+                    if &job.name == &desc.name {
                         pipeline_id = Some(p);
                         break;
                     }
@@ -142,7 +141,7 @@ impl<C: Commit + 'static> Worker<C> {
                 } else {
                     warn!(
                         "Got request for nonexistant job: {}",
-                        desc.build.name
+                        desc.name
                     );
                     continue;
                 }
