@@ -63,15 +63,18 @@ impl pipeline::Worker<vcs::Event<Commit>, vcs::Message<Commit>> for Worker {
 }
 
 macro_rules! try_cmd {
-    ($e:expr) => ({
-        let cmd = try!($e);
-        if !cmd.status.success() {
+    ($e:expr, $i:ident, $f:expr) => ({
+        let mut $i = $e;
+        $f;
+        info!("Run command: {:?}", $i);
+        let out = try!($i.output());
+        if !out.status.success() {
             return Err(GitError::Cli(
-                cmd.status,
-                String::from_utf8_lossy(&cmd.stderr).into_owned()
+                out.status,
+                String::from_utf8_lossy(&out.stderr).into_owned()
             ));
         }
-        cmd
+        out
     })
 }
 
@@ -157,45 +160,43 @@ impl Worker {
         remote: &str,
     ) -> Result<Commit, GitError> {
         try!(self.setup_dir(repo));
-        try_cmd!(Command::new(&self.executable)
-            .current_dir(&repo.path)
+        try_cmd!(Command::new(&self.executable), cmd,
+        cmd.current_dir(&repo.path)
+            .arg("fetch")
+            .arg("origin"));
+        try_cmd!(Command::new(&self.executable), cmd,
+        cmd.current_dir(&repo.path)
             .arg("fetch")
             .arg("origin")
             .arg(&repo.master_branch)
-            .arg(remote)
-            .output());
-        try_cmd!(Command::new(&self.executable)
-            .current_dir(&repo.path)
+            .arg(remote));
+        try_cmd!(Command::new(&self.executable), cmd,
+        cmd.current_dir(&repo.path)
             .arg("checkout")
-            .arg(format!("origin/{}", repo.master_branch))
-            .output());
-        try_cmd!(Command::new(&self.executable)
-            .current_dir(&repo.path)
+            .arg(format!("origin/{}", repo.master_branch)));
+        try_cmd!(Command::new(&self.executable), cmd,
+        cmd.current_dir(&repo.path)
             .arg("branch")
             .arg("-f")
             .arg(&repo.staging_branch)
-            .arg(format!("origin/{}", repo.master_branch))
-            .output());
-        try_cmd!(Command::new(&self.executable)
-            .current_dir(&repo.path)
+            .arg(format!("origin/{}", repo.master_branch)));
+        try_cmd!(Command::new(&self.executable), cmd,
+        cmd.current_dir(&repo.path)
             .arg("checkout")
-            .arg(&repo.staging_branch)
-            .output());
-        try_cmd!(Command::new(&self.executable)
-            .current_dir(&repo.path)
+            .arg(&repo.staging_branch));
+        try_cmd!(Command::new(&self.executable), cmd,
+        cmd.current_dir(&repo.path)
             .arg("merge")
             .arg("--no-ff")
             .arg("-m")
             .arg(message)
-            .arg(&pull_commit.to_string())
-            .output());
-        try_cmd!(Command::new(&self.executable)
-            .current_dir(&repo.path)
+            .arg(&pull_commit.to_string()));
+        try_cmd!(Command::new(&self.executable), cmd,
+        cmd.current_dir(&repo.path)
             .arg("push")
             .arg("-f")
             .arg("origin")
-            .arg(&repo.staging_branch)
-            .output());
+            .arg(&repo.staging_branch));
         let mut commit_string = String::new();
         try!(try!(File::open(
             Path::new(&repo.path)
@@ -211,48 +212,44 @@ impl Worker {
         merge_commit: Commit,
     ) -> Result<(), GitError> {
         try!(self.setup_dir(repo));
-        try_cmd!(Command::new(&self.executable)
-            .current_dir(&repo.path)
+        try_cmd!(Command::new(&self.executable), cmd,
+        cmd.current_dir(&repo.path)
             .arg("push")
             .arg("-f")
             .arg("origin")
-            .arg(format!("{}:{}", merge_commit, &repo.master_branch))
-            .output());
+            .arg(format!("{}:{}", merge_commit, &repo.master_branch)));
         Ok(())
     }
     fn setup_dir(&self, repo: &Repo) -> Result<(), GitError> {
         if !repo.path.exists() {
-            try_cmd!(Command::new(&self.executable)
-                .arg("init")
-                .arg(&repo.path)
-                .output());
-            try_cmd!(Command::new(&self.executable)
-                .current_dir(&repo.path)
+            try_cmd!(Command::new(&self.executable), cmd,
+            cmd.arg("init")
+                .arg(&repo.path));
+            try_cmd!(Command::new(&self.executable), cmd,
+            cmd.current_dir(&repo.path)
                 .arg("remote")
                 .arg("add")
                 .arg("origin")
-                .arg(&repo.origin)
-                .output());
-            try_cmd!(Command::new(&self.executable)
-                .current_dir(&repo.path)
+                .arg(&repo.origin));
+            try_cmd!(Command::new(&self.executable), cmd,
+            cmd.current_dir(&repo.path)
                 .arg("config")
                 .arg("--local")
                 .arg("user.name")
-                .arg(&self.name)
-                .output());
-            try_cmd!(Command::new(&self.executable)
-                .current_dir(&repo.path)
+                .arg(&self.name));
+            try_cmd!(Command::new(&self.executable), cmd,
+            cmd.current_dir(&repo.path)
                 .arg("config")
                 .arg("--local")
                 .arg("user.email")
-                .arg(&self.email)
-                .output());
+                .arg(&self.email));
         } else {
-            try!(Command::new(&self.executable)
-                .current_dir(&repo.path)
-                .arg("merge")
-                .arg("--abort")
-                .output());
+            let mut cmd = Command::new(&self.executable);
+            cmd.current_dir(&repo.path)
+               .arg("merge")
+               .arg("--abort");
+            info!("Run command: {:?}", cmd);
+            try!(cmd.output());
         }
         Ok(())
     }
