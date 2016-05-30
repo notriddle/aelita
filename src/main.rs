@@ -6,6 +6,7 @@
 #![feature(custom_derive, plugin)]
 #![plugin(serde_macros)]
 
+extern crate crossbeam;
 extern crate env_logger;
 extern crate hyper;
 #[macro_use] extern crate lazy_static;

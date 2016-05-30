@@ -1,5 +1,6 @@
 // This file is released under the same terms as Rust itself.
 
+use crossbeam;
 use hyper;
 use hyper::buffer::BufReader;
 use hyper::client::{Client, IntoUrl, RequestBuilder};
@@ -19,7 +20,9 @@ use std::io::BufWriter;
 use std::num::ParseIntError;
 use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
+use std::sync::Mutex;
 use std::thread;
+use std::time;
 use ui::{self, comments};
 use vcs::git::Commit;
 
@@ -42,6 +45,7 @@ pub struct Worker {
     authorization: Vec<u8>,
     client: Client,
     user_ident: String,
+    rate_limit_until: Mutex<Option<time::SystemTime>>,
 }
 
 impl Worker {
@@ -61,6 +65,7 @@ impl Worker {
             authorization: authorization,
             user_ident: user_ident,
             client: Client::default(),
+            rate_limit_until: Mutex::new(None),
         }
     }
     pub fn add_pipeline(&mut self, pipeline_id: PipelineId, repo: Repo) {
@@ -73,19 +78,6 @@ impl Worker {
             pipeline_id: pipeline_id,
             teams_with_write: teams_with_write,
         });
-    }
-}
-
-impl Clone for Worker {
-    fn clone(&self) -> Worker {
-        Worker{
-            listen: self.listen.clone(),
-            host: self.host.clone(),
-            repos: self.repos.clone(),
-            authorization: self.authorization.clone(),
-            user_ident: self.user_ident.clone(),
-            client: Client::default(),
-        }
     }
 }
 
@@ -177,23 +169,25 @@ impl pipeline::Worker<ui::Event<Commit, Pr>, ui::Message<Pr>> for Worker {
         recv_msg: Receiver<ui::Message<Pr>>,
         mut send_event: Sender<ui::Event<Commit, Pr>>
     ) {
-        let send_event_2 = send_event.clone();
-        let mut self_2 = self.clone();
-        thread::spawn(move || {
-            self_2.run_webhook(send_event_2);
-        });
-        loop {
-            self.handle_message(
-                recv_msg.recv().expect("Pipeline went away"),
-                &mut send_event,
-            );
-        }
+        crossbeam::scope(|scope| {
+            let s2 = &*self;
+            let send_event_2 = send_event.clone();
+            scope.spawn(move || {
+                s2.run_webhook(send_event_2);
+            });
+            loop {
+                s2.handle_message(
+                    recv_msg.recv().expect("Pipeline went away"),
+                    &mut send_event,
+                );
+            }
+        })
     }
 }
 
 impl Worker {
     fn run_webhook(
-        &mut self,
+        &self,
         send_event: Sender<ui::Event<Commit, Pr>>,
     ) {
         let mut listener = HttpListener::new(&self.listen[..])
@@ -215,7 +209,7 @@ impl Worker {
     }
 
     fn handle_webhook(
-        &mut self,
+        &self,
         req: Request,
         mut res: Response,
         send_event: &Sender<ui::Event<Commit, Pr>>
@@ -291,7 +285,7 @@ impl Worker {
     }
 
     fn handle_pr_comment(
-        &mut self,
+        &self,
         send_event: &Sender<ui::Event<Commit, Pr>>,
         desc: CommentDesc,
     ) {
@@ -409,7 +403,7 @@ impl Worker {
     }
 
     fn handle_message(
-        &mut self,
+        &self,
         msg: ui::Message<Pr>,
         _: &mut Sender<ui::Event<Commit, Pr>>
     ) {
@@ -457,13 +451,13 @@ impl Worker {
             repo.repo,
             pr
         );
-        let resp = try!(
+        let resp = try!(self.retry_send(|| {
             self.authed_request(
                 Method::Get,
                 AcceptType::Regular,
                 &url
-            ).send()
-        );
+            )
+        }));
         if !resp.status.is_success() {
             return Err(GithubRequestError::HttpStatus(resp.status))
         }
@@ -508,9 +502,10 @@ impl Worker {
             }.to_owned(),
         };
         let comment_body = try!(json_to_vec(&comment));
-        let req = self.authed_request(Method::Post, AcceptType::Regular, &url)
-            .body(&*comment_body);
-        let resp = try!(req.send());
+        let resp = try!(self.retry_send(|| {
+            self.authed_request(Method::Post, AcceptType::Regular, &url)
+                .body(&*comment_body)
+        }));
         if !resp.status.is_success() {
             return Err(GithubRequestError::HttpStatus(resp.status))
         }
@@ -528,13 +523,13 @@ impl Worker {
             team,
             user,
         );
-        let resp = try!(
+        let resp = try!(self.retry_send(|| {
             self.authed_request(
                 Method::Get,
                 AcceptType::Regular,
                 &url
-            ).send()
-        );
+            )
+        }));
         if resp.status == StatusCode::NotFound {
             Ok(false)
         } else if resp.status.is_success() {
@@ -556,13 +551,13 @@ impl Worker {
             repo.repo,
             user,
         );
-        let resp = try!(
+        let resp = try!(self.retry_send(|| {
             self.authed_request(
                 Method::Get,
                 AcceptType::Regular,
                 &url
-            ).send()
-        );
+            )
+        }));
         if resp.status == StatusCode::NotFound {
             Ok(false)
         } else if resp.status.is_success() {
@@ -582,13 +577,13 @@ impl Worker {
             repo.owner,
             repo.repo,
         );
-        let resp = try!(
+        let resp = try!(self.retry_send(|| {
             self.authed_request(
                 Method::Get,
                 AcceptType::Regular,
                 &url
-            ).send()
-        );
+            )
+        }));
         if resp.status.is_success() {
             let repo_desc = try!(json_from_reader::<_, RepositoryDesc>(resp));
             Ok(match &repo_desc.owner.owner_type[..] {
@@ -616,13 +611,13 @@ impl Worker {
             self.host,
             repo.owner,
         );
-        let resp = try!(
+        let resp = try!(self.retry_send(||{
             self.authed_request(
                 Method::Get,
                 AcceptType::Regular,
                 &url
-            ).send()
-        );
+            )
+        }));
         if resp.status.is_success() {
             let all_teams = try!(json_from_reader::<_, Vec<TeamDesc>>(resp));
             let mut writing_teams = HashSet::new();
@@ -634,13 +629,13 @@ impl Worker {
                     repo.owner,
                     repo.repo
                 );
-                let resp = try!(
+                let resp = try!(self.retry_send(|| {
                     self.authed_request(
                         Method::Get,
                         AcceptType::Repository,
                         &url
-                    ).send()
-                );
+                    )
+                }));
                 let team_repo = try!(json_from_reader::<_, TeamRepoDesc>(
                     resp
                 ));
@@ -653,12 +648,12 @@ impl Worker {
             Err(GithubRequestError::HttpStatus(resp.status))
         }
     }
-    fn authed_request<U: IntoUrl>(
-        &self,
+    fn authed_request<'a, U: IntoUrl>(
+        &'a self,
         method: Method,
         accept_type: AcceptType,
         url: U
-    ) -> RequestBuilder {
+    ) -> RequestBuilder<'a> {
         let mut headers = Headers::new();
         let accept_type: &'static [u8] = match accept_type {
             AcceptType::Regular => b"application/vnd.github.v3+json",
@@ -670,9 +665,79 @@ impl Worker {
             vec![accept_type.to_vec()],
         );
         headers.set_raw("Authorization", vec![self.authorization.clone()]);
-        headers.set_raw("User-Agent", vec![b"aelita (hyper/0.9)".to_vec()]);
+        headers.set_raw("User-Agent", vec![
+            b"aelita/0.1 (https://github.com/AelitaBot/aelita)".to_vec()
+        ]);
         self.client.request(method, url)
             .headers(headers)
+    }
+    fn retry_send<'a, T: FnMut() -> RequestBuilder<'a>>(
+        &self,
+        mut f: T,
+    ) -> hyper::error::Result<hyper::client::Response> {
+        const INIT_RETRY_DELAY_MS: u64 = 500;
+        const MAX_RETRY_DELAY_SEC: u64 = 60;
+        const MIN_RATE_LIMIT_SEC: u64 = 60;
+        let mut rate_limit_until = self.rate_limit_until.lock()
+            .expect("Rate limit acquire");
+        if let Some(ref rate_limit_until) = *rate_limit_until {
+            let duration = time::SystemTime::now()
+                .duration_since(*rate_limit_until)
+                .unwrap_or(time::Duration::new(MIN_RATE_LIMIT_SEC, 0));
+            thread::sleep(duration);
+        }
+        *rate_limit_until = None;
+        let mut delay = time::Duration::from_millis(INIT_RETRY_DELAY_MS);
+        let mut result = f().send();
+        loop {
+            result = if let Err(ref e) = result {
+                if delay.as_secs() > MAX_RETRY_DELAY_SEC {
+                    warn!("HTTP send failed and gave up: {:?}", e);
+                    break;
+                } else {
+                    warn!("HTTP send failed (retry in {:?}): {:?}", delay, e);
+                    thread::sleep(delay);
+                    delay = delay * 2;
+                    f().send()
+                }
+            } else {
+                break;
+            }
+        }
+        if let Ok(ref result) = result {
+            let r = result.headers.get_raw("X-RateLimit-Remaining");
+            let delayed = if let Some(r) = r {
+                let remaining =
+                    String::from_utf8_lossy(&r[0])
+                    .parse::<u64>()
+                    .expect("Github to give me a number here");
+                remaining < 2 // let the other thread send a request
+            } else {
+                false
+            };
+            if delayed {
+                let until = result.headers.get_raw("X-RateLimit-Reset");
+                if let Some(until) = until {
+                    let until = String::from_utf8_lossy(&until[0])
+                        .parse::<u64>()
+                        .unwrap_or(0);
+                    let until_unix = time::Duration::new(until, 0);
+                    let now_unix = (
+                        time::SystemTime::now()
+                            .duration_since(time::UNIX_EPOCH)
+                    ).expect("It's after the unix epoch");
+                    let until_delay = if now_unix > until_unix {
+                        time::Duration::new(MIN_RATE_LIMIT_SEC, 0)
+                    } else {
+                        until_unix - now_unix
+                    };
+                    *rate_limit_until = Some(
+                        time::SystemTime::now() + until_delay
+                    );
+                }
+            }
+        }
+        result
     }
 }
 
