@@ -326,7 +326,7 @@ impl GithubCompatibleSetup {
                     github_config.and_then(|gc| gc.get("user"))
                 })
                 .expect("Invalid [config.git] section: no name")
-                .to_string(),
+                .as_string(),
             git_config
                 .and_then(|git_config| git_config.get("email"))
                 .map(|o| o.as_string())
@@ -384,7 +384,7 @@ impl GithubCompatibleSetup {
                         let owner = gdo.unwrap_or_else(|| expect_opt!(
                             gco,
                             "Invalid [project.git] section: no origin"
-                        ));
+                        )).as_string();
                         let gdr = github_def.and_then(
                             |github_def| github_def.get("repo")
                         );
