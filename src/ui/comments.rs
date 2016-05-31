@@ -5,7 +5,7 @@
 use regex::Regex;
 
 lazy_static!{
-    static ref REVIEW_BEHALF: Regex = Regex::new(r#"\br=(\w+)\b"#)
+    static ref REVIEW_BEHALF: Regex = Regex::new(r#"\br=(@?\w+)\b"#)
         .expect("r= is a valid regex");
     static ref REVIEW_SELF: Regex = Regex::new(r#"\br\+(\W|$)"#)
         .expect("r+ is a valid regex");
@@ -14,7 +14,15 @@ lazy_static!{
 }
 
 fn parse_approved_behalf(body: &str) -> Option<&str> {
-    REVIEW_BEHALF.captures(body).and_then(|capture| capture.at(1))
+    REVIEW_BEHALF.captures(body)
+        .and_then(|capture| capture.at(1))
+        .map(|username| {
+            if username.as_bytes()[0] == b'@' {
+                &username[1..]
+            } else {
+                username
+            }
+        })
 }
 
 fn parse_approved_default(body: &str) -> bool {
@@ -90,6 +98,12 @@ mod test {
     }
     #[test] fn test_comment_approved_behalf_empty() {
         assert_eq!(parse("r= ", "luser"), None);
+    }
+    #[test] fn test_comment_approved_behalf_at() {
+        assert_eq!(
+            parse("r=@genius", "luser"),
+            Some(Command::Approved("genius"))
+        );
     }
     #[test] fn test_comment_approved_word_boundary_back() {
         assert_eq!(parse("r+!", "luser"), Some(Command::Approved("luser")));
