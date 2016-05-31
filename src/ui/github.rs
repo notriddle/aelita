@@ -312,7 +312,7 @@ impl Worker {
                             repo_config.pipeline_id,
                             pr,
                         )),
-                        "opened" => Some(ui::Event::Opened(
+                        "opened" | "reopened" => Some(ui::Event::Opened(
                             repo_config.pipeline_id,
                             pr,
                             commit,
