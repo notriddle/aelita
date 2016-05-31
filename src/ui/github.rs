@@ -152,8 +152,15 @@ struct PrBranchDesc {
 }
 #[derive(Deserialize, Serialize)]
 struct PrDesc {
+    state: String,
     number: u32,
     head: PrBranchDesc,
+}
+#[derive(Deserialize, Serialize)]
+struct PullRequestDesc {
+    action: String,
+    pull_request: PrDesc,
+    repository: RepositoryDesc,
 }
 
 enum AcceptType {
@@ -251,6 +258,78 @@ impl Worker {
                             "Failed to send response to bad comment: {:?}",
                             e,
                         );
+                    }
+                }
+            }
+            b"pull_request" => {
+                if let Ok(desc) = json_from_reader::<_, PullRequestDesc>(req) {
+                    info!(
+                        "Got PR message for #{}: {}",
+                        desc.pull_request.number,
+                        desc.action,
+                    );
+                    *res.status_mut() = StatusCode::NoContent;
+                    if let Err(e) = res.send(&[]) {
+                        warn!("Failed to send response to Github PR: {:?}", e);
+                    }
+                    let repo = Repo{
+                        owner: desc.repository.owner.login,
+                        repo: desc.repository.name,
+                    };
+                    let pr = Pr(desc.pull_request.number);
+                    let repo_config = match self.repos.get(&repo) {
+                        Some(repo_config) => repo_config,
+                        None => {
+                            warn!(
+                                "Got bad repo {:?}",
+                                repo
+                            );
+                            return;
+                        }
+                    };
+                    let commit = match Commit::from_str(
+                        &desc.pull_request.head.sha
+                    ) {
+                        Ok(commit) => commit,
+                        Err(e) => {
+                            warn!("Invalid commit sha with PR event: {:?}", e);
+                            match self.get_commit_for_pr(&repo, &pr) {
+                                Ok(commit) => {
+                                    info!("Got commit from web API");
+                                    commit
+                                }
+                                Err(e) => {
+                                    warn!("Also failed from API: {:?}", e);
+                                    return;
+                                }
+                            }
+                        }
+                    };
+                    let event = match &desc.action[..] {
+                        "closed" => Some(ui::Event::Closed(
+                            repo_config.pipeline_id,
+                            pr,
+                        )),
+                        "opened" => Some(ui::Event::Opened(
+                            repo_config.pipeline_id,
+                            pr,
+                            commit,
+                        )),
+                        "synchronize" => Some(ui::Event::Changed(
+                            repo_config.pipeline_id,
+                            pr,
+                            commit,
+                        )),
+                        _ => None,
+                    };
+                    if let Some(event) = event {
+                        send_event.send(event).expect("Pipeline to be there");
+                    }
+                } else {
+                    warn!("Got invalid PR message");
+                    *res.status_mut() = StatusCode::BadRequest;
+                    if let Err(e) = res.send(&[]) {
+                        warn!("Failed to send response to bad PR: {:?}", e);
                     }
                 }
             }

@@ -11,16 +11,17 @@ use vcs::Commit;
 
 /// A build queue
 pub trait Db<C: Commit, P: Pr> {
-    fn push_queue(&mut self, id: PipelineId, entry: QueueEntry<C, P>);
-    fn pop_queue(&mut self, id: PipelineId) -> Option<QueueEntry<C, P>>;
-    fn put_running(&mut self, id: PipelineId, entry: RunningEntry<C, P>);
-    fn take_running(&mut self, id: PipelineId) -> Option<RunningEntry<C, P>>;
-    fn peek_running(&mut self, id: PipelineId) -> Option<RunningEntry<C, P>>;
-    fn cancel_by_pr(&mut self, id: PipelineId, pr: &P);
+    fn push_queue(&mut self, PipelineId, QueueEntry<C, P>);
+    fn pop_queue(&mut self, PipelineId) -> Option<QueueEntry<C, P>>;
+    fn put_running(&mut self, PipelineId, RunningEntry<C, P>);
+    fn take_running(&mut self, PipelineId) -> Option<RunningEntry<C, P>>;
+    fn peek_running(&mut self, PipelineId) -> Option<RunningEntry<C, P>>;
+    fn cancel_by_pr(&mut self, PipelineId, &P);
+    fn cancel_by_pr_different_commit(&mut self, PipelineId, &P, &C);
 }
 
 /// An item in the build queue
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QueueEntry<C: Commit, P: Pr> {
     pub commit: C,
     pub pr: P,
