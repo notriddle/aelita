@@ -45,7 +45,7 @@ impl<C, P> SqliteDb<C, P>
                 id INTEGER PRIMARY KEY,
                 pipeline_id INTEGER,
                 pr TEXT,
-                commit TEXT
+                pull_commit TEXT
             );
         "###));
         Ok(SqliteDb{
@@ -214,7 +214,7 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
             &<P as Into<String>>::into(entry.pr.clone()),
         ]).expect("Remove pending entry");
         let sql = r###"
-            INSERT INTO pending (pipeline_id, pr, commit)
+            INSERT INTO pending (pipeline_id, pr, pull_commit)
             VALUES (?, ?, ?);
         "###;
         trans.execute(sql, &[
@@ -232,7 +232,7 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
         let trans = self.conn.transaction()
             .expect("Start take-pending transaction");
         let sql = r###"
-            SELECT id, pr, commit
+            SELECT id, pr, pull_commit
             FROM pending
             WHERE pipeline_id = ? AND pr = ?;
         "###;
@@ -265,7 +265,7 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
         pr: &P,
     ) -> Option<PendingEntry<C, P>> {
         let sql = r###"
-            SELECT pr, commit
+            SELECT pr, pull_commit
             FROM pending
             WHERE pipeline_id = ? AND pr = ?;
         "###;
@@ -312,7 +312,7 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
         let sql = r###"
             UPDATE running
             SET canceled = 1
-            WHERE pipeline_id = ? AND pr = ? AND commit <> ?
+            WHERE pipeline_id = ? AND pr = ? AND pull_commit <> ?
         "###;
         let affected_rows_running = self.conn.execute(sql, &[
             &pipeline_id.0,
@@ -321,7 +321,7 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
         ]).expect("Cancel running PR");
         let sql = r###"
             DELETE FROM queue
-            WHERE pipeline_id = ? AND pr = ? AND commit <> ?
+            WHERE pipeline_id = ? AND pr = ? AND pull_commit <> ?
         "###;
         let affected_rows_queue = self.conn.execute(sql, &[
             &pipeline_id.0,

@@ -46,14 +46,19 @@ impl<C: Commit> Ci<C> for WorkerThread<ci::Event<C>, ci::Message<C>> {
 }
 
 pub trait Ui<C: Commit, P: Pr> {
-    fn send_result(&self, pipeline_id: PipelineId, pr: P, status: ui::Status);
+    fn send_result(&self, PipelineId, P, ui::Status<C>);
 }
 
-impl<C, P> Ui<C, P> for WorkerThread<ui::Event<C, P>, ui::Message<P>>
+impl<C, P> Ui<C, P> for WorkerThread<ui::Event<C, P>, ui::Message<C, P>>
 where C: Commit,
       P: Pr
 {
-    fn send_result(&self, pipeline_id: PipelineId, pr: P, status: ui::Status) {
+    fn send_result(
+        &self,
+        pipeline_id: PipelineId,
+        pr: P,
+        status: ui::Status<C>,
+    ) {
         self.send_msg.send(ui::Message::SendResult(pipeline_id, pr, status))
             .unwrap();
     }
@@ -228,6 +233,10 @@ where C: Commit + 'static,
                         ui::Status::Invalidated,
                     );
                 }
+                db.add_pending(self.id, PendingEntry{
+                    commit: commit,
+                    pr: pr,
+                });
             },
             Event::UiEvent(ui::Event::Closed(pipeline_id, pr)) => {
                 assert_eq!(&pipeline_id, &self.id);
@@ -246,26 +255,29 @@ where C: Commit + 'static,
                 assert_eq!(&pipeline_id, &self.id);
                 if let Some(mut running) = db.take_running(self.id) {
                     if running.pull_commit != pull_commit {
-                        panic!("VCS merged event with wrong commit");
+                        warn!("VCS merged event with wrong commit");
                     } else if running.merge_commit.is_some() {
-                        panic!("VCS merged event with running commit");
+                        warn!("VCS merged event with running commit");
                     } else if running.canceled {
                         // Drop it on the floor. It's canceled.
                     } else {
                         running.merge_commit = Some(merge_commit.clone());
                         self.ci.start_build(
                             pipeline_id,
-                            merge_commit,
+                            merge_commit.clone(),
                         );
                         self.ui.send_result(
                             self.id,
                             running.pr.clone(),
-                            ui::Status::InProgress,
+                            ui::Status::StartingBuild(
+                                pull_commit,
+                                merge_commit,
+                            ),
                         );
                         db.put_running(self.id, running);
                     }
                 } else {
-                    panic!("VCS merged event with no queued PR");
+                    warn!("VCS merged event with no queued PR");
                 }
             },
             Event::VcsEvent(vcs::Event::FailedMergeToStaging(
@@ -275,56 +287,92 @@ where C: Commit + 'static,
                 assert_eq!(&pipeline_id, &self.id);
                 if let Some(running) = db.take_running(self.id) {
                     if running.pull_commit != pull_commit {
-                        panic!("VCS merged event with wrong commit");
+                        warn!("VCS merged event with wrong commit");
                     } else if running.merge_commit.is_some() {
-                        panic!("VCS merged event with running commit");
+                        warn!("VCS merged event with running commit");
                     } else if running.canceled {
                         // Drop it on the floor. It's canceled.
                     } else {
                         self.ui.send_result(
                             self.id,
                             running.pr.clone(),
-                            ui::Status::Unmergeable,
+                            ui::Status::Unmergeable(pull_commit),
                         );
                     }
                 } else {
-                    panic!("VCS merged event with no queued PR");
+                    warn!("VCS merged event with no queued PR");
                 }
             },
-            Event::CiEvent(ci::Event::BuildFailed(
+            Event::CiEvent(ci::Event::BuildStarted(
                 pipeline_id,
-                built_commit,
+                building_commit,
+                url,
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                if let Some(running) = db.take_running(self.id) {
+                if let Some(running) = db.peek_running(self.id) {
                     if let Some(merged_commit) = running.merge_commit {
-                        if merged_commit != built_commit {
-                            panic!("Finished building a different commit");
+                        if merged_commit != building_commit {
+                            warn!("Building a different commit");
                         } else if running.canceled {
                             // Drop it on the floor. It's canceled.
                         } else {
                             self.ui.send_result(
                                 self.id,
                                 running.pr.clone(),
-                                ui::Status::Failure,
+                                ui::Status::Testing(
+                                    running.pull_commit.clone(),
+                                    building_commit,
+                                    url,
+                                ),
                             );
                         }
                     } else {
-                        panic!("Finished building a commit that never merged");
+                        warn!("Building a commit that never merged");
                     }
                 } else {
-                    panic!("VCS merged event with no queued PR");
+                    warn!("VCS merged event with no queued PR");
+                }
+            },
+            Event::CiEvent(ci::Event::BuildFailed(
+                pipeline_id,
+                built_commit,
+                url,
+            )) => {
+                assert_eq!(&pipeline_id, &self.id);
+                if let Some(running) = db.take_running(self.id) {
+                    if let Some(merged_commit) = running.merge_commit {
+                        if merged_commit != built_commit {
+                            warn!("Finished building a different commit");
+                        } else if running.canceled {
+                            // Drop it on the floor. It's canceled.
+                        } else {
+                            self.ui.send_result(
+                                self.id,
+                                running.pr.clone(),
+                                ui::Status::Failure(
+                                    running.pull_commit.clone(),
+                                    merged_commit,
+                                    url,
+                                ),
+                            );
+                        }
+                    } else {
+                        warn!("Finished building a commit that never merged");
+                    }
+                } else {
+                    warn!("VCS merged event with no queued PR");
                 }
             },
             Event::CiEvent(ci::Event::BuildSucceeded(
                 pipeline_id,
                 built_commit,
+                url,
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
                 if let Some(running) = db.peek_running(self.id) {
                     if let Some(merged_commit) = running.merge_commit {
                         if &merged_commit != &built_commit {
-                            panic!("Finished building a different commit")
+                            warn!("Finished building a different commit")
                         } else if running.canceled {
                             // Canceled; drop on the floor.
                             let running2 = db.take_running(self.id)
@@ -336,14 +384,23 @@ where C: Commit + 'static,
                         } else {
                             self.vcs.move_staging_to_master(
                                 self.id,
-                                merged_commit,
+                                merged_commit.clone(),
+                            );
+                            self.ui.send_result(
+                                self.id,
+                                running.pr.clone(),
+                                ui::Status::Success(
+                                    running.pull_commit.clone(),
+                                    merged_commit,
+                                    url,
+                                ),
                             );
                         }
                     } else {
-                        panic!("Finished building a commit that never merged");
+                        warn!("Finished building a commit that never merged");
                     }
                 } else {
-                    panic!("VCS merged event with no queued PR");
+                    warn!("VCS merged event with no queued PR");
                 }
             },
             Event::VcsEvent(vcs::Event::FailedMoveToMaster(
@@ -354,21 +411,24 @@ where C: Commit + 'static,
                 if let Some(running) = db.take_running(self.id) {
                     if let Some(running_merge_commit) = running.merge_commit {
                         if running_merge_commit != merge_commit {
-                            panic!("VCS move event with wrong commit");
+                            warn!("VCS move event with wrong commit");
                         } else if running.canceled {
                             // Drop it on the floor. It's canceled.
                         } else {
                             self.ui.send_result(
                                 self.id,
                                 running.pr,
-                                ui::Status::Unmoveable,
+                                ui::Status::Unmoveable(
+                                    running.pull_commit,
+                                    running_merge_commit,
+                                ),
                             );
                         }
                     } else {
-                        panic!("VCS move event with commit that never ran");
+                        warn!("VCS move event with commit that never ran");
                     }
                 } else {
-                    panic!("VCS move event with no queued PR");
+                    warn!("VCS move event with no queued PR");
                 }
             },
             Event::VcsEvent(vcs::Event::MovedToMaster(
@@ -379,21 +439,24 @@ where C: Commit + 'static,
                 if let Some(running) = db.take_running(self.id) {
                     if let Some(running_merge_commit) = running.merge_commit {
                         if running_merge_commit != merge_commit {
-                            panic!("VCS move event with wrong commit");
+                            warn!("VCS move event with wrong commit");
                         } else if running.canceled {
                             // Drop it on the floor. It's canceled.
                         } else {
                             self.ui.send_result(
                                 self.id,
                                 running.pr,
-                                ui::Status::Success,
+                                ui::Status::Completed(
+                                    running.pull_commit,
+                                    running_merge_commit,
+                                ),
                             );
                         }
                     } else {
-                        panic!("VCS move event with commit that never ran");
+                        warn!("VCS move event with commit that never ran");
                     }
                 } else {
-                    panic!("VCS move event with no queued PR");
+                    warn!("VCS move event with no queued PR");
                 }
             }
         }
@@ -422,6 +485,7 @@ where C: Commit + 'static,
 use super::{Ci, Vcs, Ui};
 use ci;
 use db::{Db, PendingEntry, QueueEntry, RunningEntry};
+use hyper::client::IntoUrl;
 use pipeline::{Event, Pipeline, PipelineId};
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -465,11 +529,11 @@ impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
     fn peek_running(&mut self, _: PipelineId) -> Option<RunningEntry<C, P>> {
         self.running.clone()
     }
-    fn add_pending(&mut self, _: PipelineId, mut entry: PendingEntry<C, P>) {
+    fn add_pending(&mut self, _: PipelineId, entry: PendingEntry<C, P>) {
         let mut replaced = false;
-        for ref mut entry2 in self.pending.iter_mut() {
+        for entry2 in self.pending.iter_mut() {
             if entry2.pr == entry.pr {
-                mem::replace(entry2, &mut entry);
+                mem::replace(entry2, entry.clone());
                 replaced = true;
                 break;
             }
@@ -590,7 +654,7 @@ impl Into<String> for MemoryPr {
 }
 
 struct MemoryUi {
-    results: Vec<(MemoryPr, ui::Status)>,
+    results: Vec<(MemoryPr, ui::Status<MemoryCommit>)>,
 }
 impl MemoryUi {
     fn new() -> RefCell<MemoryUi> {
@@ -600,7 +664,12 @@ impl MemoryUi {
     }
 }
 impl Ui<MemoryCommit, MemoryPr> for RefCell<MemoryUi> {
-    fn send_result(&self, _: PipelineId, pr: MemoryPr, status: ui::Status) {
+    fn send_result(
+        &self,
+        _: PipelineId,
+        pr: MemoryPr,
+        status: ui::Status<MemoryCommit>,
+    ) {
         self.borrow_mut().results.push((pr, status));
     }
 }
@@ -745,6 +814,51 @@ fn handle_add_to_queue_by_pending_some() {
     assert_eq!(db.running.unwrap().pull_commit, MemoryCommit::A);
     assert!(db.queue.is_empty());
     assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::A);
+}
+
+#[test]
+fn handle_add_to_queue_by_pending_changed() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Opened(
+            PipelineId(0),
+            MemoryPr::A,
+            MemoryCommit::A,
+        )),
+    );
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Changed(
+            PipelineId(0),
+            MemoryPr::A,
+            MemoryCommit::B,
+        )),
+    );
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Approved(
+            PipelineId(0),
+            MemoryPr::A,
+            None,
+            "Message!".to_owned(),
+        )),
+    );
+    assert_eq!(db.running.unwrap().pull_commit, MemoryCommit::B);
+    assert!(db.queue.is_empty());
+    assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::B);
 }
 
 #[test]
@@ -896,7 +1010,7 @@ fn handle_merge_failed_notify_user() {
     assert!(vcs.borrow().master.is_none());
     assert_eq!(
         ui.borrow().results,
-        vec![(MemoryPr::A, ui::Status::Unmergeable)]
+        vec![(MemoryPr::A, ui::Status::Unmergeable(MemoryCommit::A))]
     );
 }
 
@@ -941,7 +1055,7 @@ fn handle_merge_failed_notify_user_merge_next_commit() {
     assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::C);
     assert_eq!(
         ui.borrow().results,
-        vec![(MemoryPr::A, ui::Status::Unmergeable)]
+        vec![(MemoryPr::A, ui::Status::Unmergeable(MemoryCommit::A))]
     );
 }
 
@@ -983,7 +1097,10 @@ fn handle_merge_succeeded_notify_user_start_ci() {
     assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::B);
     assert_eq!(
         ui.borrow().results,
-        vec![(MemoryPr::A, ui::Status::InProgress)]
+        vec![(MemoryPr::A, ui::Status::StartingBuild(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        ))]
     );
 }
 
@@ -1009,6 +1126,7 @@ fn handle_ci_failed_notify_user() {
         Event::CiEvent(ci::Event::BuildFailed(
             PipelineId(0),
             MemoryCommit::B,
+            None,
         ))
     );
     assert!(db.running.is_none());
@@ -1017,7 +1135,11 @@ fn handle_ci_failed_notify_user() {
     assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::B);
     assert_eq!(
         ui.borrow().results,
-        vec![(MemoryPr::A, ui::Status::Failure)]
+        vec![(MemoryPr::A, ui::Status::Failure(
+            MemoryCommit::A,
+            MemoryCommit::B,
+            None,
+        ))]
     );
 }
 
@@ -1048,6 +1170,7 @@ fn handle_ci_failed_notify_user_next_commit() {
         Event::CiEvent(ci::Event::BuildFailed(
             PipelineId(0),
             MemoryCommit::B,
+            None,
         ))
     );
     assert_eq!(db.running.unwrap(), RunningEntry{
@@ -1062,7 +1185,48 @@ fn handle_ci_failed_notify_user_next_commit() {
     assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::C);
     assert_eq!(
         ui.borrow().results,
-        vec![(MemoryPr::A, ui::Status::Failure)]
+        vec![(MemoryPr::A, ui::Status::Failure(
+            MemoryCommit::A,
+            MemoryCommit::B,
+            None,
+        ))]
+    );
+}
+
+#[test]
+fn handle_ci_started_notify_user() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    db.put_running(PipelineId(0), RunningEntry{
+        pull_commit: MemoryCommit::A,
+        merge_commit: Some(MemoryCommit::B),
+        pr: MemoryPr::A,
+        canceled: false,
+        message: "MSG!".to_owned(),
+    });
+    vcs.borrow_mut().staging = Some(MemoryCommit::B);
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::CiEvent(ci::Event::BuildStarted(
+            PipelineId(0),
+            MemoryCommit::B,
+            Some("http://example.com/".into_url().expect("this to be valid")),
+        ))
+    );
+    assert!(db.running.is_some());
+    assert!(db.queue.is_empty());
+    assert_eq!(
+        ui.borrow().results,
+        vec![(MemoryPr::A, ui::Status::Testing(
+            MemoryCommit::A,
+            MemoryCommit::B,
+            Some("http://example.com/".into_url().expect("this to be valid")),
+        ))]
     );
 }
 
@@ -1088,6 +1252,7 @@ fn handle_ci_succeeded_move_to_master() {
         Event::CiEvent(ci::Event::BuildSucceeded(
             PipelineId(0),
             MemoryCommit::B,
+            None,
         ))
     );
     assert!(db.running.is_some());
@@ -1095,7 +1260,13 @@ fn handle_ci_succeeded_move_to_master() {
     assert_eq!(vcs.borrow().master.unwrap(), MemoryCommit::B);
     assert_eq!(
         ui.borrow().results,
-        vec![]
+        vec![
+            (MemoryPr::A, ui::Status::Success(
+                MemoryCommit::A,
+                MemoryCommit::B,
+                None,
+            ))
+        ]
     );
 }
 
@@ -1129,7 +1300,10 @@ fn handle_move_failed_notify_user() {
     assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::B);
     assert_eq!(
         ui.borrow().results,
-        vec![(MemoryPr::A, ui::Status::Unmoveable)]
+        vec![(MemoryPr::A, ui::Status::Unmoveable(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        ))]
     );
 }
 
@@ -1174,7 +1348,10 @@ fn handle_move_failed_notify_user_next_commit() {
     assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::C);
     assert_eq!(
         ui.borrow().results,
-        vec![(MemoryPr::A, ui::Status::Unmoveable)]
+        vec![(MemoryPr::A, ui::Status::Unmoveable(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        ))]
     );
 }
 
@@ -1207,7 +1384,10 @@ fn handle_move_succeeded_notify_user() {
     assert!(vcs.borrow().master.is_none());
     assert_eq!(
         ui.borrow().results,
-        vec![(MemoryPr::A, ui::Status::Success)]
+        vec![(MemoryPr::A, ui::Status::Completed(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        ))]
     );
 }
 
@@ -1252,7 +1432,12 @@ fn handle_move_succeeded_notify_user_next_commit() {
     assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::C);
     assert_eq!(
         ui.borrow().results,
-        vec![(MemoryPr::A, ui::Status::Success)]
+        vec![
+            (MemoryPr::A, ui::Status::Completed(
+                MemoryCommit::A,
+                MemoryCommit::B,
+            ))
+        ]
     );
 }
 
@@ -1514,7 +1699,10 @@ fn handle_runthrough() {
     assert!(vcs.borrow().master.is_none());
     assert_eq!(ci.borrow().build, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
-        (MemoryPr::A, ui::Status::InProgress),
+        (MemoryPr::A, ui::Status::StartingBuild(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        )),
     ]);
     handle_event(
         &mut ui,
@@ -1523,13 +1711,22 @@ fn handle_runthrough() {
         &mut db,
         Event::CiEvent(ci::Event::BuildSucceeded(
             PipelineId(0),
-            MemoryCommit::B
+            MemoryCommit::B,
+            None,
         ))
     );
     assert_eq!(vcs.borrow().staging, Some(MemoryCommit::B));
     assert_eq!(vcs.borrow().master, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
-        (MemoryPr::A, ui::Status::InProgress),
+        (MemoryPr::A, ui::Status::StartingBuild(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        )),
+        (MemoryPr::A, ui::Status::Success(
+            MemoryCommit::A,
+            MemoryCommit::B,
+            None,
+        )),
     ]);
     handle_event(
         &mut ui,
@@ -1544,8 +1741,19 @@ fn handle_runthrough() {
     assert_eq!(vcs.borrow().staging, Some(MemoryCommit::B));
     assert_eq!(vcs.borrow().master, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
-        (MemoryPr::A, ui::Status::InProgress),
-        (MemoryPr::A, ui::Status::Success),
+        (MemoryPr::A, ui::Status::StartingBuild(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        )),
+        (MemoryPr::A, ui::Status::Success(
+            MemoryCommit::A,
+            MemoryCommit::B,
+            None,
+        )),
+        (MemoryPr::A, ui::Status::Completed(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        )),
     ]);
 }
 
@@ -1625,7 +1833,10 @@ fn handle_runthrough_next_commit() {
     assert!(vcs.borrow().master.is_none());
     assert_eq!(ci.borrow().build, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
-        (MemoryPr::A, ui::Status::InProgress),
+        (MemoryPr::A, ui::Status::StartingBuild(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        )),
     ]);
     // The CI successfully built it. It should now be moved to master.
     handle_event(
@@ -1635,13 +1846,22 @@ fn handle_runthrough_next_commit() {
         &mut db,
         Event::CiEvent(ci::Event::BuildSucceeded(
             PipelineId(0),
-            MemoryCommit::B
+            MemoryCommit::B,
+            None,
         ))
     );
     assert_eq!(vcs.borrow().staging, Some(MemoryCommit::B));
     assert_eq!(vcs.borrow().master, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
-        (MemoryPr::A, ui::Status::InProgress),
+        (MemoryPr::A, ui::Status::StartingBuild(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        )),
+        (MemoryPr::A, ui::Status::Success(
+            MemoryCommit::A,
+            MemoryCommit::B,
+            None,
+        )),
     ]);
     // It has been successfully moved to master. The next build should
     // start, and this one should be reported complete.
@@ -1658,8 +1878,19 @@ fn handle_runthrough_next_commit() {
     assert_eq!(vcs.borrow().staging, Some(MemoryCommit::C));
     assert_eq!(vcs.borrow().master, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
-        (MemoryPr::A, ui::Status::InProgress),
-        (MemoryPr::A, ui::Status::Success),
+        (MemoryPr::A, ui::Status::StartingBuild(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        )),
+        (MemoryPr::A, ui::Status::Success(
+            MemoryCommit::A,
+            MemoryCommit::B,
+            None,
+        )),
+        (MemoryPr::A, ui::Status::Completed(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        )),
     ]);
     // The second one is now merged into staging; let's start building.
     vcs.borrow_mut().staging = Some(MemoryCommit::D);
@@ -1676,9 +1907,23 @@ fn handle_runthrough_next_commit() {
     );
     assert_eq!(ci.borrow().build, Some(MemoryCommit::D));
     assert_eq!(ui.borrow().results, vec![
-        (MemoryPr::A, ui::Status::InProgress),
-        (MemoryPr::A, ui::Status::Success),
-        (MemoryPr::C, ui::Status::InProgress),
+        (MemoryPr::A, ui::Status::StartingBuild(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        )),
+        (MemoryPr::A, ui::Status::Success(
+            MemoryCommit::A,
+            MemoryCommit::B,
+            None,
+        )),
+        (MemoryPr::A, ui::Status::Completed(
+            MemoryCommit::A,
+            MemoryCommit::B,
+        )),
+        (MemoryPr::C, ui::Status::StartingBuild(
+            MemoryCommit::C,
+            MemoryCommit::D,
+        )),
     ]);
 }
 
