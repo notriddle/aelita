@@ -233,6 +233,10 @@ where C: Commit + 'static,
                         ui::Status::Invalidated,
                     );
                 }
+                db.add_pending(self.id, PendingEntry{
+                    commit: commit,
+                    pr: pr,
+                });
             },
             Event::UiEvent(ui::Event::Closed(pipeline_id, pr)) => {
                 assert_eq!(&pipeline_id, &self.id);
@@ -525,11 +529,11 @@ impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
     fn peek_running(&mut self, _: PipelineId) -> Option<RunningEntry<C, P>> {
         self.running.clone()
     }
-    fn add_pending(&mut self, _: PipelineId, mut entry: PendingEntry<C, P>) {
+    fn add_pending(&mut self, _: PipelineId, entry: PendingEntry<C, P>) {
         let mut replaced = false;
-        for ref mut entry2 in self.pending.iter_mut() {
+        for entry2 in self.pending.iter_mut() {
             if entry2.pr == entry.pr {
-                mem::replace(entry2, &mut entry);
+                mem::replace(entry2, entry.clone());
                 replaced = true;
                 break;
             }
@@ -810,6 +814,51 @@ fn handle_add_to_queue_by_pending_some() {
     assert_eq!(db.running.unwrap().pull_commit, MemoryCommit::A);
     assert!(db.queue.is_empty());
     assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::A);
+}
+
+#[test]
+fn handle_add_to_queue_by_pending_changed() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Opened(
+            PipelineId(0),
+            MemoryPr::A,
+            MemoryCommit::A,
+        )),
+    );
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Changed(
+            PipelineId(0),
+            MemoryPr::A,
+            MemoryCommit::B,
+        )),
+    );
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Approved(
+            PipelineId(0),
+            MemoryPr::A,
+            None,
+            "Message!".to_owned(),
+        )),
+    );
+    assert_eq!(db.running.unwrap().pull_commit, MemoryCommit::B);
+    assert!(db.queue.is_empty());
+    assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::B);
 }
 
 #[test]
