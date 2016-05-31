@@ -201,7 +201,7 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
         "###;
         self.conn.execute(sql, &[
             &pipeline_id.0,
-            &<P as Into<String>>::into(pr.clone())
+            &<P as Into<String>>::into(pr.clone()),
         ]).expect("Cancel running PR");
         let sql = r###"
             DELETE FROM queue
@@ -209,7 +209,33 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
         "###;
         self.conn.execute(sql, &[
             &pipeline_id.0,
-            &<P as Into<String>>::into(pr.clone())
+            &<P as Into<String>>::into(pr.clone()),
+        ]).expect("Cancel queue entries");
+    }
+    fn cancel_by_pr_different_commit(
+        &mut self,
+        pipeline_id: PipelineId,
+        pr: &P,
+        commit: &C,
+    ) {
+        let sql = r###"
+            UPDATE running
+            SET canceled = 1
+            WHERE pipeline_id = ? AND pr = ? AND commit <> ?
+        "###;
+        self.conn.execute(sql, &[
+            &pipeline_id.0,
+            &<P as Into<String>>::into(pr.clone()),
+            &<C as Into<String>>::into(commit.clone()),
+        ]).expect("Cancel running PR");
+        let sql = r###"
+            DELETE FROM queue
+            WHERE pipeline_id = ? AND pr = ? AND commit <> ?
+        "###;
+        self.conn.execute(sql, &[
+            &pipeline_id.0,
+            &<P as Into<String>>::into(pr.clone()),
+            &<C as Into<String>>::into(commit.clone()),
         ]).expect("Cancel queue entries");
     }
 }

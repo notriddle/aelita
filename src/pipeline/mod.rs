@@ -179,7 +179,15 @@ where C: Commit + 'static,
                     message: message,
                 });
             },
-            Event::UiEvent(ui::Event::Canceled(pipeline_id, pr)) => {
+            Event::UiEvent(ui::Event::Opened(pipeline_id, _, _)) => {
+                assert_eq!(&pipeline_id, &self.id)
+            },
+            Event::UiEvent(ui::Event::Changed(pipeline_id, pr, commit)) => {
+                assert_eq!(&pipeline_id, &self.id);
+                db.cancel_by_pr_different_commit(self.id, &pr, &commit);
+            },
+            Event::UiEvent(ui::Event::Canceled(pipeline_id, pr)) |
+            Event::UiEvent(ui::Event::Closed(pipeline_id, pr)) => {
                 assert_eq!(&pipeline_id, &self.id);
                 db.cancel_by_pr(self.id, &pr);
             },
@@ -414,6 +422,23 @@ impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
         self.queue.extend(filtered);
         if let Some(ref mut running) = self.running {
             if running.pr == *pr {
+                running.canceled = true;
+            }
+        }
+    }
+    fn cancel_by_pr_different_commit(
+        &mut self,
+        _: PipelineId,
+        pr: &P,
+        commit: &C
+    ) {
+        let queue = mem::replace(&mut self.queue, VecDeque::new());
+        let filtered = queue.into_iter().filter(|entry|
+            entry.pr != *pr || entry.commit == *commit
+        );
+        self.queue.extend(filtered);
+        if let Some(ref mut running) = self.running {
+            if running.pr == *pr && running.pull_commit != *commit {
                 running.canceled = true;
             }
         }
@@ -1100,6 +1125,186 @@ fn handle_ui_cancel() {
         &mut ci,
         &mut db,
         Event::UiEvent(ui::Event::Canceled(
+            PipelineId(0),
+            MemoryPr::A
+        ))
+    );
+    assert_eq!(db.running.unwrap(), RunningEntry{
+        pull_commit: MemoryCommit::A,
+        merge_commit: Some(MemoryCommit::B),
+        pr: MemoryPr::A,
+        canceled: true,
+        message: "MSG!".to_owned(),
+    });
+}
+
+#[test]
+fn handle_ui_changed_cancel() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    db.put_running(PipelineId(0), RunningEntry{
+        pull_commit: MemoryCommit::A,
+        merge_commit: Some(MemoryCommit::B),
+        pr: MemoryPr::A,
+        message: "MSG!".to_owned(),
+        canceled: false,
+    });
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Changed(
+            PipelineId(0),
+            MemoryPr::A,
+            MemoryCommit::C,
+        ))
+    );
+    assert_eq!(db.running.unwrap(), RunningEntry{
+        pull_commit: MemoryCommit::A,
+        merge_commit: Some(MemoryCommit::B),
+        pr: MemoryPr::A,
+        canceled: true,
+        message: "MSG!".to_owned(),
+    });
+}
+
+#[test]
+fn handle_ui_changed_no_real_change() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    db.put_running(PipelineId(0), RunningEntry{
+        pull_commit: MemoryCommit::A,
+        merge_commit: Some(MemoryCommit::B),
+        pr: MemoryPr::A,
+        message: "MSG!".to_owned(),
+        canceled: false,
+    });
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Changed(
+            PipelineId(0),
+            MemoryPr::A,
+            MemoryCommit::A,
+        ))
+    );
+    assert_eq!(db.running.unwrap(), RunningEntry{
+        pull_commit: MemoryCommit::A,
+        merge_commit: Some(MemoryCommit::B),
+        pr: MemoryPr::A,
+        canceled: false,
+        message: "MSG!".to_owned(),
+    });
+}
+
+#[test]
+fn handle_ui_changed_cancel_queue() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    db.put_running(PipelineId(0), RunningEntry{
+        pull_commit: MemoryCommit::A,
+        merge_commit: Some(MemoryCommit::B),
+        pr: MemoryPr::A,
+        message: "MSG!".to_owned(),
+        canceled: false,
+    });
+    db.push_queue(PipelineId(0), QueueEntry{
+        commit: MemoryCommit::C,
+        pr: MemoryPr::B,
+        message: "MSG!".to_owned(),
+    });
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Changed(
+            PipelineId(0),
+            MemoryPr::B,
+            MemoryCommit::D,
+        ))
+    );
+    assert_eq!(db.running.unwrap(), RunningEntry{
+        pull_commit: MemoryCommit::A,
+        merge_commit: Some(MemoryCommit::B),
+        pr: MemoryPr::A,
+        canceled: false,
+        message: "MSG!".to_owned(),
+    });
+    assert!(db.queue.is_empty());
+}
+
+#[test]
+fn handle_ui_changed_no_real_change_queue() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    db.put_running(PipelineId(0), RunningEntry{
+        pull_commit: MemoryCommit::A,
+        merge_commit: Some(MemoryCommit::B),
+        pr: MemoryPr::A,
+        message: "MSG!".to_owned(),
+        canceled: false,
+    });
+    db.push_queue(PipelineId(0), QueueEntry{
+        commit: MemoryCommit::C,
+        pr: MemoryPr::B,
+        message: "MSG!".to_owned(),
+    });
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Changed(
+            PipelineId(0),
+            MemoryPr::B,
+            MemoryCommit::C,
+        ))
+    );
+    assert_eq!(db.running.unwrap(), RunningEntry{
+        pull_commit: MemoryCommit::A,
+        merge_commit: Some(MemoryCommit::B),
+        pr: MemoryPr::A,
+        canceled: false,
+        message: "MSG!".to_owned(),
+    });
+    assert_eq!(db.queue[0], QueueEntry{
+        commit: MemoryCommit::C,
+        pr: MemoryPr::B,
+        message: "MSG!".to_owned(),
+    });
+}
+
+#[test]
+fn handle_ui_closed() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    db.put_running(PipelineId(0), RunningEntry{
+        pull_commit: MemoryCommit::A,
+        merge_commit: Some(MemoryCommit::B),
+        pr: MemoryPr::A,
+        message: "MSG!".to_owned(),
+        canceled: false,
+    });
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Closed(
             PipelineId(0),
             MemoryPr::A
         ))

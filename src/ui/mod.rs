@@ -23,6 +23,9 @@ pub enum Message<P: Pr> {
 pub enum Event<C: Commit, P: Pr> {
     Approved(PipelineId, P, C, String),
     Canceled(PipelineId, P),
+    Opened(PipelineId, P, C),
+    Changed(PipelineId, P, C),
+    Closed(PipelineId, P),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -45,6 +48,9 @@ impl<C: Commit + 'static, P: Pr + 'static> GetPipelineId for Event<C, P> {
         match *self {
             Event::Approved(i, _, _, _) => i,
             Event::Canceled(i, _) => i,
+            Event::Opened(i, _, _) => i,
+            Event::Changed(i, _, _) => i,
+            Event::Closed(i, _) => i,
         }
     }
 }
