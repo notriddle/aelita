@@ -397,20 +397,20 @@ impl Worker {
     fn handle_comment_command(
         &self,
         send_event: &Sender<ui::Event<Commit, Pr>>,
-        command: comments::Command,
+        command: comments::Command<Commit>,
         issue: &IssueCommentIssue,
         repo_config: &RepoConfig,
         pr: &Pr,
     ) {
         match command {
-            comments::Command::Approved(user) => {
+            comments::Command::Approved(user, commit) => {
                 self.handle_approved_pr(
                     send_event,
                     issue,
                     repo_config,
                     pr,
                     user,
-                    None,
+                    commit,
                 );
             }
             comments::Command::Canceled => {
@@ -459,7 +459,7 @@ impl Worker {
     fn handle_message(
         &self,
         msg: ui::Message<Pr>,
-        _: &mut Sender<ui::Event<Commit, Pr>>
+        _: &mut Sender<ui::Event<Commit, Pr>>,
     ) {
         match msg {
             ui::Message::SendResult(pipeline_id, pr, status) => {
