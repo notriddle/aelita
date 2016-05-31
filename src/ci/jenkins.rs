@@ -1,15 +1,15 @@
 // This file is released under the same terms as Rust itself.
 
 use ci;
+use crossbeam;
 use hyper::client::Client;
 use hyper::header::{Authorization, Basic};
 use pipeline::{self, PipelineId};
 use serde_json::from_reader as json_from_reader;
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::net::TcpListener;
 use std::sync::mpsc::{Sender, Receiver};
-use std::thread;
+use util::rate_limited_client::RateLimiter;
 use vcs::Commit;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -18,16 +18,16 @@ pub struct Job {
     pub token: String,
 }
 
-pub struct Worker<C: Commit + 'static> {
+pub struct Worker {
     listen: String,
     host: String,
     jobs: HashMap<PipelineId, Job>,
     auth: Option<(String, String)>,
     client: Client,
-    _commit: PhantomData<C>,
+    rate_limiter: RateLimiter,
 }
 
-impl<C: Commit + 'static> Worker<C> {
+impl Worker {
     pub fn new(
         listen: String,
         host: String,
@@ -39,7 +39,7 @@ impl<C: Commit + 'static> Worker<C> {
             jobs: HashMap::new(),
             auth: auth,
             client: Client::default(),
-            _commit: PhantomData,
+            rate_limiter: RateLimiter::new(),
         }
     }
     pub fn add_pipeline(&mut self, pipeline_id: PipelineId, job: Job) {
@@ -47,44 +47,33 @@ impl<C: Commit + 'static> Worker<C> {
     }
 }
 
-impl<C: Commit + 'static> Clone for Worker<C> {
-    fn clone(&self) -> Self {
-        Worker {
-            listen: self.listen.clone(),
-            host: self.host.clone(),
-            jobs: self.jobs.clone(),
-            auth: self.auth.clone(),
-            client: Client::default(),
-            _commit: PhantomData,
-        }
-    }
-}
-
-impl<C> pipeline::Worker<ci::Event<C>, ci::Message<C>> for Worker<C>
-    where C: Commit + 'static
+impl<C> pipeline::Worker<ci::Event<C>, ci::Message<C>> for Worker
+    where C: 'static + Commit + Sync
 {
     fn run(
         &mut self,
         recv_msg: Receiver<ci::Message<C>>,
         mut send_event: Sender<ci::Event<C>>
     ) {
-        let send_event_2 = send_event.clone();
-        let self_2 = self.clone();
-        thread::spawn(move || {
-            self_2.run_listen(send_event_2);
-        });
-        loop {
-            self.handle_message(
-                recv_msg.recv().expect("Pipeline went away"),
-                &mut send_event,
-            );
-        }
+        crossbeam::scope(|scope| {
+            let s2 = &*self;
+            let send_event_2 = send_event.clone();
+            scope.spawn(move || {
+                s2.run_listen(send_event_2);
+            });
+            loop {
+                s2.handle_message(
+                    recv_msg.recv().expect("Pipeline went away"),
+                    &mut send_event,
+                );
+            }
+        })
     }
 }
 
 
-impl<C: Commit + 'static> Worker<C> {
-    fn run_listen(
+impl Worker {
+    fn run_listen<C: 'static + Commit + Sync>(
         &self,
         send_event: Sender<ci::Event<C>>,
     ) {
@@ -168,7 +157,7 @@ impl<C: Commit + 'static> Worker<C> {
         }
     }
 
-    fn handle_message(
+    fn handle_message<C: 'static + Commit + Sync>(
         &self,
         msg: ci::Message<C>,
         send_event: &mut Sender<ci::Event<C>>,
@@ -192,14 +181,17 @@ impl<C: Commit + 'static> Worker<C> {
                     job.token,
                 );
                 info!("Trigger build: {}", url);
-                let mut rb = self.client.get(&url);
-                if let Some(ref auth) = self.auth {
-                    rb = rb.header(Authorization(Basic{
-                        username: auth.0.clone(),
-                        password: Some(auth.1.clone()),
-                    }));
-                }
-                match rb.send() {
+                let result = self.rate_limiter.retry_send(|| {
+                    let mut rb = self.client.get(&url);
+                    if let Some(ref auth) = self.auth {
+                        rb = rb.header(Authorization(Basic{
+                            username: auth.0.clone(),
+                            password: Some(auth.1.clone()),
+                        }));
+                    }
+                    rb
+                });
+                match result {
                     Ok(ref res) if !res.status.is_success() => {
                         warn!("Build refused: {:?}", res.status);
                         send_event.send(ci::Event::BuildFailed(
