@@ -8,6 +8,7 @@
 pub mod github;
 mod comments;
 
+use hyper::Url;
 use pipeline::{GetPipelineId, PipelineId};
 use std::cmp::Eq;
 use std::fmt::{Debug, Display};
@@ -15,8 +16,8 @@ use std::str::FromStr;
 use vcs::Commit;
 
 #[derive(Clone, Debug)]
-pub enum Message<P: Pr> {
-    SendResult(PipelineId, P, Status)
+pub enum Message<C: Commit, P: Pr> {
+    SendResult(PipelineId, P, Status<C>)
 }
 
 #[derive(Clone, Debug)]
@@ -28,15 +29,17 @@ pub enum Event<C: Commit, P: Pr> {
     Closed(PipelineId, P),
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Status {
-    InProgress,
-    Success,
-    Failure,
-    Unmergeable,
-    Unmoveable,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Status<C: Commit> {
     Invalidated,
     NoCommit,
+    Unmergeable(C),
+    StartingBuild(C, C),
+    Testing(C, C, Option<Url>),
+    Success(C, C, Option<Url>),
+    Failure(C, C, Option<Url>),
+    Unmoveable(C, C),
+    Completed(C, C),
 }
 
 /// A series of reviewable changesets and other messages

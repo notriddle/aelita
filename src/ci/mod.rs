@@ -2,8 +2,9 @@
 
 pub mod jenkins;
 
-use vcs::Commit;
+use hyper::Url;
 use pipeline::{GetPipelineId, PipelineId};
+use vcs::Commit;
 
 #[derive(Clone, Debug)]
 pub enum Message<C: Commit> {
@@ -12,15 +13,17 @@ pub enum Message<C: Commit> {
 
 #[derive(Clone, Debug)]
 pub enum Event<C: Commit> {
-    BuildSucceeded(PipelineId, C),
-    BuildFailed(PipelineId, C),
+    BuildStarted(PipelineId, C, Option<Url>),
+    BuildSucceeded(PipelineId, C, Option<Url>),
+    BuildFailed(PipelineId, C, Option<Url>),
 }
 
 impl<C: Commit + 'static> GetPipelineId for Event<C> {
     fn pipeline_id(&self) -> PipelineId {
         match *self {
-            Event::BuildSucceeded(i, _) => i,
-            Event::BuildFailed(i, _) => i,
+            Event::BuildStarted(i, _, _) => i,
+            Event::BuildSucceeded(i, _, _) => i,
+            Event::BuildFailed(i, _, _) => i,
         }
     }
 }

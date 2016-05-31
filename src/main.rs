@@ -178,7 +178,7 @@ fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
 struct GithubCompatibleSetup {
     github: Option<WorkerThread<
         ui::Event<git::Commit, github::Pr>,
-        ui::Message<github::Pr>,
+        ui::Message<git::Commit, github::Pr>,
     >>,
     jenkins: Option<WorkerThread<
         ci::Event<git::Commit>,
@@ -436,14 +436,14 @@ impl CompatibleSetup for GithubCompatibleSetup {
                 WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>,
                 WorkerThread<
                     ui::Event<Self::C, Self::P>,
-                    ui::Message<Self::P>
+                    ui::Message<Self::C, Self::P>
                 >,
                 WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>
             >>,
             Vec<&'a WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>>,
             Vec<&'a WorkerThread<
                 ui::Event<Self::C, Self::P>,
-                ui::Message<Self::P>,
+                ui::Message<Self::C, Self::P>,
             >>,
             Vec<&'a WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>>,
         )
@@ -503,14 +503,14 @@ trait CompatibleSetup {
                 WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>,
                 WorkerThread<
                     ui::Event<Self::C, Self::P>,
-                    ui::Message<Self::P>,
+                    ui::Message<Self::C, Self::P>,
                 >,
                 WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>
             >>,
             Vec<&'a WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>>,
             Vec<&'a WorkerThread<
                 ui::Event<Self::C, Self::P>,
-                ui::Message<Self::P>,
+                ui::Message<Self::C, Self::P>,
             >>,
             Vec<&'a WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>>,
         );

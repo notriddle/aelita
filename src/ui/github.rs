@@ -13,6 +13,7 @@ use pipeline::{self, PipelineId};
 use serde_json;
 use serde_json::{from_reader as json_from_reader, to_vec as json_to_vec};
 use std;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
@@ -162,16 +163,26 @@ struct PullRequestDesc {
     pull_request: PrDesc,
     repository: RepositoryDesc,
 }
+#[derive(Deserialize, Serialize)]
+struct StatusDesc {
+    state: String,
+    target_url: Option<String>,
+    description: String,
+    context: String,
+}
 
 enum AcceptType {
     Regular,
     Repository,
 }
 
-impl pipeline::Worker<ui::Event<Commit, Pr>, ui::Message<Pr>> for Worker {
+impl pipeline::Worker<
+    ui::Event<Commit, Pr>,
+    ui::Message<Commit, Pr>,
+> for Worker {
     fn run(
         &mut self,
-        recv_msg: Receiver<ui::Message<Pr>>,
+        recv_msg: Receiver<ui::Message<Commit, Pr>>,
         mut send_event: Sender<ui::Event<Commit, Pr>>
     ) {
         crossbeam::scope(|scope| {
@@ -458,12 +469,12 @@ impl Worker {
 
     fn handle_message(
         &self,
-        msg: ui::Message<Pr>,
+        msg: ui::Message<Commit, Pr>,
         _: &mut Sender<ui::Event<Commit, Pr>>,
     ) {
         match msg {
             ui::Message::SendResult(pipeline_id, pr, status) => {
-                let result = self.send_result_to_pr(pipeline_id, pr, status);
+                let result = self.send_result_to_pr(pipeline_id, pr, &status);
                 if let Err(e) = result {
                     warn!("Failed to send {:?} to pr {}: {:?}", status, pr, e)
                 }
@@ -497,7 +508,7 @@ impl Worker {
         &self,
         pipeline_id: PipelineId,
         pr: Pr,
-        status: ui::Status,
+        status: &ui::Status<Commit>,
     ) -> Result<(), GithubRequestError> {
         let mut repo = None;
         for (r, c) in &self.repos {
@@ -511,34 +522,184 @@ impl Worker {
                 return Err(GithubRequestError::Pipeline(pipeline_id));
             }
         };
-        let url = format!(
-            "{}/repos/{}/{}/issues/{}/comments",
-            self.host,
-            repo.owner,
-            repo.repo,
-            pr
-        );
-        let comment = PostCommentComment {
-            body: match status {
-                ui::Status::InProgress => ":hourglass: Testing PR ...",
-                ui::Status::Success => ":+1: Success",
-                ui::Status::Failure => ":-1: Build failed",
-                ui::Status::Unmergeable => ":x: Merge conflict!",
-                ui::Status::Unmoveable =>
-                    ":scream: Internal error while fast-forward master",
-                ui::Status::Invalidated =>
-                    ":not_good: New commits added",
-                ui::Status::NoCommit =>
-                    ":scream: Internal error: no commit found for PR",
-            }.to_owned(),
+        let comment_body = match *status {
+            ui::Status::StartingBuild(_, _) => None,
+            ui::Status::Testing(_, _, _) => None,
+            ui::Status::Success(_, _, ref url) => Some({
+                if let Some(ref url) = *url {
+                    Cow::Owned(format!(":+1: [Build succeeded]({})", url))
+                } else {
+                    Cow::Borrowed(":+1: Build succeeded")
+                }
+            }),
+            ui::Status::Failure(_, _, ref url) => Some({
+                if let Some(ref url) = *url {
+                    Cow::Owned(format!(":-1: [Build failed]({})", url))
+                } else {
+                    Cow::Borrowed(":-1: Build failed")
+                }
+            }),
+            ui::Status::Unmergeable(_) => Some(Cow::Borrowed(
+                ":x: Merge conflict!"
+            )),
+            ui::Status::Unmoveable(_, _) => Some(Cow::Borrowed(
+                ":scream: Internal error while fast-forward master"
+            )),
+            ui::Status::Invalidated => Some(Cow::Borrowed(
+                ":not_good: New commits added"
+            )),
+            ui::Status::NoCommit => Some(Cow::Borrowed(
+                ":scream: Internal error: no commit found for PR"
+            )),
+            ui::Status::Completed(_, _) => None,
         };
-        let comment_body = try!(json_to_vec(&comment));
-        let resp = try!(self.rate_limiter.retry_send(|| {
-            self.authed_request(Method::Post, AcceptType::Regular, &url)
-                .body(&*comment_body)
-        }));
-        if !resp.status.is_success() {
-            return Err(GithubRequestError::HttpStatus(resp.status))
+        let status = match *status {
+            ui::Status::StartingBuild(
+                ref pull_commit,
+                ref merge_commit,
+            ) => Some((
+                pull_commit,
+                Some(merge_commit),
+                StatusDesc {
+                    state: "pending".to_owned(),
+                    target_url: None,
+                    description: format!(
+                        "Testing {} with merge commit {}",
+                        pull_commit,
+                        merge_commit,
+                    ),
+                    context: "continuous-integration/aelita".to_owned(),
+                }
+            )),
+            ui::Status::Testing(
+                ref pull_commit,
+                ref merge_commit,
+                ref url,
+            ) => Some((
+                pull_commit,
+                Some(merge_commit),
+                StatusDesc {
+                    state: "pending".to_owned(),
+                    target_url: url.as_ref().map(ToString::to_string),
+                    description: format!(
+                        "Testing {} with merge commit {}",
+                        pull_commit,
+                        merge_commit,
+                    ),
+                    context: "continuous-integration/aelita".to_owned(),
+                }
+            )),
+            ui::Status::Success(
+                ref pull_commit,
+                ref merge_commit,
+                ref url,
+            ) => Some((
+                pull_commit,
+                Some(merge_commit),
+                StatusDesc {
+                    state: "success".to_owned(),
+                    target_url: url.as_ref().map(ToString::to_string),
+                    description: "Tests passed".to_owned(),
+                    context: "continuous-integration/aelita".to_owned(),
+                }
+            )),
+            ui::Status::Failure(
+                ref pull_commit,
+                ref merge_commit, 
+                ref url,
+            ) => Some((
+                pull_commit,
+                Some(merge_commit),
+                StatusDesc {
+                    state: "failure".to_owned(),
+                    target_url: url.as_ref().map(ToString::to_string),
+                    description: "Tests failed".to_owned(),
+                    context: "continuous-integration/aelita".to_owned(),
+                }
+            )),
+            ui::Status::Unmergeable(
+                ref pull_commit,
+            ) => Some((
+                pull_commit,
+                None,
+                StatusDesc {
+                    state: "failure".to_owned(),
+                    target_url: None,
+                    description: "Merge failed".to_owned(),
+                    context: "continuous-integration/aelita".to_owned(),
+                }
+            )),
+            ui::Status::Unmoveable(
+                ref pull_commit,
+                ref merge_commit,
+            ) => Some((
+                pull_commit,
+                Some(merge_commit),
+                StatusDesc {
+                    state: "error".to_owned(),
+                    target_url: None,
+                    description: "Merge failed".to_owned(),
+                    context: "continuous-integration/aelita".to_owned(),
+                }
+            )),
+            ui::Status::Invalidated | ui::Status::NoCommit => None,
+            ui::Status::Completed(_, _) => None,
+        };
+        if let Some(comment_body) = comment_body {
+            let url = format!(
+                "{}/repos/{}/{}/issues/{}/comments",
+                self.host,
+                repo.owner,
+                repo.repo,
+                pr
+            );
+            let comment = try!(json_to_vec(&PostCommentComment{
+                body: comment_body.into_owned(),
+            }));
+            let resp = try!(self.rate_limiter.retry_send(|| {
+                self.authed_request(Method::Post, AcceptType::Regular, &url)
+                    .body(&*comment)
+            }));
+            if !resp.status.is_success() {
+                return Err(GithubRequestError::HttpStatus(resp.status))
+            }
+        }
+        if let Some(status) = status {
+            let (pull_commit, merge_commit, status_body) = status;
+            let url = format!(
+                "{}/repos/{}/{}/statuses/{}",
+                self.host,
+                repo.owner,
+                repo.repo,
+                pull_commit
+            );
+            let status_body = try!(json_to_vec(&status_body));
+            let resp = try!(self.rate_limiter.retry_send(|| {
+                self.authed_request(Method::Post, AcceptType::Regular, &url)
+                    .body(&*status_body)
+            }));
+            if !resp.status.is_success() {
+                return Err(GithubRequestError::HttpStatus(resp.status))
+            }
+            if let Some(merge_commit) = merge_commit {
+                let url = format!(
+                    "{}/repos/{}/{}/statuses/{}",
+                    self.host,
+                    repo.owner,
+                    repo.repo,
+                    merge_commit
+                );
+                let resp = try!(self.rate_limiter.retry_send(|| {
+                    self.authed_request(
+                        Method::Post,
+                        AcceptType::Regular,
+                        &url
+                    ).body(&*status_body)
+                }));
+                if !resp.status.is_success() {
+                    return Err(GithubRequestError::HttpStatus(resp.status))
+                }
+            }
         }
         Ok(())
     }

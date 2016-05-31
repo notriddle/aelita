@@ -2,7 +2,7 @@
 
 use ci;
 use crossbeam;
-use hyper::client::Client;
+use hyper::client::{Client, IntoUrl};
 use hyper::header::{Authorization, Basic};
 use pipeline::{self, PipelineId};
 use serde_json::from_reader as json_from_reader;
@@ -88,8 +88,9 @@ impl Worker {
             #[derive(Deserialize, Serialize)]
             struct ResultBuildDesc {
                 phase: String,
-                status: String,
+                status: Option<String>,
                 scm: ResultBuildScmDesc,
+                url: String,
             }
             #[derive(Deserialize, Serialize)]
             struct ResultDesc {
@@ -103,8 +104,9 @@ impl Worker {
                     continue;
                 }
             };
-            if desc.build.phase != "COMPLETED" {
-                info!("Build not completed");
+            if desc.build.phase != "COMPLETED" &&
+               desc.build.phase != "STARTED" {
+                info!("Build not completed or started");
                 continue;
             }
             let commit = match C::from_str(&desc.build.scm.commit) {
@@ -135,23 +137,35 @@ impl Worker {
                     continue;
                 }
             };
-            match &desc.build.status[..] {
-                "SUCCESS" => {
-                    send_event.send(
-                        ci::Event::BuildSucceeded(
-                            *pipeline_id,
-                            commit
-                        )
-                    ).expect("Pipeline");
-                }
-                e => {
-                    info!("Build failed: {}", e);
-                    send_event.send(
-                        ci::Event::BuildFailed(
-                            *pipeline_id,
-                            commit
-                        )
-                    ).expect("Pipeline");
+            if desc.build.phase == "STARTED" {
+                send_event.send(
+                    ci::Event::BuildStarted(
+                        *pipeline_id,
+                        commit,
+                        desc.build.url.into_url().ok(),
+                    )
+                ).expect("Pipeline");
+            } else if let Some(status) = desc.build.status {
+                match &status[..] {
+                    "SUCCESS" => {
+                        send_event.send(
+                            ci::Event::BuildSucceeded(
+                                *pipeline_id,
+                                commit,
+                                desc.build.url.into_url().ok(),
+                            )
+                        ).expect("Pipeline");
+                    }
+                    e => {
+                        info!("Build failed: {}", e);
+                        send_event.send(
+                            ci::Event::BuildFailed(
+                                *pipeline_id,
+                                commit,
+                                desc.build.url.into_url().ok(),
+                            )
+                        ).expect("Pipeline");
+                    }
                 }
             }
         }
@@ -196,14 +210,16 @@ impl Worker {
                         warn!("Build refused: {:?}", res.status);
                         send_event.send(ci::Event::BuildFailed(
                             pipeline_id,
-                            commit
+                            commit,
+                            None,
                         )).expect("Pipeline");
                     }
                     Err(e) => {
                         warn!("Failed to contact CI: {:?}", e);
                         send_event.send(ci::Event::BuildFailed(
                             pipeline_id,
-                            commit
+                            commit,
+                            None,
                         )).expect("Pipeline");
                     }
                     Ok(_) => {}
