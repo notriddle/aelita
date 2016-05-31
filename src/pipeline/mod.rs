@@ -255,9 +255,9 @@ where C: Commit + 'static,
                 assert_eq!(&pipeline_id, &self.id);
                 if let Some(mut running) = db.take_running(self.id) {
                     if running.pull_commit != pull_commit {
-                        panic!("VCS merged event with wrong commit");
+                        warn!("VCS merged event with wrong commit");
                     } else if running.merge_commit.is_some() {
-                        panic!("VCS merged event with running commit");
+                        warn!("VCS merged event with running commit");
                     } else if running.canceled {
                         // Drop it on the floor. It's canceled.
                     } else {
@@ -277,7 +277,7 @@ where C: Commit + 'static,
                         db.put_running(self.id, running);
                     }
                 } else {
-                    panic!("VCS merged event with no queued PR");
+                    warn!("VCS merged event with no queued PR");
                 }
             },
             Event::VcsEvent(vcs::Event::FailedMergeToStaging(
@@ -287,9 +287,9 @@ where C: Commit + 'static,
                 assert_eq!(&pipeline_id, &self.id);
                 if let Some(running) = db.take_running(self.id) {
                     if running.pull_commit != pull_commit {
-                        panic!("VCS merged event with wrong commit");
+                        warn!("VCS merged event with wrong commit");
                     } else if running.merge_commit.is_some() {
-                        panic!("VCS merged event with running commit");
+                        warn!("VCS merged event with running commit");
                     } else if running.canceled {
                         // Drop it on the floor. It's canceled.
                     } else {
@@ -300,7 +300,7 @@ where C: Commit + 'static,
                         );
                     }
                 } else {
-                    panic!("VCS merged event with no queued PR");
+                    warn!("VCS merged event with no queued PR");
                 }
             },
             Event::CiEvent(ci::Event::BuildStarted(
@@ -312,7 +312,7 @@ where C: Commit + 'static,
                 if let Some(running) = db.peek_running(self.id) {
                     if let Some(merged_commit) = running.merge_commit {
                         if merged_commit != building_commit {
-                            panic!("Building a different commit");
+                            warn!("Building a different commit");
                         } else if running.canceled {
                             // Drop it on the floor. It's canceled.
                         } else {
@@ -327,10 +327,10 @@ where C: Commit + 'static,
                             );
                         }
                     } else {
-                        panic!("Building a commit that never merged");
+                        warn!("Building a commit that never merged");
                     }
                 } else {
-                    panic!("VCS merged event with no queued PR");
+                    warn!("VCS merged event with no queued PR");
                 }
             },
             Event::CiEvent(ci::Event::BuildFailed(
@@ -342,7 +342,7 @@ where C: Commit + 'static,
                 if let Some(running) = db.take_running(self.id) {
                     if let Some(merged_commit) = running.merge_commit {
                         if merged_commit != built_commit {
-                            panic!("Finished building a different commit");
+                            warn!("Finished building a different commit");
                         } else if running.canceled {
                             // Drop it on the floor. It's canceled.
                         } else {
@@ -357,10 +357,10 @@ where C: Commit + 'static,
                             );
                         }
                     } else {
-                        panic!("Finished building a commit that never merged");
+                        warn!("Finished building a commit that never merged");
                     }
                 } else {
-                    panic!("VCS merged event with no queued PR");
+                    warn!("VCS merged event with no queued PR");
                 }
             },
             Event::CiEvent(ci::Event::BuildSucceeded(
@@ -372,7 +372,7 @@ where C: Commit + 'static,
                 if let Some(running) = db.peek_running(self.id) {
                     if let Some(merged_commit) = running.merge_commit {
                         if &merged_commit != &built_commit {
-                            panic!("Finished building a different commit")
+                            warn!("Finished building a different commit")
                         } else if running.canceled {
                             // Canceled; drop on the floor.
                             let running2 = db.take_running(self.id)
@@ -397,10 +397,10 @@ where C: Commit + 'static,
                             );
                         }
                     } else {
-                        panic!("Finished building a commit that never merged");
+                        warn!("Finished building a commit that never merged");
                     }
                 } else {
-                    panic!("VCS merged event with no queued PR");
+                    warn!("VCS merged event with no queued PR");
                 }
             },
             Event::VcsEvent(vcs::Event::FailedMoveToMaster(
@@ -411,7 +411,7 @@ where C: Commit + 'static,
                 if let Some(running) = db.take_running(self.id) {
                     if let Some(running_merge_commit) = running.merge_commit {
                         if running_merge_commit != merge_commit {
-                            panic!("VCS move event with wrong commit");
+                            warn!("VCS move event with wrong commit");
                         } else if running.canceled {
                             // Drop it on the floor. It's canceled.
                         } else {
@@ -425,10 +425,10 @@ where C: Commit + 'static,
                             );
                         }
                     } else {
-                        panic!("VCS move event with commit that never ran");
+                        warn!("VCS move event with commit that never ran");
                     }
                 } else {
-                    panic!("VCS move event with no queued PR");
+                    warn!("VCS move event with no queued PR");
                 }
             },
             Event::VcsEvent(vcs::Event::MovedToMaster(
@@ -439,7 +439,7 @@ where C: Commit + 'static,
                 if let Some(running) = db.take_running(self.id) {
                     if let Some(running_merge_commit) = running.merge_commit {
                         if running_merge_commit != merge_commit {
-                            panic!("VCS move event with wrong commit");
+                            warn!("VCS move event with wrong commit");
                         } else if running.canceled {
                             // Drop it on the floor. It's canceled.
                         } else {
@@ -453,10 +453,10 @@ where C: Commit + 'static,
                             );
                         }
                     } else {
-                        panic!("VCS move event with commit that never ran");
+                        warn!("VCS move event with commit that never ran");
                     }
                 } else {
-                    panic!("VCS move event with no queued PR");
+                    warn!("VCS move event with no queued PR");
                 }
             }
         }
