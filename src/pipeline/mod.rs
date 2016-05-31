@@ -1,7 +1,7 @@
 // This file is released under the same terms as Rust itself.
 
 use ci;
-use db::{Db, QueueEntry, RunningEntry};
+use db::{Db, PendingEntry, QueueEntry, RunningEntry};
 use std::marker::PhantomData;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
@@ -172,22 +172,69 @@ where C: Commit + 'static,
                 message,
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                db.cancel_by_pr(self.id, &pr);
-                db.push_queue(self.id, QueueEntry{
+                let commit = match (
+                    commit,
+                    db.peek_pending_by_pr(self.id, &pr).map(|p| p.commit),
+                ) {
+                    (Some(reviewed_pr), Some(current_pr)) => {
+                        if reviewed_pr != current_pr {
+                            self.ui.send_result(
+                                self.id,
+                                pr.clone(),
+                                ui::Status::Invalidated,
+                            );
+                            None
+                        } else {
+                            Some(reviewed_pr)
+                        }
+                    }
+                    (Some(reviewed_pr), None) => {
+                        Some(reviewed_pr)
+                    }
+                    (None, Some(current_pr)) => {
+                        Some(current_pr)
+                    }
+                    (None, None) => {
+                        self.ui.send_result(
+                            self.id,
+                            pr.clone(),
+                            ui::Status::NoCommit,
+                        );
+                        None
+                    }
+                };
+                if let Some(commit) = commit {
+                    db.cancel_by_pr(self.id, &pr);
+                    db.push_queue(self.id, QueueEntry{
+                        commit: commit,
+                        pr: pr,
+                        message: message,
+                    });
+                }
+            },
+            Event::UiEvent(ui::Event::Opened(pipeline_id, pr, commit)) => {
+                assert_eq!(&pipeline_id, &self.id);
+                db.add_pending(self.id, PendingEntry{
                     commit: commit,
                     pr: pr,
-                    message: message,
                 });
-            },
-            Event::UiEvent(ui::Event::Opened(pipeline_id, _, _)) => {
-                assert_eq!(&pipeline_id, &self.id)
             },
             Event::UiEvent(ui::Event::Changed(pipeline_id, pr, commit)) => {
                 assert_eq!(&pipeline_id, &self.id);
-                db.cancel_by_pr_different_commit(self.id, &pr, &commit);
+                if db.cancel_by_pr_different_commit(self.id, &pr, &commit) {
+                    self.ui.send_result(
+                        self.id,
+                        pr.clone(),
+                        ui::Status::Invalidated,
+                    );
+                }
             },
-            Event::UiEvent(ui::Event::Canceled(pipeline_id, pr)) |
             Event::UiEvent(ui::Event::Closed(pipeline_id, pr)) => {
+                assert_eq!(&pipeline_id, &self.id);
+                db.take_pending_by_pr(self.id, &pr);
+                db.cancel_by_pr(self.id, &pr);
+            },
+            Event::UiEvent(ui::Event::Canceled(pipeline_id, pr)) => {
                 assert_eq!(&pipeline_id, &self.id);
                 db.cancel_by_pr(self.id, &pr);
             },
@@ -374,7 +421,7 @@ where C: Commit + 'static,
 
 use super::{Ci, Vcs, Ui};
 use ci;
-use db::{Db, QueueEntry, RunningEntry};
+use db::{Db, PendingEntry, QueueEntry, RunningEntry};
 use pipeline::{Event, Pipeline, PipelineId};
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -389,6 +436,7 @@ use void::Void;
 struct MemoryDb<C: Commit, P: Pr> {
     queue: VecDeque<QueueEntry<C, P>>,
     running: Option<RunningEntry<C, P>>,
+    pending: Vec<PendingEntry<C, P>>,
 }
 
 impl<C: Commit, P: Pr> MemoryDb<C, P> {
@@ -396,6 +444,7 @@ impl<C: Commit, P: Pr> MemoryDb<C, P> {
         MemoryDb{
             queue: VecDeque::new(),
             running: None,
+            pending: Vec::new(),
         }
     }
 }
@@ -416,6 +465,45 @@ impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
     fn peek_running(&mut self, _: PipelineId) -> Option<RunningEntry<C, P>> {
         self.running.clone()
     }
+    fn add_pending(&mut self, _: PipelineId, mut entry: PendingEntry<C, P>) {
+        let mut replaced = false;
+        for ref mut entry2 in self.pending.iter_mut() {
+            if entry2.pr == entry.pr {
+                mem::replace(entry2, &mut entry);
+                replaced = true;
+                break;
+            }
+        }
+        if !replaced {
+            self.pending.push(entry);
+        }
+    }
+    fn peek_pending_by_pr(
+        &mut self,
+        _: PipelineId,
+        pr: &P,
+    ) -> Option<PendingEntry<C, P>> {
+        for entry in &self.pending {
+            if entry.pr == *pr {
+                return Some(entry.clone());
+            }
+        }
+        None
+    }
+    fn take_pending_by_pr(
+        &mut self,
+        _: PipelineId,
+        pr: &P,
+    ) -> Option<PendingEntry<C, P>> {
+        let mut entry_i = None;
+        for (i, entry) in self.pending.iter().enumerate() {
+            if entry.pr == *pr {
+                entry_i = Some(i);
+                break;
+            }
+        }
+        entry_i.map(|entry_i| self.pending.remove(entry_i))
+    }
     fn cancel_by_pr(&mut self, _: PipelineId, pr: &P) {
         let queue = mem::replace(&mut self.queue, VecDeque::new());
         let filtered = queue.into_iter().filter(|entry| entry.pr != *pr);
@@ -431,17 +519,21 @@ impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
         _: PipelineId,
         pr: &P,
         commit: &C
-    ) {
+    ) -> bool {
+        let len_orig = self.queue.len();
         let queue = mem::replace(&mut self.queue, VecDeque::new());
         let filtered = queue.into_iter().filter(|entry|
             entry.pr != *pr || entry.commit == *commit
         );
         self.queue.extend(filtered);
+        let mut canceled = len_orig != self.queue.len();
         if let Some(ref mut running) = self.running {
             if running.pr == *pr && running.pull_commit != *commit {
                 running.canceled = true;
+                canceled = true;
             }
         }
+        canceled
     }
 }
 
@@ -588,7 +680,65 @@ fn handle_add_to_queue() {
         Event::UiEvent(ui::Event::Approved(
             PipelineId(0),
             MemoryPr::A,
+            Some(MemoryCommit::A),
+            "Message!".to_owned(),
+        )),
+    );
+    assert_eq!(db.running.unwrap().pull_commit, MemoryCommit::A);
+    assert!(db.queue.is_empty());
+    assert_eq!(vcs.borrow().staging.unwrap(), MemoryCommit::A);
+}
+
+#[test]
+fn handle_add_to_queue_by_pending_none() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Approved(
+            PipelineId(0),
+            MemoryPr::A,
+            None,
+            "Message!".to_owned(),
+        )),
+    );
+    assert!(db.running.is_none());
+    assert!(db.queue.is_empty());
+    assert!(vcs.borrow().staging.is_none());
+    assert_eq!(ui.borrow().results[0].1, ui::Status::NoCommit);
+}
+
+#[test]
+fn handle_add_to_queue_by_pending_some() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Opened(
+            PipelineId(0),
+            MemoryPr::A,
             MemoryCommit::A,
+        )),
+    );
+    handle_event(
+        &mut ui,
+        &mut vcs,
+        &mut ci,
+        &mut db,
+        Event::UiEvent(ui::Event::Approved(
+            PipelineId(0),
+            MemoryPr::A,
+            None,
             "Message!".to_owned(),
         )),
     );
@@ -611,7 +761,7 @@ fn handle_add_two_to_queue() {
         Event::UiEvent(ui::Event::Approved(
             PipelineId(0),
             MemoryPr::A,
-            MemoryCommit::A,
+            Some(MemoryCommit::A),
             "Message!".to_owned(),
         ))
     );
@@ -623,7 +773,7 @@ fn handle_add_two_to_queue() {
         Event::UiEvent(ui::Event::Approved(
             PipelineId(0),
             MemoryPr::B,
-            MemoryCommit::B,
+            Some(MemoryCommit::B),
             "Message!".to_owned(),
         ))
     );
@@ -647,7 +797,7 @@ fn handle_add_two_same_pr_to_queue() {
         Event::UiEvent(ui::Event::Approved(
             PipelineId(0),
             MemoryPr::A,
-            MemoryCommit::A,
+            Some(MemoryCommit::A),
             "Message!".to_owned(),
         ))
     );
@@ -659,7 +809,7 @@ fn handle_add_two_same_pr_to_queue() {
         Event::UiEvent(ui::Event::Approved(
             PipelineId(0),
             MemoryPr::A,
-            MemoryCommit::B,
+            Some(MemoryCommit::B),
             "Message!".to_owned(),
         ))
     );
@@ -683,7 +833,7 @@ fn handle_add_three_same_pr_to_queue() {
         Event::UiEvent(ui::Event::Approved(
             PipelineId(0),
             MemoryPr::A,
-            MemoryCommit::A,
+            Some(MemoryCommit::A),
             "Message!".to_owned(),
         ))
     );
@@ -695,7 +845,7 @@ fn handle_add_three_same_pr_to_queue() {
         Event::UiEvent(ui::Event::Approved(
             PipelineId(0),
             MemoryPr::A,
-            MemoryCommit::B,
+            Some(MemoryCommit::B),
             "Message!".to_owned(),
         ))
     );
@@ -707,7 +857,7 @@ fn handle_add_three_same_pr_to_queue() {
         Event::UiEvent(ui::Event::Approved(
             PipelineId(0),
             MemoryPr::A,
-            MemoryCommit::C,
+            Some(MemoryCommit::C),
             "Message!".to_owned(),
         ))
     );
@@ -1332,7 +1482,7 @@ fn handle_runthrough() {
         Event::UiEvent(ui::Event::Approved(
             PipelineId(0),
             MemoryPr::A,
-            MemoryCommit::A,
+            Some(MemoryCommit::A),
             "Message!".to_owned(),
         ))
     );
@@ -1414,7 +1564,7 @@ fn handle_runthrough_next_commit() {
         Event::UiEvent(ui::Event::Approved(
             PipelineId(0),
             MemoryPr::A,
-            MemoryCommit::A,
+            Some(MemoryCommit::A),
             "MSG!".to_owned(),
         ))
     );
@@ -1439,7 +1589,7 @@ fn handle_runthrough_next_commit() {
         Event::UiEvent(ui::Event::Approved(
             PipelineId(0),
             MemoryPr::C,
-            MemoryCommit::C,
+            Some(MemoryCommit::C),
             "Message!".to_owned(),
         ))
     );

@@ -21,7 +21,7 @@ pub enum Message<P: Pr> {
 
 #[derive(Clone, Debug)]
 pub enum Event<C: Commit, P: Pr> {
-    Approved(PipelineId, P, C, String),
+    Approved(PipelineId, P, Option<C>, String),
     Canceled(PipelineId, P),
     Opened(PipelineId, P, C),
     Changed(PipelineId, P, C),
@@ -35,6 +35,8 @@ pub enum Status {
     Failure,
     Unmergeable,
     Unmoveable,
+    Invalidated,
+    NoCommit,
 }
 
 /// A series of reviewable changesets and other messages

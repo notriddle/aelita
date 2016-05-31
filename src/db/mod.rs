@@ -16,8 +16,23 @@ pub trait Db<C: Commit, P: Pr> {
     fn put_running(&mut self, PipelineId, RunningEntry<C, P>);
     fn take_running(&mut self, PipelineId) -> Option<RunningEntry<C, P>>;
     fn peek_running(&mut self, PipelineId) -> Option<RunningEntry<C, P>>;
+    fn add_pending(&mut self, PipelineId, PendingEntry<C, P>);
+    fn peek_pending_by_pr(&mut self, PipelineId, &P)
+        -> Option<PendingEntry<C, P>>;
+    fn take_pending_by_pr(&mut self, PipelineId, &P)
+        -> Option<PendingEntry<C, P>>;
     fn cancel_by_pr(&mut self, PipelineId, &P);
-    fn cancel_by_pr_different_commit(&mut self, PipelineId, &P, &C);
+    /// Cancel all queued and running entries in the given pipeline
+    /// with the same PR number and a different commit number.
+    /// Returns true if an actual cancel occurred.
+    fn cancel_by_pr_different_commit(&mut self, PipelineId, &P, &C) -> bool;
+}
+
+/// An item not yet in the build queue
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PendingEntry<C: Commit, P: Pr> {
+    pub commit: C,
+    pub pr: P,
 }
 
 /// An item in the build queue
