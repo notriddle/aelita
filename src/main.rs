@@ -21,9 +21,10 @@ extern crate void;
 
 mod ci;
 mod db;
-mod ui;
-mod vcs;
 mod pipeline;
+mod ui;
+mod util;
+mod vcs;
 
 use ci::jenkins;
 use pipeline::{Event, GetPipelineId, Pipeline, PipelineId, WorkerThread};
@@ -250,7 +251,7 @@ impl GithubCompatibleSetup {
     fn setup_jenkins(
         config: &toml::Table,
         config_projects: &toml::Table,
-    ) -> Option<jenkins::Worker<git::Commit>> {
+    ) -> Option<jenkins::Worker> {
         let jenkins_config = try_opt!(
             config.get("jenkins")
                 .map(|jenkins_config| {
