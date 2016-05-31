@@ -293,16 +293,7 @@ impl Worker {
                         Ok(commit) => commit,
                         Err(e) => {
                             warn!("Invalid commit sha with PR event: {:?}", e);
-                            match self.get_commit_for_pr(&repo, &pr) {
-                                Ok(commit) => {
-                                    info!("Got commit from web API");
-                                    commit
-                                }
-                                Err(e) => {
-                                    warn!("Also failed from API: {:?}", e);
-                                    return;
-                                }
-                            }
+                            return;
                         }
                     };
                     let event = match &desc.action[..] {
@@ -395,7 +386,6 @@ impl Worker {
                 send_event,
                 command,
                 &desc.issue,
-                &repo,
                 repo_config,
                 &pr,
             );
@@ -409,7 +399,6 @@ impl Worker {
         send_event: &Sender<ui::Event<Commit, Pr>>,
         command: comments::Command,
         issue: &IssueCommentIssue,
-        repo: &Repo,
         repo_config: &RepoConfig,
         pr: &Pr,
     ) {
@@ -418,10 +407,10 @@ impl Worker {
                 self.handle_approved_pr(
                     send_event,
                     issue,
-                    repo,
                     repo_config,
                     pr,
                     user,
+                    None,
                 );
             }
             comments::Command::Canceled => {
@@ -434,37 +423,25 @@ impl Worker {
         &self,
         send_event: &Sender<ui::Event<Commit, Pr>>,
         issue: &IssueCommentIssue,
-        repo: &Repo,
         repo_config: &RepoConfig,
         pr: &Pr,
-        user: &str
+        user: &str,
+        commit: Option<Commit>,
     ) {
-        match self.get_commit_for_pr(repo, pr) {
-            Ok(commit) => {
-                info!("Got commit {}", commit);
-                let message = format!(
-                    "#{} a=@{} r=@{}\n\n## {} ##\n\n{}",
-                    pr,
-                    issue.user.login,
-                    user,
-                    issue.title,
-                    issue.body,
-                );
-                send_event.send(ui::Event::Approved(
-                    repo_config.pipeline_id,
-                    *pr,
-                    commit,
-                    message
-                )).expect("PR Approved: Pipeline error");
-            }
-            Err(e) => {
-                warn!(
-                    "Failed to get commit for PR {}: {:?}",
-                    pr,
-                    e
-                );
-            }
-        }
+        let message = format!(
+            "#{} a=@{} r=@{}\n\n## {} ##\n\n{}",
+            pr,
+            issue.user.login,
+            user,
+            issue.title,
+            issue.body,
+        );
+        send_event.send(ui::Event::Approved(
+            repo_config.pipeline_id,
+            *pr,
+            commit,
+            message
+        )).expect("PR Approved: Pipeline error");
     }
 
     fn handle_canceled_pr(
@@ -516,33 +493,6 @@ impl Worker {
         }
     }
 
-    fn get_commit_for_pr(
-        &self,
-        repo: &Repo,
-        pr: &Pr,
-    ) -> Result<Commit, GithubRequestError> {
-        let url = format!(
-            "{}/repos/{}/{}/pulls/{}",
-            self.host,
-            repo.owner,
-            repo.repo,
-            pr
-        );
-        let resp = try!(self.rate_limiter.retry_send(|| {
-            self.authed_request(
-                Method::Get,
-                AcceptType::Regular,
-                &url
-            )
-        }));
-        if !resp.status.is_success() {
-            return Err(GithubRequestError::HttpStatus(resp.status))
-        }
-        let desc: PrDesc = try!(json_from_reader(resp));
-        assert_eq!(desc.number, pr.0);
-        Commit::from_str(&desc.head.sha).map_err(|x| x.into())
-    }
-
     fn send_result_to_pr(
         &self,
         pipeline_id: PipelineId,
@@ -576,6 +526,10 @@ impl Worker {
                 ui::Status::Unmergeable => ":x: Merge conflict!",
                 ui::Status::Unmoveable =>
                     ":scream: Internal error while fast-forward master",
+                ui::Status::Invalidated =>
+                    ":not_good: New commits added",
+                ui::Status::NoCommit =>
+                    ":scream: Internal error: no commit found for PR",
             }.to_owned(),
         };
         let comment_body = try!(json_to_vec(&comment));
