@@ -1,0 +1,194 @@
+// This file is released under the same terms as Rust itself.
+
+//! Test the entire system front-to-back.
+//! This is only a test for the happy path, and it's not thorough,
+//! but what it lacks in thorough, it makes up for in broad.
+
+#![feature(custom_derive, plugin)]
+#![plugin(serde_macros)]
+
+extern crate crossbeam;
+extern crate env_logger;
+extern crate hyper;
+#[macro_use] extern crate lazy_static;
+#[macro_use] extern crate log;
+#[macro_use] extern crate quick_error;
+extern crate regex;
+extern crate rusqlite;
+extern crate serde;
+extern crate serde_json;
+extern crate toml;
+extern crate void;
+
+use hyper::buffer::BufReader;
+use hyper::client::Client;
+use hyper::header::{Authorization, Basic, Headers};
+use hyper::net::{HttpListener, NetworkListener, NetworkStream};
+use hyper::server::{Request, Response};
+use hyper::status::StatusCode;
+use hyper::uri::RequestUri;
+use std::fs::File;
+use std::io::{BufWriter, Read, Write};
+use std::net::TcpStream;
+use std::path::Path;
+use std::process::Command;
+use std::thread;
+use std::time;
+
+const EXECUTABLE: &'static str = "target/debug/aelita";
+
+fn single_request<T, H>(listener: &mut HttpListener, h: H) -> T
+    where H: FnOnce(Request, Response) -> T
+{
+    let mut stream = listener.accept().unwrap();
+    let addr = stream.peer_addr()
+        .expect("webhook client address");
+    let mut stream_clone = stream.clone();
+    let mut buf_read = BufReader::new(
+        &mut stream_clone as &mut NetworkStream
+    );
+    let mut buf_write = BufWriter::new(&mut stream);
+    let req = Request::new(&mut buf_read, addr)
+        .expect("webhook Request");
+    let mut head = Headers::new();
+    let res = Response::new(&mut buf_write, &mut head);
+    h(req, res)
+}
+
+#[test]
+fn one_item_github_round_trip() {
+    env_logger::init().unwrap();
+    if !Path::new(EXECUTABLE).exists() {
+        panic!("Integration tests require the executable to be built.");
+    }
+
+    let mut github_server = HttpListener::new(&"localhost:9011").unwrap();
+    let mut jenkins_server = HttpListener::new(&"localhost:9012").unwrap();
+
+    Command::new("/usr/bin/tar")
+        .current_dir("./tests/")
+        .arg("-xvf")
+        .arg("cache.tar.gz")
+        .output()
+        .unwrap();
+
+    Command::new("/bin/rm")
+        .current_dir("./tests/")
+        .arg("db.sqlite")
+        .output()
+        .unwrap();
+
+    let mut aelita = Command::new(Path::new(EXECUTABLE).canonicalize().unwrap())
+        .current_dir("./tests/")
+        .arg("test-github-round-trip.toml")
+        .spawn()
+        .unwrap();
+
+    info!("Aelita asks if we're an organization. We're not, for this test.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath("/repos/AelitaBot/testp".to_owned())
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(br#"{"name":"testp","owner":{"login":"AelitaBot","type":"User"}}"#).unwrap();
+    });
+
+    info!("Wait a sec for it to finish starting.");
+    thread::sleep(time::Duration::new(2, 0));
+
+    info!("Pull request comes into existance.");
+    let http_client = Client::new();
+    let mut http_headers = Headers::new();
+    http_headers.set_raw("X-Github-Event", vec![b"pull_request".to_vec()]);
+    http_client.post("http://localhost:9001")
+        .body(r#"{"action":"opened","repository":{"name":"testp","owner":{"login":"AelitaBot","type":"User"}},"pull_request":{"state":"opened","number":1,"head":{"sha":"55016813274e906e4cbfed97be83e19e6cd93d91"}}}"#)
+        .headers(http_headers)
+        .send()
+        .unwrap();
+
+    info!("User posts comment to mark pull request reviewed.");
+    let http_client = Client::new();
+    let mut http_headers = Headers::new();
+    http_headers.set_raw("X-Github-Event", vec![b"issue_comment".to_vec()]);
+    http_client.post("http://localhost:9001")
+        .body(r#"{"issue":{"number":1,"title":"My PR!","body":"Test","pull_request":{"url":"http://github.com/AelitaBot/aelita/pull_request/1"},"state":"opened","user":{"login":"testu","type":"User"}},"comment":{"user":{"login":"testu","type":"User"},"body":"@AelitaBot r+"},"repository":{"name":"testp","owner":{"login":"AelitaBot","type":"User"}}}"#)
+        .headers(http_headers)
+        .send()
+        .unwrap();
+
+    info!("Aelita checks if user has permission to do that.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath("/repos/AelitaBot/testp/collaborators/testu".to_owned())
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::NoContent;
+        res.send(&[]).unwrap();
+    });
+
+    info!("Aelita sends build trigger.");
+    single_request(&mut jenkins_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath("/job/testp/build?token=MY_BUILD_TOKEN".to_owned())
+        );
+        assert_eq!(
+            req.headers.get::<Authorization<Basic>>().unwrap().0,
+            Basic{
+                username: "AelitaBot".to_owned(),
+                password: Some("MY_JENKINS_API_TOKEN".to_owned()),
+            }
+        );
+        *res.status_mut() = StatusCode::NoContent;
+        res.send(&[]).unwrap();
+    });
+
+    info!("Aelita does the merge.");
+    let mut commit_string = String::new();
+    File::open(Path::new("tests/cache/origin/.git/refs/heads/staging"))
+        .unwrap()
+        .read_to_string(&mut commit_string)
+        .unwrap();
+    commit_string = commit_string.replace("\n", "").replace("\r", "");
+
+    info!("Jenkins sends start notification to Aelita.");
+    let mut tcp_client = TcpStream::connect("localhost:9002").unwrap();
+    tcp_client.write(
+        r#"{"name":"testp","build":{"phase":"STARTED","url":"http://jenkins.com/job/1/","scm":{"commit":"CMMT"}}}"#
+            .replace("CMMT", &commit_string)
+            .as_bytes()
+    ).unwrap();
+    drop(tcp_client);
+
+    info!("Jenkins sends finished notification to Aelita.");
+    let mut tcp_client = TcpStream::connect("localhost:9002").unwrap();
+    tcp_client.write(
+        r#"{"name":"testp","build":{"phase":"COMPLETED","status":"SUCCESS","url":"http://jenkins.com/job/1/","scm":{"commit":"CMMT"}}}"#
+            .replace("CMMT", &commit_string)
+            .as_bytes()
+    ).unwrap();
+    drop(tcp_client);
+
+    info!("Wait a sec for it to finish pushing.");
+    thread::sleep(time::Duration::new(2, 0));
+
+    info!("Aelita fast-forwards master.");
+    let mut master_string = String::new();
+    File::open(Path::new("tests/cache/origin/.git/refs/heads/master"))
+        .unwrap()
+        .read_to_string(&mut master_string)
+        .unwrap();
+    master_string = master_string.replace("\n", "").replace("\r", "");
+    assert!(master_string != "e16d1eca074ae29ac1812e14316e96f3117d0675");
+
+    aelita.kill().unwrap();
+}
