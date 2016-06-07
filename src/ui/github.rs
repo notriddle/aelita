@@ -216,8 +216,13 @@ impl Worker {
                 &mut stream_clone as &mut NetworkStream
             );
             let mut buf_write = BufWriter::new(&mut stream);
-            let req = Request::new(&mut buf_read, addr)
-                .expect("webhook Request");
+            let req = match Request::new(&mut buf_read, addr) {
+                Ok(req) => req,
+                Err(e) => {
+                    warn!("Invalid webhook HTTP: {:?}", e);
+                    continue;
+                }
+            };
             let mut head = Headers::new();
             let res = Response::new(&mut buf_write, &mut head);
             self.handle_webhook(req, res, &send_event);
