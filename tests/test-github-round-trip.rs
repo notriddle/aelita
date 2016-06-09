@@ -18,6 +18,7 @@ extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
 extern crate toml;
+extern crate url;
 extern crate void;
 
 use hyper::buffer::BufReader;
@@ -78,7 +79,8 @@ fn one_item_github_round_trip() {
         .output()
         .unwrap();
 
-    let mut aelita = Command::new(Path::new(EXECUTABLE).canonicalize().unwrap())
+    let executable = Path::new(EXECUTABLE).canonicalize().unwrap();
+    let mut aelita = Command::new(executable)
         .current_dir("./tests/")
         .arg("test-github-round-trip.toml")
         .spawn()
@@ -95,7 +97,10 @@ fn one_item_github_round_trip() {
             b"token MY_PERSONAL_ACCESS_TOKEN"
         );
         *res.status_mut() = StatusCode::Ok;
-        res.send(br#"{"name":"testp","owner":{"login":"AelitaBot","type":"User"}}"#).unwrap();
+        res.send(concat!(r#" { "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{"login":"AelitaBot","type":"User"} "#,
+            r#" } "#).as_bytes()).unwrap();
     });
 
     info!("Wait a sec for it to finish starting.");
@@ -106,7 +111,20 @@ fn one_item_github_round_trip() {
     let mut http_headers = Headers::new();
     http_headers.set_raw("X-Github-Event", vec![b"pull_request".to_vec()]);
     http_client.post("http://localhost:9001")
-        .body(r#"{"action":"opened","repository":{"name":"testp","owner":{"login":"AelitaBot","type":"User"}},"pull_request":{"state":"opened","number":1,"head":{"sha":"55016813274e906e4cbfed97be83e19e6cd93d91"}}}"#)
+        .body(concat!(r#" { "#,
+            r#" "action":"opened", "#,
+            r#" "repository":{ "#,
+                r#" "name":"testp", "#,
+                r#" "owner":{"login":"AelitaBot","type":"User"} "#,
+            r#" }, "#,
+            r#" "pull_request":{ "#,
+                r#" "state":"opened", "#,
+                r#" "number":1, "#,
+                r#" "head":{ "#,
+                    r#" "sha":"55016813274e906e4cbfed97be83e19e6cd93d91" "#,
+                r#" } "#,
+            r#" } "#,
+        r#" } "#))
         .headers(http_headers)
         .send()
         .unwrap();
@@ -116,16 +134,45 @@ fn one_item_github_round_trip() {
     let mut http_headers = Headers::new();
     http_headers.set_raw("X-Github-Event", vec![b"issue_comment".to_vec()]);
     http_client.post("http://localhost:9001")
-        .body(r#"{"issue":{"number":1,"title":"My PR!","body":"Test","pull_request":{"url":"http://github.com/AelitaBot/aelita/pull_request/1"},"state":"opened","user":{"login":"testu","type":"User"}},"comment":{"user":{"login":"testu","type":"User"},"body":"@AelitaBot r+"},"repository":{"name":"testp","owner":{"login":"AelitaBot","type":"User"}}}"#)
+        .body(concat!(r#" { "#,
+            r#" "issue":{ "#,
+                r#" "number":1, "#,
+                r#" "title":"My PR!", "#,
+                r#" "body":"Test", "#,
+                r#" "pull_request":{ "#,
+                    r#" "url":"http://github.com/testu/testp/pull_request/1" "#,
+                r#" }, "#,
+                r#" "state":"opened", "#,
+                r#" "user":{ "#,
+                    r#" "login":"testu", "#,
+                    r#" "type":"User" "#,
+                r#" } "#,
+            r#" }, "#,
+            r#" "comment":{ "#,
+                r#" "user":{ "#,
+                    r#" "login":"testu", "#,
+                    r#" "type":"User" "#,
+                r#" }, "#,
+                r#" "body":"@AelitaBot r+" "#,
+            r#" }, "#,
+            r#" "repository":{ "#,
+                r#" "name":"testp", "#,
+                r#" "owner":{ "#,
+                    r#" "login":"AelitaBot", "#,
+                    r#" "type":"User" "#,
+                r#"} "#,
+            r#"} "#,
+        r#"}"#))
         .headers(http_headers)
         .send()
         .unwrap();
 
     info!("Aelita checks if user has permission to do that.");
     single_request(&mut github_server, |req, mut res| {
+        let path = "/repos/AelitaBot/testp/collaborators/testu".to_owned();
         assert_eq!(
             req.uri,
-            RequestUri::AbsolutePath("/repos/AelitaBot/testp/collaborators/testu".to_owned())
+            RequestUri::AbsolutePath(path)
         );
         assert_eq!(
             &req.headers.get_raw("Authorization").unwrap()[0][..],
@@ -137,9 +184,10 @@ fn one_item_github_round_trip() {
 
     info!("Aelita sends build trigger.");
     single_request(&mut jenkins_server, |req, mut res| {
+        let path = "/job/testp/build?token=MY_BUILD_TOKEN".to_owned();
         assert_eq!(
             req.uri,
-            RequestUri::AbsolutePath("/job/testp/build?token=MY_BUILD_TOKEN".to_owned())
+            RequestUri::AbsolutePath(path)
         );
         assert_eq!(
             req.headers.get::<Authorization<Basic>>().unwrap().0,
