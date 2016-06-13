@@ -1,0 +1,125 @@
+# This file is released under the same terms as Rust itself
+
+# Regular comments are written like this
+# Default options will be written with no space after the `#`
+# Others will not be commented out, and will have placeholders IN_ALL_CAPS
+
+[config]
+
+# Where to store the database
+#db = "db.sqlite"
+
+[config.github]
+
+# Port to listen for websockets
+listen = "localhost:6000"
+
+# User account to listen for commands on
+user = "AelitaBot"
+
+# Web address that the Github API is on; this is needed for Github Enterprise
+#host = "https://api.github.com"
+
+# Global default owner account for repositories
+# This is based on the observation that most organizations and individuals who
+# deploy aelita will own all their repos. It is not required to be specified
+# here, but if it is not specified it will need to be given for all projects
+owner = "MY_USER_OR_ORGANIZATON"
+
+# Personal access token; get it in the user account section on GitHub's website
+token = "MY_PERSONAL_ACCESS_TOKEN"
+
+# The git configuration section is not required, because all options have
+# defaults
+#[config.git]
+
+# Location of the `git` binary
+#executable = "git"
+
+# Base directory for all git checkouts
+#path = "./cache/"
+
+# Git committer name for the merge commit
+# Defaults to the Github username
+#name = "aelita-mergebot"
+
+# Git committer email for the merge commit
+# Defaults to the Github username @github.com
+#email = "aelita-mergebot@github.com"
+
+# Buildbot configuration
+# We use a change_hook connected to a git poller to trigger builds,
+# and HttpStatusPush to get build complete notifications,
+# and the JSON API.
+[config.buildbot]
+
+# Port to listen on for build-complete notifications
+# We ignore the contents entirely
+# (to support Buildbot 0.8 and 0.9, which use different formats).
+listen = "localhost:7000"
+
+# Web address that the Buildbot Web Status is on
+host = "http://MY_BUILDBOT_HOST"
+
+# HTTP Basic username
+user = "MY_BUILDBOT_USER"
+
+# HTTP Basic password
+token = "MY_BUILDBOT_PASSWORD"
+
+# This is a project definition
+# The part after the dot is the project's name
+[projects.MY_PROJECT]
+
+# Normally, the defaults will work for Github, but you need to specify that
+# this project uses Github at all
+# This is all that is typically needed; the rest of the options are described
+# below
+github = {}
+
+# The Git part is implied by Github, but if you're not using Github, you'll
+# need to specify that this is a Git project
+# This is all that is typically needed; the rest of the options are described
+# below
+#git = {}
+
+# Buildbot!
+[projects.MY_PROJECT.buildbot]
+
+# The poller to trigger through change_hook.
+# This is not currently inferred.
+poller = "git@github.com:MY_OWNER/MY_PROJECT
+
+# The builders that will need to be complete before the build is done.
+builders = [ "runtests" ]
+
+# These are the options that can be configured for Github. If you use it,
+# remove the `github = {}` part
+#[projects.MY_PROJECT.github]
+
+# The owner of the project
+#owner = "MY_OWNER_OR_ORGANIZATON"
+
+# The project's repo. It defaults to the project's name
+#repo = "MY_PROJECT"
+
+# These are the options that can be configured for Git. If you use it,
+# remove the `git = {}` part
+#[projects.MY_PROJECT.git]
+
+# The place to download this project
+# WARNING: This is not looked up using the API, so it needs to be specified
+# every time for Github Enterprise users
+#origin = "git@github.com:MY_OWNER_OR_ORGANIZATON/MY_PROJECT"
+
+# The name of the master branch. Defaults to `master`
+#master_branch = "master"
+
+# The name of the staging branch. Defaults to `staging`
+# If you're used to using homu or bors, they call it `auto`
+#staging_branch = "staging"
+
+# The project's path, below the base directory above. Defaults to the project's
+# name.
+#path = "MY_PROJECT"
+
