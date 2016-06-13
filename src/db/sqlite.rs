@@ -39,7 +39,8 @@ impl<C, P> SqliteDb<C, P>
                 message TEXT,
                 pull_commit TEXT,
                 merge_commit TEXT,
-                canceled INT
+                canceled INT,
+                built INT
             );
             CREATE TABLE IF NOT EXISTS pending (
                 id INTEGER PRIMARY KEY,
@@ -121,14 +122,15 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
             pull_commit,
             merge_commit,
             message,
-            canceled
+            canceled,
+            built,
         }: RunningEntry<C, P>
     ) {
         let sql = r###"
             REPLACE INTO running
-                (pipeline_id, pr, pull_commit, merge_commit, message, canceled)
+                (pipeline_id, pr, pull_commit, merge_commit, message, canceled, built)
             VALUES
-                (?, ?, ?, ?, ?, ?);
+                (?, ?, ?, ?, ?, ?, ?);
         "###;
         self.conn.execute(sql, &[
             &pipeline_id.0,
@@ -137,6 +139,7 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
             &merge_commit.map(|m| <C as Into<String>>::into(m)),
             &message,
             &canceled,
+            &built,
         ]).expect("Put running");
     }
     fn take_running(
@@ -146,7 +149,7 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
         let trans = self.conn.transaction()
             .expect("Start take-running transaction");
         let sql = r###"
-            SELECT pr, pull_commit, merge_commit, message, canceled
+            SELECT pr, pull_commit, merge_commit, message, canceled, built
             FROM running
             WHERE pipeline_id = ?;
         "###;
@@ -163,6 +166,7 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
                     ),
                     message: row.get(3),
                     canceled: row.get(4),
+                    built: row.get(5),
                 }).expect("Get running entry");
             rows.next().map(|item| item.expect("Retrieve running entry"))
         };
@@ -178,7 +182,7 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
         pipeline_id: PipelineId,
     ) -> Option<RunningEntry<C, P>> {
         let sql = r###"
-            SELECT pr, pull_commit, merge_commit, message, canceled
+            SELECT pr, pull_commit, merge_commit, message, canceled, built
             FROM running
             WHERE pipeline_id = ?;
         "###;
@@ -194,6 +198,7 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
                 ),
                 message: row.get(3),
                 canceled: row.get(4),
+                built: row.get(5),
             })
             .expect("Get running entry");
         rows.next()
