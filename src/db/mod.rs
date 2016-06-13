@@ -51,4 +51,5 @@ pub struct RunningEntry<C: Commit, P: Pr> {
     pub pr: P,
     pub message: String,
     pub canceled: bool,
+    pub built: bool,
 }

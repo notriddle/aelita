@@ -4,7 +4,7 @@ use crossbeam;
 use hyper;
 use hyper::buffer::BufReader;
 use hyper::client::{Client, IntoUrl, RequestBuilder};
-use hyper::header::Headers;
+use hyper::header::{Headers, UserAgent};
 use hyper::method::Method;
 use hyper::net::{HttpListener, NetworkListener, NetworkStream};
 use hyper::server::{Request, Response};
@@ -22,6 +22,7 @@ use std::num::ParseIntError;
 use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
 use ui::{self, comments};
+use util::USER_AGENT;
 use util::rate_limited_client::RateLimiter;
 use vcs::git::Commit;
 
@@ -862,9 +863,7 @@ impl Worker {
             vec![accept_type.to_vec()],
         );
         headers.set_raw("Authorization", vec![self.authorization.clone()]);
-        headers.set_raw("User-Agent", vec![
-            b"aelita/0.1 (https://github.com/AelitaBot/aelita)".to_vec()
-        ]);
+        headers.set(UserAgent(USER_AGENT.to_owned()));
         self.client.request(method, url)
             .headers(headers)
     }

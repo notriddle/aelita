@@ -17,6 +17,7 @@ extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
 extern crate toml;
+extern crate url;
 extern crate void;
 
 mod ci;
@@ -26,6 +27,7 @@ mod ui;
 mod util;
 mod vcs;
 
+use ci::buildbot;
 use ci::jenkins;
 use pipeline::{Event, GetPipelineId, Pipeline, PipelineId, WorkerThread};
 use std::borrow::Cow;
@@ -184,6 +186,10 @@ struct GithubCompatibleSetup {
         ci::Event<git::Commit>,
         ci::Message<git::Commit>,
     >>,
+    buildbot: Option<WorkerThread<
+        ci::Event<git::Commit>,
+        ci::Message<git::Commit>,
+    >>,
     git: Option<WorkerThread<
         vcs::Event<git::Commit>,
         vcs::Message<git::Commit>,
@@ -299,6 +305,62 @@ impl GithubCompatibleSetup {
             }
         }
         Some(jenkins)
+    }
+
+    fn setup_buildbot(
+        config: &toml::Table,
+        config_projects: &toml::Table,
+    ) -> Option<buildbot::Worker> {
+        let buildbot_config = try_opt!(
+            config.get("buildbot")
+                .map(|buildbot_config| {
+                    expect_opt!(
+                        buildbot_config.as_table(),
+                        "Invalid [config.buildbot] section: must be a table"
+                    )
+                })
+        );
+        let mut buildbot = buildbot::Worker::new(
+            expect_opt!(
+                buildbot_config.get("listen"),
+                "Invalid [config.buildbot] section: no listen address"
+            ).as_string(),
+            expect_opt!(
+                buildbot_config.get("host"),
+                "Invalid [config.buildbot] section: no host address"
+            ).as_string(),
+            buildbot_config.get("user").map(|user| {
+                (user.as_string(), expect_opt!(
+                    buildbot_config.get("token"),
+                    "Invalid [config.buildbot] section: user, but no password"
+                ).as_string())
+            }),
+        );
+        for (i, (_name, def)) in config_projects.iter().enumerate() {
+            let def = expect_opt!(
+                def.as_table(),
+                "[project] declarations must be tables"
+            );
+            let buildbot_def = def.get("buildbot").map(|buildbot_def| {
+                expect_opt!(
+                    buildbot_def.as_table(),
+                    "[project.buildbot] must be a table"
+                )
+            });
+            if let Some(buildbot_def) = buildbot_def {
+                buildbot.add_pipeline(PipelineId(i as i32), buildbot::Job{
+                    poller: buildbot_def.get("poller")
+                        .map(toml::Value::as_string),
+                    builders: expect_opt!(
+                        buildbot_def.get("builders")
+                            .and_then(toml::Value::as_slice)
+                            .into_iter().filter(|x| !x.is_empty()).next(),
+                        "Invalid [project.buildbot]: no builders specified"
+                    ).iter().map(toml::Value::as_string).collect(),
+                });
+            }
+        }
+        Some(buildbot)
     }
 
     fn setup_git(
@@ -425,6 +487,8 @@ impl CompatibleSetup for GithubCompatibleSetup {
                 .map(|w| WorkerThread::start(w)),
             jenkins: GithubCompatibleSetup::setup_jenkins(config, projects)
                 .map(|w| WorkerThread::start(w)),
+            buildbot: GithubCompatibleSetup::setup_buildbot(config, projects)
+                .map(|w| WorkerThread::start(w)),
         }
     }
     fn start<'a>(&'a self, _config: &toml::Table, projects: &toml::Table)
@@ -450,6 +514,7 @@ impl CompatibleSetup for GithubCompatibleSetup {
     {
         let mut cis = vec![];
         if let Some(ref j) = self.jenkins { cis.push(j); }
+        if let Some(ref b) = self.buildbot { cis.push(b); }
         let mut uis = vec![];
         if let Some(ref g) = self.github { uis.push(g); }
         let mut vcss = vec![];
@@ -469,14 +534,26 @@ impl CompatibleSetup for GithubCompatibleSetup {
                 println!("Project requires at least one UI configured");
                 exit(3);
             };
-            let ci = if def.contains_key("jenkins") {
+            let ci = if
+                def.contains_key("jenkins") &&
+                def.contains_key("buildbot")
+            {
+                // TODO: A "meta-CI" that can broadcast and aggregate n>1 CIs.
+                println!("Multi-CI is not currently supported.");
+                exit(3);
+            } else if def.contains_key("jenkins") {
                 expect_opt!(
                     self.jenkins.as_ref(),
                     "[project.jenkins] requires [config.jenkins]"
                 )
+            } else if def.contains_key("buildbot") {
+                expect_opt!(
+                    self.buildbot.as_ref(),
+                    "[project.buildbot] requires [config.buildbot]"
+                )
             } else {
                 println!("Project requires at least one CI configured");
-                exit(3)
+                exit(3);
             };
             let vcs = self.git.as_ref().expect("No git setup configured?");
             pipelines.push(Pipeline::new(
