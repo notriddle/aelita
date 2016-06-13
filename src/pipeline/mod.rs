@@ -330,7 +330,7 @@ where C: Commit + 'static,
                         warn!("Building a commit that never merged");
                     }
                 } else {
-                    warn!("VCS merged event with no queued PR");
+                    warn!("CI build started event with no queued PR");
                 }
             },
             Event::CiEvent(ci::Event::BuildFailed(
@@ -360,7 +360,7 @@ where C: Commit + 'static,
                         warn!("Finished building a commit that never merged");
                     }
                 } else {
-                    warn!("VCS merged event with no queued PR");
+                    warn!("CI build failed event with no queued PR");
                 }
             },
             Event::CiEvent(ci::Event::BuildSucceeded(
@@ -400,7 +400,7 @@ where C: Commit + 'static,
                         warn!("Finished building a commit that never merged");
                     }
                 } else {
-                    warn!("VCS merged event with no queued PR");
+                    warn!("CI build succeeded event with no queued PR");
                 }
             },
             Event::VcsEvent(vcs::Event::FailedMoveToMaster(
