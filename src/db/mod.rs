@@ -13,6 +13,7 @@ use vcs::Commit;
 pub trait Db<C: Commit, P: Pr> {
     fn push_queue(&mut self, PipelineId, QueueEntry<C, P>);
     fn pop_queue(&mut self, PipelineId) -> Option<QueueEntry<C, P>>;
+    fn list_queue(&mut self, PipelineId) -> Vec<QueueEntry<C, P>>;
     fn put_running(&mut self, PipelineId, RunningEntry<C, P>);
     fn take_running(&mut self, PipelineId) -> Option<RunningEntry<C, P>>;
     fn peek_running(&mut self, PipelineId) -> Option<RunningEntry<C, P>>;
@@ -21,6 +22,7 @@ pub trait Db<C: Commit, P: Pr> {
         -> Option<PendingEntry<C, P>>;
     fn take_pending_by_pr(&mut self, PipelineId, &P)
         -> Option<PendingEntry<C, P>>;
+    fn list_pending(&mut self, PipelineId) -> Vec<PendingEntry<C, P>>;
     fn cancel_by_pr(&mut self, PipelineId, &P);
     /// Cancel all queued and running entries in the given pipeline
     /// with the same PR number and a different commit number.
