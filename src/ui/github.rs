@@ -446,11 +446,11 @@ impl Worker {
         commit: Option<Commit>,
     ) {
         let message = format!(
-            "#{} a=@{} r=@{}\n\n## {} ##\n\n{}",
+            "{}\n\nMerged #{} a=@{} r=@{}\n\n{}",
+            issue.title,
             pr,
             issue.user.login,
             user,
-            issue.title,
             issue.body,
         );
         send_event.send(ui::Event::Approved(
