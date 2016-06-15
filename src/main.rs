@@ -25,12 +25,14 @@ mod db;
 mod pipeline;
 mod ui;
 mod util;
+mod view;
 mod vcs;
 
 use ci::buildbot;
 use ci::jenkins;
 use pipeline::{Event, GetPipelineId, Pipeline, PipelineId, WorkerThread};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::env::args;
 use std::error::Error;
 use std::fs::File;
@@ -38,6 +40,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::process::exit;
 use std::str::FromStr;
+use std::thread;
 use ui::github;
 use ui::Pr;
 use vcs::git;
@@ -114,21 +117,25 @@ fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
           <<S as CompatibleSetup>::C as FromStr>::Err: Error,
           <<S as CompatibleSetup>::P as FromStr>::Err: Error
 {
-    let mut db = db::sqlite::SqliteDb::open(
-        config.get("db")
-            .map(|file| file.as_string())
-            .unwrap_or_else(|| "db.sqlite".to_owned())
-    ).expect("open up db");
+    use std::sync::mpsc::{Select, Handle};
+    let db_path = config.get("db")
+        .map(|file| file.as_string())
+        .unwrap_or_else(|| "db.sqlite".to_owned());
+    let mut db = db::sqlite::SqliteDb::open(&db_path).expect("to open up db");
     let workers = S::setup_workers(config, config_projects);
     let (mut pipelines, cis, uis, vcss) =
         workers.start(config, config_projects);
-    use std::sync::mpsc::{Select, Handle};
     debug!(
         "Created {} pipelines, {} CIs, {} UIs, and {} VCSs",
         pipelines.len(),
         cis.len(),
         uis.len(),
         vcss.len(),
+    );
+    start_view::<S::C, S::P, _>(
+        config,
+        config_projects,
+        PathBuf::from(db_path)
     );
     unsafe {
         let select = Select::new();
@@ -174,6 +181,34 @@ fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
                 }
             }
         }
+    }
+}
+
+fn start_view<C: Commit, P: Pr, Q: Into<PathBuf>>(
+    config: &toml::Table,
+    config_projects: &toml::Table,
+    db_path: Q,
+)
+    where <C as FromStr>::Err: Error,
+          <P as FromStr>::Err: Error,
+{
+    if let Some(view) = config.get("view") {
+        let view = expect_opt!(
+            view.as_table(),
+            "[config.view] must be a table"
+        );
+        let listen = view.get("listen").map(|listen| {
+            expect_opt!(
+                listen.as_str(),
+                "[config.view.listen] must be a string"
+            )
+        }).unwrap_or("localhost:80").to_owned();
+        let mut pipelines = HashMap::new();
+        for (i, (project_name, _)) in config_projects.iter().enumerate() {
+            pipelines.insert(project_name.to_owned(), PipelineId(i as i32));
+        }
+        let db_path = db_path.into();
+        thread::spawn(|| view::run_sqlite::<C, P>(listen, db_path, pipelines));
     }
 }
 

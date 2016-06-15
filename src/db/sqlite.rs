@@ -114,6 +114,29 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
         trans.commit().expect("Commit pop-from-queue transaction");
         item.map(|item| item.1)
     }
+    fn list_queue(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Vec<QueueEntry<C, P>> {
+        let sql = r###"
+            SELECT pr, pull_commit, message
+            FROM queue
+            WHERE pipeline_id = ?
+            ORDER BY id ASC;
+        "###;
+        let mut stmt = self.conn.prepare(&sql)
+            .expect("Prepare list-queue query");
+        let rows = stmt.query_map(&[&pipeline_id.0], |row| QueueEntry {
+                pr: P::from_str(&row.get::<_, String>(0)).unwrap(),
+                commit: C::from_str(&row.get::<_, String>(1)).unwrap(),
+                message: row.get::<_, String>(2),
+            })
+            .expect("Get queue entry");
+        let rows: Vec<QueueEntry<C, P>> = rows.map(|item| {
+            item.expect("Retrieve queue entry")
+        }).collect();
+        rows
+    }
     fn put_running(
         &mut self,
         pipeline_id: PipelineId,
@@ -288,6 +311,28 @@ impl<C, P> Db<C, P> for SqliteDb<C, P>
             .expect("Get pending entry");
         rows.next()
             .map(|item| item.expect("Retrieve pending entry"))
+    }
+    fn list_pending(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Vec<PendingEntry<C, P>> {
+        let sql = r###"
+            SELECT pr, pull_commit
+            FROM pending
+            WHERE pipeline_id = ?;
+        "###;
+        let mut stmt = self.conn.prepare(&sql)
+            .expect("Prepare peek-pending query");
+        let rows = stmt.query_map(&[&pipeline_id.0], |row| PendingEntry {
+                pr: P::from_str(&row.get::<_, String>(0)[..]).unwrap(),
+                commit: C::from_str(&row.get::<_, String>(1)[..])
+                    .unwrap(),
+            })
+            .expect("Get pending entry");
+        let rows: Vec<PendingEntry<C, P>> = rows.map(|item| {
+            item.expect("Retrieve pending entry")
+        }).collect();
+        rows
     }
     fn cancel_by_pr(&mut self, pipeline_id: PipelineId, pr: &P) {
         let sql = r###"

@@ -9,6 +9,9 @@
 # Where to store the database
 #db = "db.sqlite"
 
+[config.view]
+listen = "localhost:8000"
+
 [config.github]
 
 # Port to listen for websockets

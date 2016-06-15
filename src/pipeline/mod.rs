@@ -536,6 +536,9 @@ impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
     fn pop_queue(&mut self, _: PipelineId) -> Option<QueueEntry<C, P>> {
         self.queue.pop_front()
     }
+    fn list_queue(&mut self, _: PipelineId) -> Vec<QueueEntry<C, P>> {
+        unimplemented!()
+    }
     fn put_running(&mut self, _: PipelineId, entry: RunningEntry<C, P>) {
         self.running = Some(entry);
     }
@@ -583,6 +586,9 @@ impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
             }
         }
         entry_i.map(|entry_i| self.pending.remove(entry_i))
+    }
+    fn list_pending(&mut self, _: PipelineId) -> Vec<PendingEntry<C, P>> {
+        unimplemented!()
     }
     fn cancel_by_pr(&mut self, _: PipelineId, pr: &P) {
         let queue = mem::replace(&mut self.queue, VecDeque::new());
