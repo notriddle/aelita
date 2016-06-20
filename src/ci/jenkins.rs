@@ -90,7 +90,7 @@ impl Worker {
                 phase: String,
                 status: Option<String>,
                 scm: ResultBuildScmDesc,
-                url: String,
+                full_url: String,
             }
             #[derive(Deserialize, Serialize)]
             struct ResultDesc {
@@ -142,7 +142,7 @@ impl Worker {
                     ci::Event::BuildStarted(
                         *pipeline_id,
                         commit,
-                        desc.build.url.into_url().ok(),
+                        desc.build.full_url.into_url().ok(),
                     )
                 ).expect("Pipeline");
             } else if let Some(status) = desc.build.status {
@@ -152,7 +152,7 @@ impl Worker {
                             ci::Event::BuildSucceeded(
                                 *pipeline_id,
                                 commit,
-                                desc.build.url.into_url().ok(),
+                                desc.build.full_url.into_url().ok(),
                             )
                         ).expect("Pipeline");
                     }
@@ -162,7 +162,7 @@ impl Worker {
                             ci::Event::BuildFailed(
                                 *pipeline_id,
                                 commit,
-                                desc.build.url.into_url().ok(),
+                                desc.build.full_url.into_url().ok(),
                             )
                         ).expect("Pipeline");
                     }

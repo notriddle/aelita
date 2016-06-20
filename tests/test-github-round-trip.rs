@@ -211,7 +211,7 @@ fn one_item_github_round_trip() {
     info!("Jenkins sends start notification to Aelita.");
     let mut tcp_client = TcpStream::connect("localhost:9002").unwrap();
     tcp_client.write(
-        r#"{"name":"testp","build":{"phase":"STARTED","url":"http://jenkins.com/job/1/","scm":{"commit":"CMMT"}}}"#
+        r#"{"name":"testp","build":{"phase":"STARTED","full_url":"http://jenkins.com/job/1/","scm":{"commit":"CMMT"}}}"#
             .replace("CMMT", &commit_string)
             .as_bytes()
     ).unwrap();
@@ -220,7 +220,7 @@ fn one_item_github_round_trip() {
     info!("Jenkins sends finished notification to Aelita.");
     let mut tcp_client = TcpStream::connect("localhost:9002").unwrap();
     tcp_client.write(
-        r#"{"name":"testp","build":{"phase":"COMPLETED","status":"SUCCESS","url":"http://jenkins.com/job/1/","scm":{"commit":"CMMT"}}}"#
+        r#"{"name":"testp","build":{"phase":"COMPLETED","status":"SUCCESS","full_url":"http://jenkins.com/job/1/","scm":{"commit":"CMMT"}}}"#
             .replace("CMMT", &commit_string)
             .as_bytes()
     ).unwrap();
