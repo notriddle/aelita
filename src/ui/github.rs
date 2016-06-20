@@ -140,7 +140,7 @@ struct TeamDesc {
 }
 #[derive(Serialize, Deserialize)]
 struct TeamRepoDesc {
-    permissions: TeamRepoPermissions,
+    permissions: Option<TeamRepoPermissions>,
 }
 #[derive(Serialize, Deserialize)]
 struct TeamRepoPermissions {
@@ -837,8 +837,10 @@ impl Worker {
                 let team_repo = try!(json_from_reader::<_, TeamRepoDesc>(
                     resp
                 ));
-                if team_repo.permissions.admin || team_repo.permissions.push {
-                    writing_teams.insert(team.id);
+                if let Some(ref permissions) = team_repo.permissions {
+                    if permissions.admin || permissions.push {
+                        writing_teams.insert(team.id);
+                    }
                 }
             }
             Ok(writing_teams)
