@@ -148,18 +148,28 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
             html {
                 head {
                     title { : name }
+                    link(rel="stylesheet", href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css");
+                    style { : raw!(include_str!("style.css")) }
                 }
                 body {
+                    h1 { : name }
                     table {
-                        |t| {
-                            for entry in running {
-                                render_entry(State::Running, entry, t);
-                            }
-                            for entry in queued {
-                                render_entry(State::Queued, entry, t);
-                            }
-                            for entry in pending {
-                                render_entry(State::Pending, entry, t);
+                        thead {
+                            th { : "Status" }
+                            th { : "PR#" }
+                            th { : "Title" }
+                        }
+                        tbody {
+                            |t| {
+                                for entry in running {
+                                    render_entry(State::Running, entry, t);
+                                }
+                                for entry in queued {
+                                    render_entry(State::Queued, entry, t);
+                                }
+                                for entry in pending {
+                                    render_entry(State::Pending, entry, t);
+                                }
                             }
                         }
                     }
@@ -179,17 +189,41 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
             html {
                 head {
                     title { : "Aelita" }
+                    link(rel="stylesheet", href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css");
+                    style { : raw!(include_str!("style.css")) }
                 }
                 body {
                     h1 { : "Repositories" }
-                    ul {
-                        @ for (name, _) in self.pipelines {
-                            li {
-                                a(href=name) { : name }
-                            }
+                    table {
+                        thead {
+                            th { : "Name" }
+                            th { : "Running" }
+                            th { : "In queue" }
+                            th { : "In review" }
+                            th { : "Opened" }
+                        }
+                        tbody {
+                            @ for (n, &pid) in self.pipelines { |t| {
+                                let opened = self.db.list_pending(pid).len();
+                                let queue = self.db.list_queue(pid).len();
+                                let running = self.db.peek_running(pid).is_some();
+                                let running = if running { 1 } else { 0 };
+                                let review = opened - queue - running;
+                                t << html!{
+                                    tr {
+                                        td(class="fill-link") {
+                                            a(href=n) : { n }
+                                        }
+                                        td { : running }
+                                        td { : queue }
+                                        td { : review }
+                                        td { : opened }
+                                    }
+                                }
+                            }}
                         }
                     }
-                    h1 { : "Cheat sheet" }
+                    h2 { : "Github cheat sheet" }
                     p { : "To use the robot, say a command to it." }
                     dl {
                         dt { : raw!("<code>r+</code>") }
@@ -228,7 +262,7 @@ fn render_entry<P: Pr>(
                     State::Pending => "In review",
                 }
             }
-            td {
+            td(class="fill-link") {
                 a(href=entry.url.to_string()) { : entry.pr.to_string() }
             }
             td { : &entry.title }
