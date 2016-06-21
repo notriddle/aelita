@@ -44,7 +44,6 @@ use std::thread;
 use ui::github;
 use ui::Pr;
 use vcs::git;
-use vcs::Commit;
 
 macro_rules! try_opt {
     ($e:expr) => (
@@ -114,7 +113,7 @@ fn main() {
 
 fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
     where S: CompatibleSetup,
-          <<S as CompatibleSetup>::C as FromStr>::Err: Error,
+          <<<S as CompatibleSetup>::P as Pr>::C as FromStr>::Err: Error,
           <<S as CompatibleSetup>::P as FromStr>::Err: Error
 {
     use std::sync::mpsc::{Select, Handle};
@@ -132,22 +131,22 @@ fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
         uis.len(),
         vcss.len(),
     );
-    start_view::<S::C, S::P, _>(
+    start_view::<S::P, _>(
         config,
         config_projects,
         PathBuf::from(db_path)
     );
     unsafe {
         let select = Select::new();
-        let mut ci_handles: Vec<Handle<ci::Event<S::C>>> =
+        let mut ci_handles: Vec<Handle<ci::Event<<S::P as Pr>::C>>> =
             cis.iter().map(|worker| {
                 select.handle(&worker.recv_event)
             }).collect();
-        let mut ui_handles: Vec<Handle<ui::Event<S::C, S::P>>> =
+        let mut ui_handles: Vec<Handle<ui::Event<S::P>>> =
             uis.iter().map(|worker| {
                 select.handle(&worker.recv_event)
             }).collect();
-        let mut vcs_handles: Vec<Handle<vcs::Event<S::C>>> =
+        let mut vcs_handles: Vec<Handle<vcs::Event<<S::P as Pr>::C>>> =
             vcss.iter().map(|worker| {
                 select.handle(&worker.recv_event)
             }).collect();
@@ -155,7 +154,7 @@ fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
         for h in &mut ci_handles { h.add(); }
         for h in &mut ui_handles { h.add(); }
         for h in &mut vcs_handles { h.add(); }
-        let mut pending: Option<Event<S::C, S::P>> = None;
+        let mut pending: Option<Event<S::P>> = None;
         'outer: loop {
             if let Some(event) = pending.take() {
                 let pipeline_id = event.pipeline_id();
@@ -184,12 +183,12 @@ fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
     }
 }
 
-fn start_view<C: Commit, P: Pr, Q: Into<PathBuf>>(
+fn start_view<P: Pr, Q: Into<PathBuf>>(
     config: &toml::Table,
     config_projects: &toml::Table,
     db_path: Q,
 )
-    where <C as FromStr>::Err: Error,
+    where <P::C as FromStr>::Err: Error,
           <P as FromStr>::Err: Error,
 {
     if let Some(view) = config.get("view") {
@@ -208,14 +207,14 @@ fn start_view<C: Commit, P: Pr, Q: Into<PathBuf>>(
             pipelines.insert(project_name.to_owned(), PipelineId(i as i32));
         }
         let db_path = db_path.into();
-        thread::spawn(|| view::run_sqlite::<C, P>(listen, db_path, pipelines));
+        thread::spawn(|| view::run_sqlite::<P>(listen, db_path, pipelines));
     }
 }
 
 struct GithubCompatibleSetup {
     github: Option<WorkerThread<
-        ui::Event<git::Commit, github::Pr>,
-        ui::Message<git::Commit, github::Pr>,
+        ui::Event<github::Pr>,
+        ui::Message<github::Pr>,
     >>,
     jenkins: Option<WorkerThread<
         ci::Event<git::Commit>,
@@ -512,7 +511,6 @@ impl GithubCompatibleSetup {
 }
 
 impl CompatibleSetup for GithubCompatibleSetup {
-    type C = git::Commit;
     type P = github::Pr;
     fn setup_workers(config: &toml::Table, projects: &toml::Table) -> Self {
         GithubCompatibleSetup{
@@ -530,21 +528,26 @@ impl CompatibleSetup for GithubCompatibleSetup {
         -> (
             Vec<Pipeline<
                 'a,
-                Self::C,
                 Self::P,
-                WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>,
                 WorkerThread<
-                    ui::Event<Self::C, Self::P>,
-                    ui::Message<Self::C, Self::P>
+                    ci::Event<<Self::P as Pr>::C>,
+                    ci::Message<<Self::P as Pr>::C>,
                 >,
-                WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>
+                WorkerThread<ui::Event<Self::P>, ui::Message<Self::P>>,
+                WorkerThread<
+                    vcs::Event<<Self::P as Pr>::C>,
+                    vcs::Message<<Self::P as Pr>::C>,
+                >,
             >>,
-            Vec<&'a WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>>,
             Vec<&'a WorkerThread<
-                ui::Event<Self::C, Self::P>,
-                ui::Message<Self::C, Self::P>,
+                ci::Event<<Self::P as Pr>::C>,
+                ci::Message<<Self::P as Pr>::C>,
             >>,
-            Vec<&'a WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>>,
+            Vec<&'a WorkerThread<ui::Event<Self::P>, ui::Message<Self::P>>>,
+            Vec<&'a WorkerThread<
+                vcs::Event<<Self::P as Pr>::C>,
+                vcs::Message<<Self::P as Pr>::C>,
+            >>,
         )
     {
         let mut cis = vec![];
@@ -603,28 +606,32 @@ impl CompatibleSetup for GithubCompatibleSetup {
 }
 
 trait CompatibleSetup {
-    type C: Commit + 'static;
     type P: Pr + 'static;
     fn setup_workers(config: &toml::Table, projects: &toml::Table) -> Self;
     fn start<'a>(&'a self, config: &toml::Table, projects: &toml::Table)
         -> (
             Vec<Pipeline<
                 'a,
-                Self::C,
                 Self::P,
-                WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>,
                 WorkerThread<
-                    ui::Event<Self::C, Self::P>,
-                    ui::Message<Self::C, Self::P>,
+                    ci::Event<<Self::P as Pr>::C>,
+                    ci::Message<<Self::P as Pr>::C>,
                 >,
-                WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>
+                WorkerThread<ui::Event<Self::P>, ui::Message<Self::P>>,
+                WorkerThread<
+                    vcs::Event<<Self::P as Pr>::C>,
+                    vcs::Message<<Self::P as Pr>::C>,
+                >,
             >>,
-            Vec<&'a WorkerThread<ci::Event<Self::C>, ci::Message<Self::C>>>,
             Vec<&'a WorkerThread<
-                ui::Event<Self::C, Self::P>,
-                ui::Message<Self::C, Self::P>,
+                ci::Event<<Self::P as Pr>::C>,
+                ci::Message<<Self::P as Pr>::C>,
             >>,
-            Vec<&'a WorkerThread<vcs::Event<Self::C>, vcs::Message<Self::C>>>,
+            Vec<&'a WorkerThread<ui::Event<Self::P>, ui::Message<Self::P>>>,
+            Vec<&'a WorkerThread<
+                vcs::Event<<Self::P as Pr>::C>,
+                vcs::Message<<Self::P as Pr>::C>,
+            >>,
         );
 }
 

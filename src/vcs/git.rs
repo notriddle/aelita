@@ -13,6 +13,7 @@ use std::process::Command;
 use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
 use vcs;
+use void::Void;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Repo {
@@ -97,7 +98,7 @@ impl Worker {
                 };
                 info!("Merging {} ...", pull_commit);
                 match self.merge_to_staging(
-                    repo, pull_commit, &message, &remote
+                    repo, pull_commit, &message, &remote.0
                 ) {
                     Err(e) => {
                         warn!(
@@ -274,7 +275,9 @@ quick_error! {
 #[derive(Copy, Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Commit(u64, u64, u32);
 
-impl vcs::Commit for Commit {}
+impl vcs::Commit for Commit {
+    type Remote = Remote;
+}
 
 impl Display for Commit {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -303,8 +306,35 @@ impl FromStr for Commit {
     }
 }
 
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Remote(pub String);
+impl Display for Remote {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Debug for Remote {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Remote({})", self.0)
+    }
+}
+
+impl FromStr for Remote {
+    type Err = Void;
+    fn from_str(s: &str) -> Result<Remote, Void> {
+        Ok(Remote(s.to_owned()))
+    }
+}
+
 impl Into<String> for Commit {
     fn into(self) -> String {
         self.to_string()
+    }
+}
+
+impl Into<String> for Remote {
+    fn into(self) -> String {
+        self.0
     }
 }

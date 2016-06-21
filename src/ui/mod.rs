@@ -16,39 +16,41 @@ use std::str::FromStr;
 use vcs::Commit;
 
 #[derive(Clone, Debug)]
-pub enum Message<C: Commit, P: Pr> {
-    SendResult(PipelineId, P, Status<C>)
+pub enum Message<P: Pr> {
+    SendResult(PipelineId, P, Status<P>)
 }
 
 #[derive(Clone, Debug)]
-pub enum Event<C: Commit, P: Pr> {
-    Approved(PipelineId, P, Option<C>, String),
+pub enum Event<P: Pr> {
+    Approved(PipelineId, P, Option<P::C>, String),
     Canceled(PipelineId, P),
-    Opened(PipelineId, P, C),
-    Changed(PipelineId, P, C),
+    Opened(PipelineId, P, P::C),
+    Changed(PipelineId, P, P::C),
     Closed(PipelineId, P),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Status<C: Commit> {
+pub enum Status<P: Pr> {
     Invalidated,
     NoCommit,
-    Unmergeable(C),
-    StartingBuild(C, C),
-    Testing(C, C, Option<Url>),
-    Success(C, C, Option<Url>),
-    Failure(C, C, Option<Url>),
-    Unmoveable(C, C),
-    Completed(C, C),
+    Unmergeable(P::C),
+    StartingBuild(P::C, P::C),
+    Testing(P::C, P::C, Option<Url>),
+    Success(P::C, P::C, Option<Url>),
+    Failure(P::C, P::C, Option<Url>),
+    Unmoveable(P::C, P::C),
+    Completed(P::C, P::C),
 }
 
 /// A series of reviewable changesets and other messages
 pub trait Pr: Clone + Debug + Display + Eq + FromStr + Into<String> +
-              PartialEq + Send {
-    fn remote(&self) -> String;
+              PartialEq + Send
+{
+    type C: Commit;
+    fn remote(&self) -> <Self::C as Commit>::Remote;
 }
 
-impl<C: Commit + 'static, P: Pr + 'static> GetPipelineId for Event<C, P> {
+impl<P: Pr> GetPipelineId for Event<P> {
     fn pipeline_id(&self) -> PipelineId {
         match *self {
             Event::Approved(i, _, _, _) => i,

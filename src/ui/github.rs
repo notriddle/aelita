@@ -24,7 +24,7 @@ use std::sync::mpsc::{Sender, Receiver};
 use ui::{self, comments};
 use util::USER_AGENT;
 use util::rate_limited_client::RateLimiter;
-use vcs::git::Commit;
+use vcs::git::{Commit, Remote};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Repo {
@@ -178,13 +178,13 @@ enum AcceptType {
 }
 
 impl pipeline::Worker<
-    ui::Event<Commit, Pr>,
-    ui::Message<Commit, Pr>,
+    ui::Event<Pr>,
+    ui::Message<Pr>,
 > for Worker {
     fn run(
         &mut self,
-        recv_msg: Receiver<ui::Message<Commit, Pr>>,
-        mut send_event: Sender<ui::Event<Commit, Pr>>
+        recv_msg: Receiver<ui::Message<Pr>>,
+        mut send_event: Sender<ui::Event<Pr>>
     ) {
         crossbeam::scope(|scope| {
             let s2 = &*self;
@@ -205,7 +205,7 @@ impl pipeline::Worker<
 impl Worker {
     fn run_webhook(
         &self,
-        send_event: Sender<ui::Event<Commit, Pr>>,
+        send_event: Sender<ui::Event<Pr>>,
     ) {
         let mut listener = HttpListener::new(&self.listen[..])
             .expect("webhook");
@@ -234,7 +234,7 @@ impl Worker {
         &self,
         req: Request,
         mut res: Response,
-        send_event: &Sender<ui::Event<Commit, Pr>>
+        send_event: &Sender<ui::Event<Pr>>
     ) {
         let x_github_event = {
             if let Some(xges) = req.headers.get_raw("X-Github-Event") {
@@ -371,7 +371,7 @@ impl Worker {
 
     fn handle_pr_comment(
         &self,
-        send_event: &Sender<ui::Event<Commit, Pr>>,
+        send_event: &Sender<ui::Event<Pr>>,
         desc: CommentDesc,
     ) {
         let repo = Repo{
@@ -413,7 +413,7 @@ impl Worker {
 
     fn handle_comment_command(
         &self,
-        send_event: &Sender<ui::Event<Commit, Pr>>,
+        send_event: &Sender<ui::Event<Pr>>,
         command: comments::Command<Commit>,
         issue: &IssueCommentIssue,
         repo_config: &RepoConfig,
@@ -438,7 +438,7 @@ impl Worker {
 
     fn handle_approved_pr(
         &self,
-        send_event: &Sender<ui::Event<Commit, Pr>>,
+        send_event: &Sender<ui::Event<Pr>>,
         issue: &IssueCommentIssue,
         repo_config: &RepoConfig,
         pr: &Pr,
@@ -463,7 +463,7 @@ impl Worker {
 
     fn handle_canceled_pr(
         &self,
-        send_event: &Sender<ui::Event<Commit, Pr>>,
+        send_event: &Sender<ui::Event<Pr>>,
         repo_config: &RepoConfig,
         pr: &Pr,
     ) {
@@ -475,8 +475,8 @@ impl Worker {
 
     fn handle_message(
         &self,
-        msg: ui::Message<Commit, Pr>,
-        _: &mut Sender<ui::Event<Commit, Pr>>,
+        msg: ui::Message<Pr>,
+        _: &mut Sender<ui::Event<Pr>>,
     ) {
         match msg {
             ui::Message::SendResult(pipeline_id, pr, status) => {
@@ -514,7 +514,7 @@ impl Worker {
         &self,
         pipeline_id: PipelineId,
         pr: Pr,
-        status: &ui::Status<Commit>,
+        status: &ui::Status<Pr>,
     ) -> Result<(), GithubRequestError> {
         let mut repo = None;
         for (r, c) in &self.repos {
@@ -900,8 +900,9 @@ quick_error! {
 pub struct Pr(u32);
 
 impl ui::Pr for Pr {
-    fn remote(&self) -> String {
-        format!("pull/{}/head", self.0)
+    type C = Commit;
+    fn remote(&self) -> <Commit as ::vcs::Commit>::Remote {
+        Remote(format!("pull/{}/head", self.0))
     }
 }
 
