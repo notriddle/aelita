@@ -211,14 +211,20 @@ where P: Pr + 'static,
                     });
                 }
             },
-            Event::UiEvent(ui::Event::Opened(pipeline_id, pr, commit)) => {
+            Event::UiEvent(ui::Event::Opened(
+                pipeline_id, pr, commit, title, url
+            )) => {
                 assert_eq!(&pipeline_id, &self.id);
                 db.add_pending(self.id, PendingEntry{
                     commit: commit,
                     pr: pr,
+                    title: title,
+                    url: url,
                 });
             },
-            Event::UiEvent(ui::Event::Changed(pipeline_id, pr, commit)) => {
+            Event::UiEvent(ui::Event::Changed(
+                pipeline_id, pr, commit, title, url
+            )) => {
                 assert_eq!(&pipeline_id, &self.id);
                 if db.cancel_by_pr_different_commit(self.id, &pr, &commit) {
                     self.ui.send_result(
@@ -230,6 +236,8 @@ where P: Pr + 'static,
                 db.add_pending(self.id, PendingEntry{
                     commit: commit,
                     pr: pr,
+                    title: title,
+                    url: url,
                 });
             },
             Event::UiEvent(ui::Event::Closed(pipeline_id, pr)) => {

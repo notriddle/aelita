@@ -2,6 +2,7 @@
 
 use crossbeam;
 use hyper;
+use hyper::Url;
 use hyper::buffer::BufReader;
 use hyper::client::{Client, IntoUrl, RequestBuilder};
 use hyper::header::{Headers, UserAgent};
@@ -85,7 +86,7 @@ impl Worker {
 // JSON API structs
 #[derive(Serialize, Deserialize)]
 struct IssueCommentPullRequest {
-    url: String,
+    html_url: String,
 }
 #[derive(Serialize, Deserialize)]
 struct IssueCommentIssue {
@@ -158,6 +159,8 @@ struct PrDesc {
     state: String,
     number: u32,
     head: PrBranchDesc,
+    html_url: String,
+    title: String,
 }
 #[derive(Deserialize, Serialize)]
 struct PullRequestDesc {
@@ -323,11 +326,15 @@ impl Worker {
                             repo_config.pipeline_id,
                             pr,
                             commit,
+                            desc.pull_request.title,
+                            Url::parse(&desc.pull_request.html_url).unwrap(),
                         )),
-                        "synchronize" => Some(ui::Event::Changed(
+                        "synchronize" | "edited" => Some(ui::Event::Changed(
                             repo_config.pipeline_id,
                             pr,
                             commit,
+                            desc.pull_request.title,
+                            Url::parse(&desc.pull_request.html_url).unwrap(),
                         )),
                         _ => None,
                     };

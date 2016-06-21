@@ -3,6 +3,7 @@
 use super::{Ci, Vcs, Ui};
 use ci;
 use db::{Db, PendingEntry, QueueEntry, RunningEntry};
+use hyper::Url;
 use hyper::client::IntoUrl;
 use pipeline::{Event, Pipeline, PipelineId};
 use std::cell::RefCell;
@@ -323,6 +324,8 @@ fn handle_add_to_queue_by_pending_some() {
             PipelineId(0),
             MemoryPr::A,
             MemoryCommit::A,
+            "".to_owned(),
+            Url::parse("http://www.com/").unwrap(),
         )),
     );
     handle_event(
@@ -357,6 +360,8 @@ fn handle_add_to_queue_by_pending_changed() {
             PipelineId(0),
             MemoryPr::A,
             MemoryCommit::A,
+            "".to_owned(),
+            Url::parse("http://www.com/").unwrap(),
         )),
     );
     handle_event(
@@ -368,6 +373,8 @@ fn handle_add_to_queue_by_pending_changed() {
             PipelineId(0),
             MemoryPr::A,
             MemoryCommit::B,
+            "".to_owned(),
+            Url::parse("http://www.com/").unwrap(),
         )),
     );
     handle_event(
@@ -1105,6 +1112,8 @@ fn handle_ui_changed_cancel() {
             PipelineId(0),
             MemoryPr::A,
             MemoryCommit::C,
+            "".to_owned(),
+            Url::parse("http://www.com/").unwrap(),
         ))
     );
     assert_eq!(db.running.unwrap(), RunningEntry{
@@ -1140,6 +1149,8 @@ fn handle_ui_changed_no_real_change() {
             PipelineId(0),
             MemoryPr::A,
             MemoryCommit::A,
+            "".to_owned(),
+            Url::parse("http://www.com/").unwrap(),
         ))
     );
     assert_eq!(db.running.unwrap(), RunningEntry{
@@ -1180,6 +1191,8 @@ fn handle_ui_changed_cancel_queue() {
             PipelineId(0),
             MemoryPr::B,
             MemoryCommit::D,
+            "".to_owned(),
+            Url::parse("http://www.com/").unwrap(),
         ))
     );
     assert_eq!(db.running.unwrap(), RunningEntry{
@@ -1221,6 +1234,8 @@ fn handle_ui_changed_no_real_change_queue() {
             PipelineId(0),
             MemoryPr::B,
             MemoryCommit::C,
+            "".to_owned(),
+            Url::parse("http://www.com/").unwrap(),
         ))
     );
     assert_eq!(db.running.unwrap(), RunningEntry{

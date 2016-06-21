@@ -1,6 +1,7 @@
 // This file is released under the same terms as Rust itself.
 
 use db::{Db, PendingEntry, QueueEntry, RunningEntry};
+use hyper::Url;
 use rusqlite::{self, Connection};
 use std::convert::AsRef;
 use std::marker::PhantomData;
@@ -42,7 +43,9 @@ impl<P> SqliteDb<P>
                 id INTEGER PRIMARY KEY,
                 pipeline_id INTEGER,
                 pr TEXT,
-                pull_commit TEXT
+                pull_commit TEXT,
+                title TEXT,
+                url TEXT
             );
         "###));
         Ok(SqliteDb{
@@ -244,13 +247,15 @@ impl<P> Db<P> for SqliteDb<P>
             &<P as Into<String>>::into(entry.pr.clone()),
         ]).expect("Remove pending entry");
         let sql = r###"
-            INSERT INTO pending (pipeline_id, pr, pull_commit)
-            VALUES (?, ?, ?);
+            INSERT INTO pending (pipeline_id, pr, pull_commit, title, url)
+            VALUES (?, ?, ?, ?, ?);
         "###;
         trans.execute(sql, &[
             &pipeline_id.0,
             &<P as Into<String>>::into(entry.pr.clone()),
             &<P::C as Into<String>>::into(entry.commit.clone()),
+            &entry.title,
+            &entry.url.as_str(),
         ]).expect("Add pending entry");
         trans.commit().expect("Commit add-pending transaction");
     }
@@ -262,7 +267,7 @@ impl<P> Db<P> for SqliteDb<P>
         let trans = self.conn.transaction()
             .expect("Start take-pending transaction");
         let sql = r###"
-            SELECT id, pr, pull_commit
+            SELECT id, pr, pull_commit, title, url
             FROM pending
             WHERE pipeline_id = ? AND pr = ?;
         "###;
@@ -277,6 +282,8 @@ impl<P> Db<P> for SqliteDb<P>
                     pr: P::from_str(&row.get::<_, String>(1)[..]).unwrap(),
                     commit: P::C::from_str(&row.get::<_, String>(2)[..])
                         .unwrap(),
+                    title: row.get(3),
+                    url: Url::parse(&row.get::<_, String>(4)).unwrap(),
                 })).expect("Get pending entry");
             rows.next().map(|item| item.expect("Retrieve pending entry"))
         };
@@ -295,7 +302,7 @@ impl<P> Db<P> for SqliteDb<P>
         pr: &P,
     ) -> Option<PendingEntry<P>> {
         let sql = r###"
-            SELECT pr, pull_commit
+            SELECT pr, pull_commit, title, url
             FROM pending
             WHERE pipeline_id = ? AND pr = ?;
         "###;
@@ -309,6 +316,8 @@ impl<P> Db<P> for SqliteDb<P>
                 pr: P::from_str(&row.get::<_, String>(0)[..]).unwrap(),
                 commit: P::C::from_str(&row.get::<_, String>(1)[..])
                     .unwrap(),
+                title: row.get(2),
+                url: Url::parse(&row.get::<_, String>(3)).unwrap(),
             })
             .expect("Get pending entry");
         rows.next()
@@ -319,7 +328,7 @@ impl<P> Db<P> for SqliteDb<P>
         pipeline_id: PipelineId,
     ) -> Vec<PendingEntry<P>> {
         let sql = r###"
-            SELECT pr, pull_commit
+            SELECT pr, pull_commit, title, url
             FROM pending
             WHERE pipeline_id = ?;
         "###;
@@ -329,6 +338,8 @@ impl<P> Db<P> for SqliteDb<P>
                 pr: P::from_str(&row.get::<_, String>(0)[..]).unwrap(),
                 commit: P::C::from_str(&row.get::<_, String>(1)[..])
                     .unwrap(),
+                title: row.get(2),
+                url: Url::parse(&row.get::<_, String>(3)).unwrap(),
             })
             .expect("Get pending entry");
         let rows: Vec<PendingEntry<P>> = rows.map(|item| {

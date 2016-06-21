@@ -8,6 +8,7 @@
 
 extern crate crossbeam;
 extern crate env_logger;
+#[macro_use] extern crate horrorshow;
 extern crate hyper;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
