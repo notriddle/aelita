@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
 use std::io::BufWriter;
+use std::iter;
 use std::num::ParseIntError;
 use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
@@ -446,11 +447,12 @@ impl Worker {
         commit: Option<Commit>,
     ) {
         let message = format!(
-            "{}\n\nMerged #{} a=@{} r=@{}\n\n{}",
+            "{}\n\nMerge #{} a=@{} r=@{}\n{}\n\n{}",
             issue.title,
             pr,
             issue.user.login,
             user,
+            iter::repeat('_').take(72).collect::<String>(),
             issue.body,
         );
         send_event.send(ui::Event::Approved(
