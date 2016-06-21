@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 #[derive(Clone, Debug)]
 pub enum Message<C: Commit> {
-    MergeToStaging(PipelineId, C, String, String),
+    MergeToStaging(PipelineId, C, String, C::Remote),
     MoveStagingToMaster(PipelineId, C),
 }
 
@@ -24,7 +24,8 @@ pub enum Event<C: Commit> {
 /// A reviewable changeset
 pub trait Commit: Clone + Debug + Display + Eq + FromStr + Into<String> +
                   PartialEq + Send {
-    // This trait intentionally defines no methods of its own
+    type Remote: Clone + Debug + Display + Eq + FromStr + Into<String> +
+                 PartialEq + Send;
 }
 
 impl<C: Commit + 'static> GetPipelineId for Event<C> {

@@ -142,7 +142,8 @@ impl Worker {
             return;
         }
         *res.status_mut() = StatusCode::Ok;
-        res.headers_mut().set_raw("Content-Type", vec![b"text/plain".to_vec()]);
+        res.headers_mut()
+            .set_raw("Content-Type", vec![b"text/plain".to_vec()]);
         let result = res.send(&[]);
         if let Err(e) = result {
             warn!("Failed to send response: {:?}", e);
@@ -157,22 +158,32 @@ impl Worker {
                     Ok(builder) => {
                         if let Some(text) = builder.text {
                             if text.len() < 2 {
-                                warn!("Build {} incomplete, but has text", name);
+                                warn!(
+                                    "Build {} incomplete, but has text",
+                                    name
+                                );
                                 return;
                             }
                             info!("Builder {} complete", name);
-                            is_success = is_success && text.contains(&"successful".to_string());
+                            is_success = is_success &&
+                                text.contains(&"successful".to_string());
                             if let Some(ref revision) = revision {
-                                if revision != &builder.source_stamps[0].revision[..] {
+                                let b = &builder.source_stamps[0].revision[..];
+                                if revision != b {
                                     warn!(
-                                        "builders disagree on revision: {} and {}",
+                                        "builders different revs: {} and {}",
                                         revision,
                                         &builder.source_stamps[0].revision[..]
                                     );
                                     return;
                                 }
                             } else {
-                                revision = Some(builder.source_stamps[0].revision.clone());
+                                revision = Some(
+                                    builder
+                                    .source_stamps[0]
+                                    .revision
+                                    .clone()
+                                );
                             }
                         } else {
                             info!("Builder {} incomplete", name);

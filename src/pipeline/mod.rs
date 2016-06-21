@@ -45,19 +45,18 @@ impl<C: Commit> Ci<C> for WorkerThread<ci::Event<C>, ci::Message<C>> {
     }
 }
 
-pub trait Ui<C: Commit, P: Pr> {
-    fn send_result(&self, PipelineId, P, ui::Status<C>);
+pub trait Ui<P: Pr> {
+    fn send_result(&self, PipelineId, P, ui::Status<P>);
 }
 
-impl<C, P> Ui<C, P> for WorkerThread<ui::Event<C, P>, ui::Message<C, P>>
-where C: Commit,
-      P: Pr
+impl<P> Ui<P> for WorkerThread<ui::Event<P>, ui::Message<P>>
+where P: Pr
 {
     fn send_result(
         &self,
         pipeline_id: PipelineId,
         pr: P,
-        status: ui::Status<C>,
+        status: ui::Status<P>,
     ) {
         self.send_msg.send(ui::Message::SendResult(pipeline_id, pr, status))
             .unwrap();
@@ -65,7 +64,7 @@ where C: Commit,
 }
 
 pub trait Vcs<C: Commit> {
-    fn merge_to_staging(&self, PipelineId, C, String, String);
+    fn merge_to_staging(&self, PipelineId, C, String, C::Remote);
     fn move_staging_to_master(&self, PipelineId, C);
 }
 
@@ -75,7 +74,7 @@ impl<C: Commit> Vcs<C> for WorkerThread<vcs::Event<C>, vcs::Message<C>> {
         pipeline_id: PipelineId,
         pull_commit: C,
         message: String,
-        remote: String
+        remote: C::Remote
     ) {
         self.send_msg.send(vcs::Message::MergeToStaging(
             pipeline_id, pull_commit, message, remote
@@ -95,25 +94,22 @@ impl<C: Commit> Vcs<C> for WorkerThread<vcs::Event<C>, vcs::Message<C>> {
 // TODO: When Rust starts enforcing lifetimes on type aliases,
 // use a type alias with something like:
 //
-//     pub type WorkerPipeline<'cntx, C: Commit + 'static, P: Pr + 'static> =
+//     pub type WorkerPipeline<'cntx, P: Pr + 'static> =
 //         Pipeline<
 //             'cntx,
-//             C,
 //             P,
-//             WorkerThread<ci::Event<C>, ci::Message<C>>,
-//             WorkerThread<ui::Event<C, P>, ui::Message<P>>,
-//             WorkerThread<vcs::Event<C>, vcs::Message<P>>,
+//             WorkerThread<ci::Event<P::C>, ci::Message<P::C>>,
+//             WorkerThread<ui::Event<P::C, P>, ui::Message<P>>,
+//             WorkerThread<vcs::Event<P::C>, vcs::Message<P>>,
 //         >;
 //
 // That way, we can avoid all these ackward generics in main.
-pub struct Pipeline<'cntx, C, P, B, U, V>
-where C: Commit + 'static,
-      P: Pr + 'static,
-      B: Ci<C> + 'cntx,
-      U: Ui<C, P> + 'cntx,
-      V: Vcs<C> + 'cntx
+pub struct Pipeline<'cntx, P, B, U, V>
+where P: Pr + 'static,
+      B: Ci<P::C> + 'cntx,
+      U: Ui<P> + 'cntx,
+      V: Vcs<P::C> + 'cntx
 {
-    pub _commit: PhantomData<C>,
     pub _pr: PhantomData<P>,
     pub id: PipelineId,
     pub ci: &'cntx B,
@@ -122,17 +118,17 @@ where C: Commit + 'static,
 }
 
 #[derive(Clone)]
-pub enum Event<C: Commit + 'static, P: Pr + 'static> {
-    UiEvent(ui::Event<C, P>),
-    VcsEvent(vcs::Event<C>),
-    CiEvent(ci::Event<C>),
+pub enum Event<P: Pr + 'static> {
+    UiEvent(ui::Event<P>),
+    VcsEvent(vcs::Event<P::C>),
+    CiEvent(ci::Event<P::C>),
 }
 
 pub trait GetPipelineId {
     fn pipeline_id(&self) -> PipelineId;
 }
 
-impl<C: Commit + 'static, P: Pr + 'static> GetPipelineId for Event<C, P> {
+impl<P: Pr + 'static> GetPipelineId for Event<P> {
     fn pipeline_id(&self) -> PipelineId {
         match *self {
             Event::UiEvent(ref e) => e.pipeline_id(),
@@ -142,12 +138,11 @@ impl<C: Commit + 'static, P: Pr + 'static> GetPipelineId for Event<C, P> {
     }
 }
 
-impl<'cntx, C, P, B, U, V> Pipeline<'cntx, C, P, B, U, V>
-where C: Commit + 'static,
-      P: Pr + 'static,
-      B: Ci<C> + 'cntx,
-      U: Ui<C, P> + 'cntx,
-      V: Vcs<C> + 'cntx
+impl<'cntx, P, B, U, V> Pipeline<'cntx, P, B, U, V>
+where P: Pr + 'static,
+      B: Ci<P::C> + 'cntx,
+      U: Ui<P> + 'cntx,
+      V: Vcs<P::C> + 'cntx
 {
     pub fn new(
         id: PipelineId,
@@ -156,7 +151,6 @@ where C: Commit + 'static,
         vcs: &'cntx V,
     ) -> Self {
         Pipeline {
-            _commit: PhantomData,
             _pr: PhantomData,
             id: id,
             ci: ci,
@@ -164,10 +158,10 @@ where C: Commit + 'static,
             vcs: vcs,
         }
     }
-    pub fn handle_event<D: Db<C, P>>(
+    pub fn handle_event<D: Db<P>>(
         &mut self,
         db: &mut D,
-        event: Event<C, P>,
+        event: Event<P>,
     ) {
         match event {
             Event::UiEvent(ui::Event::Approved(
@@ -320,7 +314,7 @@ where C: Commit + 'static,
                         } else if running.canceled {
                             // Drop it on the floor. It's canceled.
                         } else if running.built {
-                            warn!("Got CI build started after finished building!");
+                            warn!("Got CI build started after done building!");
                         } else {
                             self.ui.send_result(
                                 self.id,
@@ -426,7 +420,7 @@ where C: Commit + 'static,
                         } else if running.canceled {
                             // Drop it on the floor. It's canceled.
                         } else if !running.built {
-                            warn!("Failed move to master before done building!");
+                            warn!("Failed move to master before built!");
                         } else {
                             self.ui.send_result(
                                 self.id,
@@ -513,13 +507,13 @@ use ui::{self, Pr};
 use vcs::{self, Commit};
 use void::Void;
 
-struct MemoryDb<C: Commit, P: Pr> {
-    queue: VecDeque<QueueEntry<C, P>>,
-    running: Option<RunningEntry<C, P>>,
-    pending: Vec<PendingEntry<C, P>>,
+struct MemoryDb<P: Pr> {
+    queue: VecDeque<QueueEntry<P>>,
+    running: Option<RunningEntry<P>>,
+    pending: Vec<PendingEntry<P>>,
 }
 
-impl<C: Commit, P: Pr> MemoryDb<C, P> {
+impl<P: Pr> MemoryDb<P> {
     fn new() -> Self {
         MemoryDb{
             queue: VecDeque::new(),
@@ -529,26 +523,26 @@ impl<C: Commit, P: Pr> MemoryDb<C, P> {
     }
 }
 
-impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
-    fn push_queue(&mut self, _: PipelineId, entry: QueueEntry<C, P>) {
+impl<P: Pr> Db<P> for MemoryDb<P> {
+    fn push_queue(&mut self, _: PipelineId, entry: QueueEntry<P>) {
         self.queue.push_back(entry);
     }
-    fn pop_queue(&mut self, _: PipelineId) -> Option<QueueEntry<C, P>> {
+    fn pop_queue(&mut self, _: PipelineId) -> Option<QueueEntry<P>> {
         self.queue.pop_front()
     }
-    fn list_queue(&mut self, _: PipelineId) -> Vec<QueueEntry<C, P>> {
+    fn list_queue(&mut self, _: PipelineId) -> Vec<QueueEntry<P>> {
         unimplemented!()
     }
-    fn put_running(&mut self, _: PipelineId, entry: RunningEntry<C, P>) {
+    fn put_running(&mut self, _: PipelineId, entry: RunningEntry<P>) {
         self.running = Some(entry);
     }
-    fn take_running(&mut self, _: PipelineId) -> Option<RunningEntry<C, P>> {
+    fn take_running(&mut self, _: PipelineId) -> Option<RunningEntry<P>> {
         mem::replace(&mut self.running, None)
     }
-    fn peek_running(&mut self, _: PipelineId) -> Option<RunningEntry<C, P>> {
+    fn peek_running(&mut self, _: PipelineId) -> Option<RunningEntry<P>> {
         self.running.clone()
     }
-    fn add_pending(&mut self, _: PipelineId, entry: PendingEntry<C, P>) {
+    fn add_pending(&mut self, _: PipelineId, entry: PendingEntry<P>) {
         let mut replaced = false;
         for entry2 in self.pending.iter_mut() {
             if entry2.pr == entry.pr {
@@ -565,7 +559,7 @@ impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
         &mut self,
         _: PipelineId,
         pr: &P,
-    ) -> Option<PendingEntry<C, P>> {
+    ) -> Option<PendingEntry<P>> {
         for entry in &self.pending {
             if entry.pr == *pr {
                 return Some(entry.clone());
@@ -577,7 +571,7 @@ impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
         &mut self,
         _: PipelineId,
         pr: &P,
-    ) -> Option<PendingEntry<C, P>> {
+    ) -> Option<PendingEntry<P>> {
         let mut entry_i = None;
         for (i, entry) in self.pending.iter().enumerate() {
             if entry.pr == *pr {
@@ -587,7 +581,7 @@ impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
         }
         entry_i.map(|entry_i| self.pending.remove(entry_i))
     }
-    fn list_pending(&mut self, _: PipelineId) -> Vec<PendingEntry<C, P>> {
+    fn list_pending(&mut self, _: PipelineId) -> Vec<PendingEntry<P>> {
         unimplemented!()
     }
     fn cancel_by_pr(&mut self, _: PipelineId, pr: &P) {
@@ -604,7 +598,7 @@ impl<C: Commit, P: Pr> Db<C, P> for MemoryDb<C, P> {
         &mut self,
         _: PipelineId,
         pr: &P,
-        commit: &C
+        commit: &P::C
     ) -> bool {
         let len_orig = self.queue.len();
         let queue = mem::replace(&mut self.queue, VecDeque::new());
@@ -629,7 +623,9 @@ enum MemoryCommit {
     A, B, C, D, E, F, G, H, I, J, K, L, M,
     N, O, P, Q, R, S, T, U, V, W, X, Y, Z
 }
-impl Commit for MemoryCommit {}
+impl Commit for MemoryCommit {
+    type Remote = String;
+}
 impl FromStr for MemoryCommit {
     type Err = Void;
     fn from_str(_: &str) -> Result<MemoryCommit, Void> {
@@ -654,6 +650,7 @@ enum MemoryPr {
     N, O, P, Q, R, S, T, U, V, W, X, Y, Z
 }
 impl Pr for MemoryPr {
+    type C = MemoryCommit;
     fn remote(&self) -> String {
         "".to_owned()
     }
@@ -676,7 +673,7 @@ impl Into<String> for MemoryPr {
 }
 
 struct MemoryUi {
-    results: Vec<(MemoryPr, ui::Status<MemoryCommit>)>,
+    results: Vec<(MemoryPr, ui::Status<MemoryPr>)>,
 }
 impl MemoryUi {
     fn new() -> RefCell<MemoryUi> {
@@ -685,12 +682,12 @@ impl MemoryUi {
         })
     }
 }
-impl Ui<MemoryCommit, MemoryPr> for RefCell<MemoryUi> {
+impl Ui<MemoryPr> for RefCell<MemoryUi> {
     fn send_result(
         &self,
         _: PipelineId,
         pr: MemoryPr,
-        status: ui::Status<MemoryCommit>,
+        status: ui::Status<MemoryPr>,
     ) {
         self.borrow_mut().results.push((pr, status));
     }
@@ -743,12 +740,11 @@ fn handle_event(
     ui: &mut RefCell<MemoryUi>,
     vcs: &mut RefCell<MemoryVcs>,
     ci: &mut RefCell<MemoryCi>,
-    db: &mut MemoryDb<MemoryCommit, MemoryPr>,
-    event: Event<MemoryCommit, MemoryPr>,
+    db: &mut MemoryDb<MemoryPr>,
+    event: Event<MemoryPr>,
 ) {
     Pipeline{
         _pr: PhantomData,
-        _commit: PhantomData,
         ui: ui,
         vcs: vcs,
         ci: ci,

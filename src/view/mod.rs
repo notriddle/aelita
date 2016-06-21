@@ -19,16 +19,15 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use ui::Pr;
-use vcs::Commit;
 
 const WORKER_COUNT: usize = 1;
 
-pub fn run_sqlite<C: Commit, P: Pr>(
+pub fn run_sqlite<P: Pr>(
     listen: String,
     path: PathBuf,
     pipelines: HashMap<String, PipelineId>,
 )
-    where <C as FromStr>::Err: StdError,
+    where <P::C as FromStr>::Err: StdError,
           <P as FromStr>::Err: StdError 
 {
     let path: &Path = path.as_ref();
@@ -36,9 +35,9 @@ pub fn run_sqlite<C: Commit, P: Pr>(
     crossbeam::scope(|scope| {
         for _ in 0..WORKER_COUNT {
             let mut worker = Worker {
-                db: SqliteDb::<C, P>::open(path).expect("opening sqlite to succeed"),
+                db: SqliteDb::<P>::open(path)
+                    .expect("opening sqlite to succeed"),
                 pipelines: &pipelines,
-                _commit: PhantomData::<C>,
                 _pr: PhantomData::<P>,
             };
             scope.spawn(move || worker.run(listen));
@@ -46,16 +45,15 @@ pub fn run_sqlite<C: Commit, P: Pr>(
     });
 }
 
-struct Worker<'a, C, P, D>
-    where C: Commit, P: Pr, D: Db<C, P>
+struct Worker<'a, P, D>
+    where P: Pr, D: Db<P>
 {
     db: D,
     pipelines: &'a HashMap<String, PipelineId>,
-    _commit: PhantomData<C>,
     _pr: PhantomData<P>,
 }
 
-impl<'a, C: Commit, P: Pr, D: Db<C, P>> Worker<'a, C, P, D> {
+impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
     fn run(&mut self, listen: &str) {
         let mut listener = HttpListener::new(listen).expect("a TCP socket");
         while let Ok(mut stream) = listener.accept() {
@@ -83,7 +81,11 @@ impl<'a, C: Commit, P: Pr, D: Db<C, P>> Worker<'a, C, P, D> {
             }
         }
     }
-    fn handle_req(&mut self, req: Request, mut res: Response) -> Result<(), HyperError> {
+    fn handle_req(
+        &mut self,
+        req: Request,
+        mut res: Response,
+    ) -> Result<(), HyperError> {
         let pipeline_id = if let RequestUri::AbsolutePath(path) = req.uri {
             let mut path = &path[..];
             if path.as_bytes()[0] == b'/' {
