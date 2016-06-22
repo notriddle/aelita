@@ -126,6 +126,7 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
         mut res: Response<::hyper::net::Streaming>,
     ) -> Result<(), Box<Error>> {
         let pending_entries = self.db.list_pending(pipeline_id);
+        let is_empty = pending_entries.is_empty();
         let queued_entries = self.db.list_queue(pipeline_id);
         let running_entry = self.db.peek_running(pipeline_id);
         let mut running = None;
@@ -167,6 +168,13 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                                 }
                                 for entry in pending {
                                     render_entry(State::Pending, entry, t);
+                                }
+                                if is_empty {
+                                    t << html!{
+                                        td(colspan=3) {
+                                            : "No opened pull requests"
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -219,6 +227,11 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                                     }
                                 }
                             }}
+                            @ if self.pipelines.is_empty() {
+                                td(colspan=5) {
+                                    : "No configured repositories"
+                                }
+                            }
                         }
                     }
                     h2 { : "Github cheat sheet" }
