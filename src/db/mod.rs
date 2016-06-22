@@ -5,6 +5,7 @@
 
 pub mod sqlite;
 
+use hyper::Url;
 use ui::Pr;
 use pipeline::PipelineId;
 
@@ -34,6 +35,8 @@ pub trait Db<P: Pr> {
 pub struct PendingEntry<P: Pr> {
     pub commit: P::C,
     pub pr: P,
+    pub title: String,
+    pub url: Url,
 }
 
 /// An item in the build queue

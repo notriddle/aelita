@@ -24,8 +24,8 @@ pub enum Message<P: Pr> {
 pub enum Event<P: Pr> {
     Approved(PipelineId, P, Option<P::C>, String),
     Canceled(PipelineId, P),
-    Opened(PipelineId, P, P::C),
-    Changed(PipelineId, P, P::C),
+    Opened(PipelineId, P, P::C, String, Url),
+    Changed(PipelineId, P, P::C, String, Url),
     Closed(PipelineId, P),
 }
 
@@ -55,8 +55,8 @@ impl<P: Pr> GetPipelineId for Event<P> {
         match *self {
             Event::Approved(i, _, _, _) => i,
             Event::Canceled(i, _) => i,
-            Event::Opened(i, _, _) => i,
-            Event::Changed(i, _, _) => i,
+            Event::Opened(i, _, _, _, _) => i,
+            Event::Changed(i, _, _, _, _) => i,
             Event::Closed(i, _) => i,
         }
     }

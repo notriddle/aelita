@@ -2,6 +2,7 @@
 
 use crossbeam;
 use hyper;
+use hyper::Url;
 use hyper::buffer::BufReader;
 use hyper::client::{Client, IntoUrl, RequestBuilder};
 use hyper::header::{Headers, UserAgent};
@@ -18,6 +19,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
 use std::io::BufWriter;
+use std::iter;
 use std::num::ParseIntError;
 use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
@@ -84,7 +86,7 @@ impl Worker {
 // JSON API structs
 #[derive(Serialize, Deserialize)]
 struct IssueCommentPullRequest {
-    url: String,
+    html_url: String,
 }
 #[derive(Serialize, Deserialize)]
 struct IssueCommentIssue {
@@ -157,6 +159,8 @@ struct PrDesc {
     state: String,
     number: u32,
     head: PrBranchDesc,
+    html_url: String,
+    title: String,
 }
 #[derive(Deserialize, Serialize)]
 struct PullRequestDesc {
@@ -322,11 +326,15 @@ impl Worker {
                             repo_config.pipeline_id,
                             pr,
                             commit,
+                            desc.pull_request.title,
+                            Url::parse(&desc.pull_request.html_url).unwrap(),
                         )),
-                        "synchronize" => Some(ui::Event::Changed(
+                        "synchronize" | "edited" => Some(ui::Event::Changed(
                             repo_config.pipeline_id,
                             pr,
                             commit,
+                            desc.pull_request.title,
+                            Url::parse(&desc.pull_request.html_url).unwrap(),
                         )),
                         _ => None,
                     };
@@ -446,11 +454,12 @@ impl Worker {
         commit: Option<Commit>,
     ) {
         let message = format!(
-            "{}\n\nMerged #{} a=@{} r=@{}\n\n{}",
+            "{}\n\nMerge #{} a=@{} r=@{}\n{}\n\n{}",
             issue.title,
             pr,
             issue.user.login,
             user,
+            iter::repeat('_').take(72).collect::<String>(),
             issue.body,
         );
         send_event.send(ui::Event::Approved(
