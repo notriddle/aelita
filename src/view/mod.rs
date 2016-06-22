@@ -4,18 +4,16 @@ use crossbeam;
 use db::{Db, PendingEntry};
 use db::sqlite::SqliteDb;
 use horrorshow::prelude::*;
-use hyper::Url;
 use hyper::buffer::BufReader;
-use hyper::error::Error as HyperError;
 use hyper::header::{ContentType, Headers};
 use hyper::net::{HttpListener, NetworkListener, NetworkStream};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
 use hyper::uri::RequestUri;
 use pipeline::PipelineId;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::convert::AsRef;
-use std::error::Error as StdError;
+use std::error::Error;
 use std::io::{BufWriter, Write};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -29,8 +27,8 @@ pub fn run_sqlite<P: Pr>(
     path: PathBuf,
     pipelines: HashMap<String, PipelineId>,
 )
-    where <P::C as FromStr>::Err: StdError,
-          <P as FromStr>::Err: StdError 
+    where <P::C as FromStr>::Err: Error,
+          <P as FromStr>::Err: Error 
 {
     let path: &Path = path.as_ref();
     let listen: &str = listen.as_ref();
@@ -87,7 +85,7 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
         &mut self,
         req: Request,
         mut res: Response,
-    ) -> Result<(), HyperError> {
+    ) -> Result<(), Box<Error>> {
         let pipeline = if let RequestUri::AbsolutePath(ref path) = req.uri {
             let mut path = &path[..];
             if path == "/" {
@@ -124,15 +122,15 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
         &mut self,
         name: &str,
         pipeline_id: PipelineId,
-        req: Request,
+        _req: Request,
         mut res: Response<::hyper::net::Streaming>,
-    ) -> Result<(), HyperError> {
+    ) -> Result<(), Box<Error>> {
         let pending_entries = self.db.list_pending(pipeline_id);
         let queued_entries = self.db.list_queue(pipeline_id);
         let running_entry = self.db.peek_running(pipeline_id);
         let mut running = None;
         let mut queued = Vec::new();
-        let mut pending: Vec<_> = pending_entries.into_iter().filter_map(|entry| {
+        let pending: Vec<_> = pending_entries.into_iter().filter_map(|entry| {
             if Some(&entry.pr) == running_entry.as_ref().map(|x| &x.pr) {
                 running = Some(entry);
             } else if queued_entries.iter()
@@ -176,15 +174,15 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                 }
             }
         };
-        html.write_to_io(&mut res);
+        try!(html.write_to_io(&mut res));
         try!(res.end());
         Ok(())
     }
     fn handle_home_req(
         &mut self,
-        req: Request,
+        _req: Request,
         mut res: Response<::hyper::net::Streaming>,
-    ) -> Result<(), HyperError> {
+    ) -> Result<(), Box<Error>> {
         let html = html!{
             html {
                 head {
@@ -236,7 +234,7 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                 }
             }
         };
-        html.write_to_io(&mut res);
+        try!(html.write_to_io(&mut res));
         try!(res.end());
         Ok(())
     }
