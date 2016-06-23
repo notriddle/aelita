@@ -204,8 +204,15 @@ fn start_view<P: Pr, Q: Into<PathBuf>>(
             )
         }).unwrap_or("localhost:80").to_owned();
         let mut pipelines = HashMap::new();
-        for (i, (project_name, _)) in config_projects.iter().enumerate() {
+        let mut i = 0;
+        for (project_name, project_config) in config_projects.iter() {
+            let project_config = project_config.as_table().unwrap();
             pipelines.insert(project_name.to_owned(), PipelineId(i as i32));
+            i += 1;
+            if project_config.get("try").is_some() {
+                pipelines.insert(project_name.to_owned() + "--try", PipelineId(i as i32));
+                i += 1;
+            }
         }
         let db_path = db_path.into();
         thread::spawn(|| view::run_sqlite::<P>(listen, db_path, pipelines));
@@ -260,7 +267,8 @@ impl GithubCompatibleSetup {
                 "Invalid [config.github] section: no bot username"
             ).as_string(),
         );
-        for (i, (name, def)) in projects.iter().enumerate() {
+        let mut i = 0;
+        for (name, def) in projects.iter() {
             let def = expect_opt!(
                 def.as_table(),
                 "[project] declarations must be tables"
@@ -271,20 +279,34 @@ impl GithubCompatibleSetup {
                     "[project.github] must be a table"
                 )
             }) {
-                github.add_pipeline(PipelineId(i as i32), github::Repo{
-                    owner: github_def.get("owner")
-                        .unwrap_or_else(|| {
-                            expect_opt!(
-                                github_config.get("owner"),
-                                "No [config.github.owner] or
-                                [project.github.owner]"
-                            )
-                        })
-                        .as_string(),
-                    repo: github_def.get("repo").map(|r| r.as_string())
-                        .unwrap_or_else(|| name.to_owned())
-                });
+                let owner = github_def.get("owner")
+                    .unwrap_or_else(|| {
+                        expect_opt!(
+                            github_config.get("owner"),
+                            "No [config.github.owner] or
+                            [project.github.owner]"
+                        )
+                    })
+                    .as_string();
+                let repo = github_def.get("repo").map(|r| r.as_string())
+                    .unwrap_or_else(|| name.to_owned());
+                github.add_project(
+                    PipelineId(i as i32),
+                    if def.get("try").is_some() {
+                        Some(PipelineId(i + 1 as i32))
+                    } else {
+                        None
+                    },
+                    github::Repo{
+                        owner: owner,
+                        repo: repo,
+                    },
+                );
             }
+            if def.get("try").is_some() {
+                i += 1;
+            }
+            i += 1;
         }
         Some(github)
     }
@@ -318,7 +340,8 @@ impl GithubCompatibleSetup {
                 ).as_string())
             }),
         );
-        for (i, (name, def)) in config_projects.iter().enumerate() {
+        let mut i = 0;
+        for (name, def) in config_projects.iter() {
             let def = expect_opt!(
                 def.as_table(),
                 "[project] declarations must be tables"
@@ -329,15 +352,33 @@ impl GithubCompatibleSetup {
                     "[project.jenkins] must be a table"
                 )
             }) {
+                let name = jenkins_def.get("job").map(|r| r.as_string())
+                    .unwrap_or_else(|| name.to_owned());
+                let token = expect_opt!(
+                    jenkins_def.get("token"),
+                    "Invalid [project.jenkins]: no token specified"
+                ).as_string();
+                if let Some(try_def) = def.get("try").map(|def| def.as_table()) {
+                    let try_jenkins_def = try_def.and_then(|t| t.get("jenkins"))
+                        .map(|j| j.as_table().unwrap());
+                    jenkins.add_pipeline(PipelineId(i + 1 as i32), jenkins::Job{
+                        name: try_jenkins_def.and_then(|j| j.get("job"))
+                            .map(|r| r.as_string())
+                            .unwrap_or_else(|| name.clone() + "--try"),
+                        token: try_jenkins_def.and_then(|j| j.get("token"))
+                            .map(|r| r.as_string())
+                            .unwrap_or_else(|| token.clone()),
+                    });
+                }
                 jenkins.add_pipeline(PipelineId(i as i32), jenkins::Job{
-                    name: jenkins_def.get("job").map(|r| r.as_string())
-                        .unwrap_or_else(|| name.to_owned()),
-                    token: expect_opt!(
-                        jenkins_def.get("token"),
-                        "Invalid [project.jenkins]: no token specified"
-                    ).as_string(),
+                    name: name,
+                    token: token,
                 });
             }
+            if def.get("try").is_some() {
+                i += 1;
+            }
+            i += 1;
         }
         Some(jenkins)
     }
@@ -371,7 +412,8 @@ impl GithubCompatibleSetup {
                 ).as_string())
             }),
         );
-        for (i, (_name, def)) in config_projects.iter().enumerate() {
+        let mut i = 0;
+        for (_name, def) in config_projects.iter() {
             let def = expect_opt!(
                 def.as_table(),
                 "[project] declarations must be tables"
@@ -383,6 +425,20 @@ impl GithubCompatibleSetup {
                 )
             });
             if let Some(buildbot_def) = buildbot_def {
+                if let Some(try_def) = def.get("try").map(|def| def.as_table()) {
+                    let try_buildbot_def = try_def.and_then(|t| t.get("buildbot"))
+                        .map(|b| b.as_table().unwrap()).unwrap();
+                    buildbot.add_pipeline(PipelineId(i + 1 as i32), buildbot::Job{
+                        poller: try_buildbot_def.get("poller")
+                            .map(toml::Value::as_string),
+                        builders: expect_opt!(
+                            try_buildbot_def.get("builders")
+                                .and_then(toml::Value::as_slice)
+                                .into_iter().filter(|x| !x.is_empty()).next(),
+                            "Invalid [project.try.buildbot]: no builders specified"
+                        ).iter().map(toml::Value::as_string).collect(),
+                    });
+                }
                 buildbot.add_pipeline(PipelineId(i as i32), buildbot::Job{
                     poller: buildbot_def.get("poller")
                         .map(toml::Value::as_string),
@@ -394,6 +450,10 @@ impl GithubCompatibleSetup {
                     ).iter().map(toml::Value::as_string).collect(),
                 });
             }
+            if def.get("try").is_some() {
+                i += 1;
+            }
+            i += 1;
         }
         Some(buildbot)
     }
@@ -441,7 +501,8 @@ impl GithubCompatibleSetup {
             git_config.and_then(|git_config| git_config.get("path"))
             .map(|p| p.as_string())
             .unwrap_or_else(|| "./cache/".to_owned());
-        for (i, (name, def)) in config_projects.iter().enumerate() {
+        let mut i = 0;
+        for (name, def) in config_projects.iter() {
             let def = expect_opt!(
                 def.as_table(),
                 "[project] declarations must be tables"
@@ -461,50 +522,80 @@ impl GithubCompatibleSetup {
             if git_def.is_none() && github_def.is_none() {
                 continue;
             }
-            git.add_pipeline(PipelineId(i as i32), git::Repo{
-                path: PathBuf::from(&base_path).join(
-                    git_def.and_then(
+            let path = PathBuf::from(&base_path).join(
+                git_def.and_then(
+                    |git_def| git_def.get("path")
+                ).map(|p| p.as_string())
+                .unwrap_or_else(|| name.to_owned())
+            );
+            let origin = git_def
+                .and_then(|git_def| git_def.get("origin"))
+                .map(|o| o.as_string())
+                .unwrap_or_else(|| {
+                    let gdo = github_def.and_then(
+                        |github_def| github_def.get("owner")
+                    );
+                    let gco = github_config.and_then(
+                        |github_config| github_config.get("owner")
+                    );
+                    let owner = gdo.unwrap_or_else(|| expect_opt!(
+                        gco,
+                        "Invalid [project.git] section: no origin"
+                    )).as_string();
+                    let gdr = github_def.and_then(
+                        |github_def| github_def.get("repo")
+                    );
+                    let gcr = github_config.and_then(
+                        |github_config| github_config.get("repo")
+                    );
+                    let repo = gdr.and(gcr)
+                        .map(|r| r.as_string())
+                        .unwrap_or_else(|| name.to_owned());
+                    format!("git@github.com:{}/{}.git", owner, repo)
+                });
+            let master_branch = git_def
+                .and_then(|git_def| {
+                    git_def.get("master_branch").map(|m| m.as_string())
+                })
+                .unwrap_or_else(|| "master".to_owned());
+            let staging_branch = git_def
+                .and_then(|git_def| {
+                    git_def.get("staging_branch").map(|m| m.as_string())
+                })
+                .unwrap_or_else(|| "staging".to_owned());
+            if let Some(try_def) = def.get("try").map(|def| def.as_table()) {
+                let try_git_def = try_def.and_then(|t| t.get("get"))
+                    .map(|b| b.as_table().unwrap());
+                let try_path = PathBuf::from(&base_path).join(
+                    try_git_def.and_then(
                         |git_def| git_def.get("path")
                     ).map(|p| p.as_string())
-                    .unwrap_or_else(|| name.to_owned())
-                ),
-                origin:
-                    git_def
-                    .and_then(|git_def| git_def.get("origin"))
-                    .map(|o| o.as_string())
-                    .unwrap_or_else(|| {
-                        let gdo = github_def.and_then(
-                            |github_def| github_def.get("owner")
-                        );
-                        let gco = github_config.and_then(
-                            |github_config| github_config.get("owner")
-                        );
-                        let owner = gdo.unwrap_or_else(|| expect_opt!(
-                            gco,
-                            "Invalid [project.git] section: no origin"
-                        )).as_string();
-                        let gdr = github_def.and_then(
-                            |github_def| github_def.get("repo")
-                        );
-                        let gcr = github_config.and_then(
-                            |github_config| github_config.get("repo")
-                        );
-                        let repo = gdr.and(gcr)
-                            .map(|r| r.as_string())
-                            .unwrap_or_else(|| name.to_owned());
-                        format!("git@github.com:{}/{}.git", owner, repo)
-                    }),
-                master_branch: git_def
+                    .unwrap_or_else(|| name.to_owned() + "--try")
+                );
+                let try_branch = try_git_def
                     .and_then(|git_def| {
-                        git_def.get("master_branch").map(|m| m.as_string())
+                        git_def.get("branch").map(|m| m.as_string())
                     })
-                    .unwrap_or_else(|| "master".to_owned()),
-                staging_branch: git_def
-                    .and_then(|git_def| {
-                        git_def.get("staging_branch").map(|m| m.as_string())
-                    })
-                    .unwrap_or_else(|| "staging".to_owned()),
+                    .unwrap_or_else(|| "trying".to_owned());
+                git.add_pipeline(PipelineId(i + 1 as i32), git::Repo{
+                    path: try_path,
+                    origin: origin.clone(),
+                    master_branch: master_branch.clone(),
+                    staging_branch: try_branch,
+                    push_to_master: false,
+                });
+            }
+            git.add_pipeline(PipelineId(i as i32), git::Repo{
+                path: path,
+                origin: origin,
+                master_branch: master_branch,
+                staging_branch: staging_branch,
+                push_to_master: true,
             });
+            if def.get("try").is_some() {
+                i += 1;
+            }
+            i += 1;
         }
         Some(git)
     }
@@ -559,7 +650,8 @@ impl CompatibleSetup for GithubCompatibleSetup {
         let mut vcss = vec![];
         if let Some(ref g) = self.git { vcss.push(g); }
         let mut pipelines = vec![];
-        for (i, (_name, def)) in projects.iter().enumerate() {
+        let mut i = 0;
+        for (_name, def) in projects.iter() {
             let def = expect_opt!(
                 def.as_table(),
                 "[project] declarations must be tables"
@@ -601,6 +693,16 @@ impl CompatibleSetup for GithubCompatibleSetup {
                 ui,
                 vcs,
             ));
+            i += 1;
+            if def.get("try").is_some() {
+                pipelines.push(Pipeline::new(
+                    PipelineId(i as i32),
+                    ci,
+                    ui,
+                    vcs,
+                ));
+                i += 1;
+            }
         }
         (pipelines, cis, uis, vcss)
     }

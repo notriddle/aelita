@@ -38,6 +38,7 @@ pub struct Repo {
 #[derive(Debug)]
 struct RepoConfig {
     pipeline_id: PipelineId,
+    try_pipeline_id: Option<PipelineId>,
     teams_with_write: Option<RwLock<HashSet<u32>>>,
 }
 
@@ -71,7 +72,12 @@ impl Worker {
             rate_limiter: RateLimiter::new(),
         }
     }
-    pub fn add_pipeline(&mut self, pipeline_id: PipelineId, repo: Repo) {
+    pub fn add_project(
+        &mut self,
+        pipeline_id: PipelineId,
+        try_pipeline_id: Option<PipelineId>,
+        repo: Repo,
+    ) {
         let teams_with_write = if self.repo_is_org(&repo).expect("if org") {
             Some(RwLock::new(
                 self.get_all_teams_with_write(&repo).expect("Get team info")
@@ -81,6 +87,7 @@ impl Worker {
         };
         self.repos.insert(repo, RepoConfig{
             pipeline_id: pipeline_id,
+            try_pipeline_id: try_pipeline_id,
             teams_with_write: teams_with_write,
         });
     }
@@ -324,30 +331,26 @@ impl Worker {
                             return;
                         }
                     };
-                    let event = match &desc.action[..] {
-                        "closed" => Some(ui::Event::Closed(
-                            repo_config.pipeline_id,
-                            pr,
-                        )),
-                        "opened" | "reopened" => Some(ui::Event::Opened(
-                            repo_config.pipeline_id,
-                            pr,
+                    if let Some(try_pipeline_id) = repo_config.try_pipeline_id {
+                        self.handle_pr_update(
+                            &desc.action[..],
+                            send_event,
+                            try_pipeline_id,
                             commit,
-                            desc.pull_request.title,
-                            Url::parse(&desc.pull_request.html_url).unwrap(),
-                        )),
-                        "synchronize" | "edited" => Some(ui::Event::Changed(
-                            repo_config.pipeline_id,
                             pr,
-                            commit,
-                            desc.pull_request.title,
-                            Url::parse(&desc.pull_request.html_url).unwrap(),
-                        )),
-                        _ => None,
-                    };
-                    if let Some(event) = event {
-                        send_event.send(event).expect("Pipeline to be there");
+                            desc.pull_request.title.clone(),
+                            desc.pull_request.html_url.clone(),
+                        );
                     }
+                    self.handle_pr_update(
+                        &desc.action[..],
+                        send_event,
+                        repo_config.pipeline_id,
+                        commit,
+                        pr,
+                        desc.pull_request.title,
+                        desc.pull_request.html_url,
+                    );
                 } else {
                     warn!("Got invalid PR message");
                     *res.status_mut() = StatusCode::BadRequest;
@@ -426,6 +429,42 @@ impl Worker {
         }
     }
 
+    fn handle_pr_update(
+        &self,
+        action: &str,
+        send_event: &Sender<ui::Event<Pr>>,
+        pipeline_id: PipelineId,
+        commit: Commit,
+        pr: Pr,
+        title: String,
+        html_url: String,
+    ) {
+        let event = match action {
+            "closed" => Some(ui::Event::Closed(
+                pipeline_id,
+                pr,
+            )),
+            "opened" | "reopened" => Some(ui::Event::Opened(
+                pipeline_id,
+                pr,
+                commit,
+                title,
+                Url::parse(&html_url).unwrap(),
+            )),
+            "synchronize" | "edited" => Some(ui::Event::Changed(
+                pipeline_id,
+                pr,
+                commit,
+                title,
+                Url::parse(&html_url).unwrap(),
+            )),
+            _ => None,
+        };
+        if let Some(event) = event {
+            send_event.send(event).expect("Pipeline to be there");
+        }
+    }
+
     fn handle_pr_comment(
         &self,
         send_event: &Sender<ui::Event<Pr>>,
@@ -479,25 +518,50 @@ impl Worker {
         match command {
             comments::Command::Approved(user, commit) => {
                 self.handle_approved_pr(
+                    repo_config.pipeline_id,
                     send_event,
                     issue,
-                    repo_config,
                     pr,
                     user,
                     commit,
                 );
             }
             comments::Command::Canceled => {
-                self.handle_canceled_pr(send_event, repo_config, pr);
+                self.handle_canceled_pr(
+                    repo_config.pipeline_id,
+                    send_event,
+                    pr,
+                );
+            }
+            comments::Command::TryApproved(user, commit) => {
+                if let Some(try_pipeline_id) = repo_config.try_pipeline_id {
+                    self.handle_approved_pr(
+                        try_pipeline_id,
+                        send_event,
+                        issue,
+                        pr,
+                        user,
+                        commit,
+                    );
+                }
+            }
+            comments::Command::TryCanceled => {
+                if let Some(try_pipeline_id) = repo_config.try_pipeline_id {
+                    self.handle_canceled_pr(
+                        try_pipeline_id,
+                        send_event,
+                        pr,
+                    );
+                }
             }
         }
     }
 
     fn handle_approved_pr(
         &self,
+        pipeline_id: PipelineId,
         send_event: &Sender<ui::Event<Pr>>,
         issue: &IssueCommentIssue,
-        repo_config: &RepoConfig,
         pr: &Pr,
         user: &str,
         commit: Option<Commit>,
@@ -512,21 +576,21 @@ impl Worker {
             issue.body,
         );
         send_event.send(ui::Event::Approved(
-            repo_config.pipeline_id,
+            pipeline_id,
             *pr,
             commit,
-            message
+            message,
         )).expect("PR Approved: Pipeline error");
     }
 
     fn handle_canceled_pr(
         &self,
+        pipeline_id: PipelineId,
         send_event: &Sender<ui::Event<Pr>>,
-        repo_config: &RepoConfig,
         pr: &Pr,
     ) {
         send_event.send(ui::Event::Canceled(
-            repo_config.pipeline_id,
+            pipeline_id,
             *pr,
         )).expect("PR Canceled: Pipeline error");
     }
@@ -576,9 +640,13 @@ impl Worker {
         status: &ui::Status<Pr>,
     ) -> Result<(), GithubRequestError> {
         let mut repo = None;
+        let mut is_try = false;
         for (r, c) in &self.repos {
             if c.pipeline_id == pipeline_id {
                 repo = Some(r);
+            } else if c.try_pipeline_id == Some(pipeline_id) {
+                repo = Some(r);
+                is_try = true;
             }
         }
         let repo = match repo {
@@ -618,6 +686,11 @@ impl Worker {
             )),
             ui::Status::Completed(_, _) => None,
         };
+        let context = if is_try {
+            "continuous-integration/aelita/try".to_owned()
+        } else {
+            "continuous-integration/aelita".to_owned()
+        };
         let status = match *status {
             ui::Status::StartingBuild(
                 ref pull_commit,
@@ -629,11 +702,11 @@ impl Worker {
                     state: "pending".to_owned(),
                     target_url: None,
                     description: format!(
-                        "Testing {} with merge commit {}",
+                        "Testing {:.5} with merge commit {:.5}",
                         pull_commit,
                         merge_commit,
                     ),
-                    context: "continuous-integration/aelita".to_owned(),
+                    context: context,
                 }
             )),
             ui::Status::Testing(
@@ -647,11 +720,11 @@ impl Worker {
                     state: "pending".to_owned(),
                     target_url: url.as_ref().map(ToString::to_string),
                     description: format!(
-                        "Testing {} with merge commit {}",
+                        "Testing {:.5} with merge commit {:.5}",
                         pull_commit,
                         merge_commit,
                     ),
-                    context: "continuous-integration/aelita".to_owned(),
+                    context: context,
                 }
             )),
             ui::Status::Success(
@@ -665,7 +738,7 @@ impl Worker {
                     state: "success".to_owned(),
                     target_url: url.as_ref().map(ToString::to_string),
                     description: "Tests passed".to_owned(),
-                    context: "continuous-integration/aelita".to_owned(),
+                    context: context,
                 }
             )),
             ui::Status::Failure(
@@ -679,7 +752,7 @@ impl Worker {
                     state: "failure".to_owned(),
                     target_url: url.as_ref().map(ToString::to_string),
                     description: "Tests failed".to_owned(),
-                    context: "continuous-integration/aelita".to_owned(),
+                    context: context,
                 }
             )),
             ui::Status::Unmergeable(
@@ -691,7 +764,7 @@ impl Worker {
                     state: "failure".to_owned(),
                     target_url: None,
                     description: "Merge failed".to_owned(),
-                    context: "continuous-integration/aelita".to_owned(),
+                    context: context,
                 }
             )),
             ui::Status::Unmoveable(
@@ -704,7 +777,7 @@ impl Worker {
                     state: "error".to_owned(),
                     target_url: None,
                     description: "Merge failed".to_owned(),
-                    context: "continuous-integration/aelita".to_owned(),
+                    context: context,
                 }
             )),
             ui::Status::Invalidated | ui::Status::NoCommit => None,

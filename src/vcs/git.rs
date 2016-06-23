@@ -21,6 +21,7 @@ pub struct Repo {
     pub origin: String,
     pub master_branch: String,
     pub staging_branch: String,
+    pub push_to_master: bool,
 }
 
 pub struct Worker {
@@ -212,6 +213,9 @@ impl Worker {
         repo: &Repo,
         merge_commit: Commit,
     ) -> Result<(), GitError> {
+        if !repo.push_to_master {
+            return Ok(());
+        }
         try!(self.setup_dir(repo));
         try_cmd!(Command::new(&self.executable), cmd,
         cmd.current_dir(&repo.path)

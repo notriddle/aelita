@@ -243,6 +243,10 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                         dd { : "Add the pull request on behalf of \"username.\"" }
                         dt { : raw!("<code>r-</code>") }
                         dd { : "Cancel the pull request." }
+                        dt { : raw!("<code>try+</code>") }
+                        dd { : "Test the pull request without mergeing it." }
+                        dt { : raw!("<code>try-</code>") }
+                        dd { : "Cancel the pull request." }
                     }
                 }
             }
