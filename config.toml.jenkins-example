@@ -18,7 +18,7 @@ listen = "localhost:8000"
 listen = "localhost:6000"
 
 # User account to listen for commands on
-user = "AelitaBot"
+user = "aelita-mergebot"
 
 # Web address that the Github API is on; this is needed for Github Enterprise
 #host = "https://api.github.com"
@@ -70,6 +70,18 @@ token = "MY_JENKINS_API_TOKEN"
 # This is a project definition
 # The part after the dot is the project's name
 [projects.MY_PROJECT]
+
+# AS A NOTE: People used to homu and bors may expect a list of reviewers in
+# this section.
+# There is not one here, because the Github frontend will determine permissions
+# using Github's API.
+# For individually-owned repos, any collaborator can act as a reviewer.
+# For organizationally-owned repos, any member of a team that has push enabled.
+# The type of repo owner is determined at startup,
+# and the list of push teams is refreshed when a team event is received.
+#
+# (This algorithm is the closest thing I could get to
+# "r+ is enabled if the merge button is enabled")
 
 # Normally, the defaults will work for Github, but you need to specify that
 # this project uses Github at all

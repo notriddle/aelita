@@ -22,6 +22,7 @@ use std::io::BufWriter;
 use std::iter;
 use std::num::ParseIntError;
 use std::str::FromStr;
+use std::sync::RwLock;
 use std::sync::mpsc::{Sender, Receiver};
 use ui::{self, comments};
 use util::USER_AGENT;
@@ -34,10 +35,10 @@ pub struct Repo {
     pub repo: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug)]
 struct RepoConfig {
     pipeline_id: PipelineId,
-    teams_with_write: Option<HashSet<u32>>,
+    teams_with_write: Option<RwLock<HashSet<u32>>>,
 }
 
 pub struct Worker {
@@ -72,7 +73,9 @@ impl Worker {
     }
     pub fn add_pipeline(&mut self, pipeline_id: PipelineId, repo: Repo) {
         let teams_with_write = if self.repo_is_org(&repo).expect("if org") {
-            Some(self.get_all_teams_with_write(&repo).expect("Get team info"))
+            Some(RwLock::new(
+                self.get_all_teams_with_write(&repo).expect("Get team info")
+            ))
         } else {
             None
         };
@@ -174,6 +177,10 @@ struct StatusDesc {
     target_url: Option<String>,
     description: String,
     context: String,
+}
+#[derive(Deserialize, Serialize)]
+struct TeamAddDesc {
+    repository: RepositoryDesc,
 }
 
 enum AcceptType {
@@ -361,6 +368,48 @@ impl Worker {
                     warn!("Failed to send response to Github ping: {:?}", e);
                 }
             }
+            b"team_add" => {
+                if let Ok(desc) = json_from_reader::<_, TeamAddDesc>(req) {
+                    info!("Got team add event");
+                    *res.status_mut() = StatusCode::NoContent;
+                    if let Err(e) = res.send(&[]) {
+                        warn!(
+                            "Failed to send response to Github team add: {:?}",
+                            e,
+                        );
+                    }
+                    let repo = Repo{
+                        owner: desc.repository.owner.login,
+                        repo: desc.repository.name,
+                    };
+                    let repo_config = match self.repos.get(&repo) {
+                        Some(repo_config) => repo_config,
+                        None => {
+                            warn!("Got team add event for nonexistant repo");
+                            return;
+                        }
+                    };
+                    if let Some(ref teams) = repo_config.teams_with_write {
+                        let mut teams = teams.write().unwrap();
+                        match self.get_all_teams_with_write(&repo) {
+                            Ok(t) => *teams = t,
+                            Err(e) => {
+                                warn!("Failed to refresh teams: {:?}", e);
+                                return;
+                            }
+                        }
+                    }
+                } else {
+                    warn!("Got invalid team add event");
+                    *res.status_mut() = StatusCode::BadRequest;
+                    if let Err(e) = res.send(&[]) {
+                        warn!(
+                            "Failed to send response to bad Github team: {:?}",
+                            e,
+                        );
+                    }
+                }
+            }
             e => {
                 *res.status_mut() = StatusCode::BadRequest;
                 if let Err(e) = res.send(&[]) {
@@ -506,7 +555,8 @@ impl Worker {
         if let Some(ref teams_with_write) = repo_config.teams_with_write {
             info!("Using teams permission check");
             let mut allowed = false;
-            for team in teams_with_write {
+            let teams_with_write = teams_with_write.read().unwrap();
+            for team in &*teams_with_write {
                 if try!(self.user_is_member_of(user, *team)) {
                     allowed = true;
                     break;
