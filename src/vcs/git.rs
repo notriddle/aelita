@@ -51,7 +51,7 @@ impl Worker {
 
 impl pipeline::Worker<vcs::Event<Commit>, vcs::Message<Commit>> for Worker {
     fn run(
-        &mut self,
+        &self,
         recv_msg: Receiver<vcs::Message<Commit>>,
         mut send_event: Sender<vcs::Event<Commit>>
     ) {

@@ -30,6 +30,7 @@ mod view;
 mod vcs;
 
 use ci::buildbot;
+use ci::github_status;
 use ci::jenkins;
 use pipeline::{Event, GetPipelineId, Pipeline, PipelineId, WorkerThread};
 use std::borrow::Cow;
@@ -232,6 +233,10 @@ struct GithubCompatibleSetup {
         ci::Event<git::Commit>,
         ci::Message<git::Commit>,
     >>,
+    github_status: Option<WorkerThread<
+        ci::Event<git::Commit>,
+        ci::Message<git::Commit>,
+    >>,
     git: Option<WorkerThread<
         vcs::Event<git::Commit>,
         vcs::Message<git::Commit>,
@@ -311,78 +316,6 @@ impl GithubCompatibleSetup {
         Some(github)
     }
 
-    fn setup_jenkins(
-        config: &toml::Table,
-        config_projects: &toml::Table,
-    ) -> Option<jenkins::Worker> {
-        let jenkins_config = try_opt!(
-            config.get("jenkins")
-                .map(|jenkins_config| {
-                    expect_opt!(
-                        jenkins_config.as_table(),
-                        "Invalid [config.jenkins] section: must be a table"
-                    )
-                })
-        );
-        let mut jenkins = jenkins::Worker::new(
-            expect_opt!(
-                jenkins_config.get("listen"),
-                "Invalid [config.jenkins] section: no listen address"
-            ).as_string(),
-            expect_opt!(
-                jenkins_config.get("host"),
-                "Invalid [config.jenkins] section: no host address"
-            ).as_string(),
-            jenkins_config.get("user").map(|user| {
-                (user.as_string(), expect_opt!(
-                    jenkins_config.get("token"),
-                    "Invalid [config.jenkins] section: user, but no password"
-                ).as_string())
-            }),
-        );
-        let mut i = 0;
-        for (name, def) in config_projects.iter() {
-            let def = expect_opt!(
-                def.as_table(),
-                "[project] declarations must be tables"
-            );
-            if let Some(jenkins_def) = def.get("jenkins").map(|jenkins_def| {
-                expect_opt!(
-                    jenkins_def.as_table(),
-                    "[project.jenkins] must be a table"
-                )
-            }) {
-                let name = jenkins_def.get("job").map(|r| r.as_string())
-                    .unwrap_or_else(|| name.to_owned());
-                let token = expect_opt!(
-                    jenkins_def.get("token"),
-                    "Invalid [project.jenkins]: no token specified"
-                ).as_string();
-                if let Some(try_def) = def.get("try").map(|def| def.as_table()) {
-                    let try_jenkins_def = try_def.and_then(|t| t.get("jenkins"))
-                        .map(|j| j.as_table().unwrap());
-                    jenkins.add_pipeline(PipelineId(i + 1 as i32), jenkins::Job{
-                        name: try_jenkins_def.and_then(|j| j.get("job"))
-                            .map(|r| r.as_string())
-                            .unwrap_or_else(|| name.clone() + "--try"),
-                        token: try_jenkins_def.and_then(|j| j.get("token"))
-                            .map(|r| r.as_string())
-                            .unwrap_or_else(|| token.clone()),
-                    });
-                }
-                jenkins.add_pipeline(PipelineId(i as i32), jenkins::Job{
-                    name: name,
-                    token: token,
-                });
-            }
-            if def.get("try").is_some() {
-                i += 1;
-            }
-            i += 1;
-        }
-        Some(jenkins)
-    }
-
     fn setup_buildbot(
         config: &toml::Table,
         config_projects: &toml::Table,
@@ -456,6 +389,154 @@ impl GithubCompatibleSetup {
             i += 1;
         }
         Some(buildbot)
+    }
+
+    fn setup_github_status(
+        config: &toml::Table,
+        projects: &toml::Table,
+    ) -> Option<github_status::Worker> {
+        let github_config = try_opt!(config.get("github").map(|github_config| {
+            expect_opt!(
+                github_config.as_table(),
+                "Invalid [config.github] section: must be a table"
+            )
+        }));
+        let github_status_config = match github_config.get("status") {
+            Some(github_status_config) => expect_opt!(
+                github_status_config.as_table(),
+                "Invalid [config.github.status] section: not a table"
+            ),
+            None => return None,
+        };
+        let mut github_status = github_status::Worker::new(
+            expect_opt!(
+                github_status_config.get("listen"),
+                "Invalid [config.github.status] section: no listen address"
+            ).as_string(),
+        );
+        let mut i = 0;
+        for (name, def) in projects.iter() {
+            let def = expect_opt!(
+                def.as_table(),
+                "[project] declarations must be tables"
+            );
+            if let Some(github_def) = def.get("github").map(|github_def| {
+                expect_opt!(
+                    github_def.as_table(),
+                    "[project.github] must be a table"
+                )
+            }) {
+                if let Some(context) = github_def.get("status") {
+                    let context = context.as_string();
+                    let owner = github_def.get("owner")
+                        .unwrap_or_else(|| {
+                            expect_opt!(
+                                github_config.get("owner"),
+                                "No [config.github.owner] or
+                                [project.github.owner]"
+                            )
+                        })
+                        .as_string();
+                    let repo = github_def.get("repo").map(|r| r.as_string())
+                        .unwrap_or_else(|| name.to_owned());
+                    if def.get("try").is_some() {
+                        github_status.add_pipeline(
+                            PipelineId(i + 1 as i32),
+                            github_status::Repo{
+                                repo: repo.clone(),
+                                owner: owner.clone(),
+                            },
+                            context.clone(),
+                        );
+                    }
+                    github_status.add_pipeline(
+                        PipelineId(i as i32),
+                        github_status::Repo{
+                            repo: repo,
+                            owner: owner,
+                        },
+                        context,
+                    );
+                }
+            }
+            if def.get("try").is_some() {
+                i += 1;
+            }
+            i += 1;
+        }
+        Some(github_status)
+    }
+
+    fn setup_jenkins(
+        config: &toml::Table,
+        config_projects: &toml::Table,
+    ) -> Option<jenkins::Worker> {
+        let jenkins_config = try_opt!(
+            config.get("jenkins")
+                .map(|jenkins_config| {
+                    expect_opt!(
+                        jenkins_config.as_table(),
+                        "Invalid [config.jenkins] section: must be a table"
+                    )
+                })
+        );
+        let mut jenkins = jenkins::Worker::new(
+            expect_opt!(
+                jenkins_config.get("listen"),
+                "Invalid [config.jenkins] section: no listen address"
+            ).as_string(),
+            expect_opt!(
+                jenkins_config.get("host"),
+                "Invalid [config.jenkins] section: no host address"
+            ).as_string(),
+            jenkins_config.get("user").map(|user| {
+                (user.as_string(), expect_opt!(
+                    jenkins_config.get("token"),
+                    "Invalid [config.jenkins] section: user, but no password"
+                ).as_string())
+            }),
+        );
+        let mut i = 0;
+        for (name, def) in config_projects.iter() {
+            let def = expect_opt!(
+                def.as_table(),
+                "[project] declarations must be tables"
+            );
+            if let Some(jenkins_def) = def.get("jenkins").map(|jenkins_def| {
+                expect_opt!(
+                    jenkins_def.as_table(),
+                    "[project.jenkins] must be a table"
+                )
+            }) {
+                let name = jenkins_def.get("job").map(|r| r.as_string())
+                    .unwrap_or_else(|| name.to_owned());
+                let token = expect_opt!(
+                    jenkins_def.get("token"),
+                    "Invalid [project.jenkins]: no token specified"
+                ).as_string();
+                if let Some(try_def) = def.get("try").map(|def| def.as_table()) {
+                    let try_jenkins_def = try_def.and_then(|t| t.get("jenkins"))
+                        .map(|j| j.as_table().unwrap());
+                    jenkins.add_pipeline(PipelineId(i + 1 as i32), jenkins::Job{
+                        name: try_jenkins_def.and_then(|j| j.get("job"))
+                            .map(|r| r.as_string())
+                            .unwrap_or_else(|| name.clone() + "--try"),
+                        token: try_jenkins_def.and_then(|j| j.get("token"))
+                            .map(|r| r.as_string())
+                            .unwrap_or_else(|| token.clone()),
+                    });
+                }
+                jenkins.add_pipeline(PipelineId(i as i32), jenkins::Job{
+                    name: name,
+                    token: token,
+                });
+            }
+            if def.get("try").is_some() {
+                i += 1;
+            }
+            i += 1;
+        }
+        Some(jenkins)
     }
 
     fn setup_git(
@@ -608,11 +689,14 @@ impl CompatibleSetup for GithubCompatibleSetup {
         GithubCompatibleSetup{
             github: GithubCompatibleSetup::setup_github(config, projects)
                 .map(|w| WorkerThread::start(w)),
-            git: GithubCompatibleSetup::setup_git(config, projects)
+            buildbot: GithubCompatibleSetup::setup_buildbot(config, projects)
                 .map(|w| WorkerThread::start(w)),
+            github_status:
+                GithubCompatibleSetup::setup_github_status(config, projects)
+                    .map(|w| WorkerThread::start(w)),
             jenkins: GithubCompatibleSetup::setup_jenkins(config, projects)
                 .map(|w| WorkerThread::start(w)),
-            buildbot: GithubCompatibleSetup::setup_buildbot(config, projects)
+            git: GithubCompatibleSetup::setup_git(config, projects)
                 .map(|w| WorkerThread::start(w)),
         }
     }
@@ -642,11 +726,12 @@ impl CompatibleSetup for GithubCompatibleSetup {
             >>,
         )
     {
-        let mut cis = vec![];
-        if let Some(ref j) = self.jenkins { cis.push(j); }
-        if let Some(ref b) = self.buildbot { cis.push(b); }
         let mut uis = vec![];
         if let Some(ref g) = self.github { uis.push(g); }
+        let mut cis = vec![];
+        if let Some(ref b) = self.buildbot { cis.push(b); }
+        if let Some(ref g) = self.github_status { cis.push(g); }
+        if let Some(ref j) = self.jenkins { cis.push(j); }
         let mut vcss = vec![];
         if let Some(ref g) = self.git { vcss.push(g); }
         let mut pipelines = vec![];
@@ -666,21 +751,38 @@ impl CompatibleSetup for GithubCompatibleSetup {
                 exit(3);
             };
             let ci = if
+            (
                 def.contains_key("jenkins") &&
                 def.contains_key("buildbot")
+            ) ||
+            (
+                def.contains_key("github_status") &&
+                def.contains_key("buildbot")
+            ) ||
+            (
+                def.contains_key("jenkins") &&
+                def.contains_key("github_status")
+            )
             {
                 // TODO: A "meta-CI" that can broadcast and aggregate n>1 CIs.
                 println!("Multi-CI is not currently supported.");
                 exit(3);
-            } else if def.contains_key("jenkins") {
-                expect_opt!(
-                    self.jenkins.as_ref(),
-                    "[project.jenkins] requires [config.jenkins]"
-                )
             } else if def.contains_key("buildbot") {
                 expect_opt!(
                     self.buildbot.as_ref(),
                     "[project.buildbot] requires [config.buildbot]"
+                )
+            } else if def.get("github")
+                    .and_then(|g| g.as_table().unwrap().get("status"))
+                    .is_some() {
+                expect_opt!(
+                    self.github_status.as_ref(),
+                    "[project.github_status] requires [config.github_status]"
+                )
+            } else if def.contains_key("jenkins") {
+                expect_opt!(
+                    self.jenkins.as_ref(),
+                    "[project.jenkins] requires [config.jenkins]"
                 )
             } else {
                 println!("Project requires at least one CI configured");

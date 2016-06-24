@@ -33,10 +33,17 @@ use std::io::{BufWriter, Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::Command;
+use std::sync::{Mutex, Once, ONCE_INIT};
 use std::thread;
 use std::time;
 
 const EXECUTABLE: &'static str = "target/debug/aelita";
+
+lazy_static!{
+    static ref ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+}
+
+static START: Once = ONCE_INIT;
 
 fn single_request<T, H>(listener: &mut HttpListener, h: H) -> T
     where H: FnOnce(Request, Response) -> T
@@ -58,7 +65,9 @@ fn single_request<T, H>(listener: &mut HttpListener, h: H) -> T
 
 #[test]
 fn one_item_github_round_trip() {
-    env_logger::init().unwrap();
+    let _lock = ONE_AT_A_TIME.lock();
+    START.call_once(|| env_logger::init().unwrap());
+
     if !Path::new(EXECUTABLE).exists() {
         panic!("Integration tests require the executable to be built.");
     }
@@ -227,6 +236,201 @@ fn one_item_github_round_trip() {
             .as_bytes()
     ).unwrap();
     drop(tcp_client);
+
+    info!("Wait a sec for it to finish pushing.");
+    thread::sleep(time::Duration::new(2, 0));
+
+    info!("Aelita fast-forwards master.");
+    let mut master_string = String::new();
+    File::open(Path::new("tests/cache/origin/.git/refs/heads/master"))
+        .unwrap()
+        .read_to_string(&mut master_string)
+        .unwrap();
+    master_string = master_string.replace("\n", "").replace("\r", "");
+    assert!(master_string != "e16d1eca074ae29ac1812e14316e96f3117d0675");
+
+    aelita.kill().unwrap();
+}
+
+#[test]
+fn one_item_github_round_trip_status() {
+    let _lock = ONE_AT_A_TIME.lock();
+    START.call_once(|| env_logger::init().unwrap());
+
+    if !Path::new(EXECUTABLE).exists() {
+        panic!("Integration tests require the executable to be built.");
+    }
+
+    let mut github_server = HttpListener::new(&"localhost:9011").unwrap();
+
+    Command::new("/usr/bin/tar")
+        .current_dir("./tests/")
+        .arg("-xvf")
+        .arg("cache.tar.gz")
+        .output()
+        .unwrap();
+
+    Command::new("/bin/rm")
+        .current_dir("./tests/")
+        .arg("db.sqlite")
+        .output()
+        .unwrap();
+
+    let executable = Path::new(EXECUTABLE).canonicalize().unwrap();
+    let mut aelita = Command::new(executable)
+        .current_dir("./tests/")
+        .arg("test-github-round-trip-status.toml")
+        .spawn()
+        .unwrap();
+
+    info!("Aelita asks if we're an organization. We're not, for this test.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath("/repos/AelitaBot/testp".to_owned())
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(concat!(r#" { "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{"login":"AelitaBot","type":"User"} "#,
+            r#" } "#).as_bytes()).unwrap();
+    });
+
+    info!("Wait a sec for it to finish starting.");
+    thread::sleep(time::Duration::new(2, 0));
+
+    info!("Pull request comes into existance.");
+    let http_client = Client::new();
+    let mut http_headers = Headers::new();
+    http_headers.set_raw("X-Github-Event", vec![b"pull_request".to_vec()]);
+    http_client.post("http://localhost:9001")
+        .body(concat!(r#" { "#,
+            r#" "action":"opened", "#,
+            r#" "repository":{ "#,
+                r#" "name":"testp", "#,
+                r#" "owner":{"login":"AelitaBot","type":"User"} "#,
+            r#" }, "#,
+            r#" "pull_request":{ "#,
+                r#" "title":"HA!", "#,
+                r#" "html_url":"http://github.com/testu/testp/pull_request/1", "#,
+                r#" "state":"opened", "#,
+                r#" "number":1, "#,
+                r#" "head":{ "#,
+                    r#" "sha":"55016813274e906e4cbfed97be83e19e6cd93d91" "#,
+                r#" } "#,
+            r#" } "#,
+        r#" } "#))
+        .headers(http_headers)
+        .send()
+        .unwrap();
+
+    info!("User posts comment to mark pull request reviewed.");
+    let http_client = Client::new();
+    let mut http_headers = Headers::new();
+    http_headers.set_raw("X-Github-Event", vec![b"issue_comment".to_vec()]);
+    http_client.post("http://localhost:9001")
+        .body(concat!(r#" { "#,
+            r#" "issue":{ "#,
+                r#" "number":1, "#,
+                r#" "title":"My PR!", "#,
+                r#" "body":"Test", "#,
+                r#" "pull_request":{ "#,
+                    r#" "html_url":"http://github.com/testu/testp/pull_request/1" "#,
+                r#" }, "#,
+                r#" "state":"opened", "#,
+                r#" "user":{ "#,
+                    r#" "login":"testu", "#,
+                    r#" "type":"User" "#,
+                r#" } "#,
+            r#" }, "#,
+            r#" "comment":{ "#,
+                r#" "user":{ "#,
+                    r#" "login":"testu", "#,
+                    r#" "type":"User" "#,
+                r#" }, "#,
+                r#" "body":"@AelitaBot r+" "#,
+            r#" }, "#,
+            r#" "repository":{ "#,
+                r#" "name":"testp", "#,
+                r#" "owner":{ "#,
+                    r#" "login":"AelitaBot", "#,
+                    r#" "type":"User" "#,
+                r#"} "#,
+            r#"} "#,
+        r#"}"#))
+        .headers(http_headers)
+        .send()
+        .unwrap();
+
+    info!("Aelita checks if user has permission to do that.");
+    single_request(&mut github_server, |req, mut res| {
+        let path = "/repos/AelitaBot/testp/collaborators/testu".to_owned();
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath(path)
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::NoContent;
+        res.send(&[]).unwrap();
+    });
+
+    info!("Wait a sec for it to finish merging.");
+    thread::sleep(time::Duration::new(2, 0));
+
+    info!("Aelita does the merge.");
+    let mut commit_string = String::new();
+    File::open(Path::new("tests/cache/origin/.git/refs/heads/staging"))
+        .unwrap()
+        .read_to_string(&mut commit_string)
+        .unwrap();
+    commit_string = commit_string.replace("\n", "").replace("\r", "");
+
+    info!("Github sends start notification to Aelita.");
+    let http_client = Client::new();
+    let mut http_headers = Headers::new();
+    http_headers.set_raw("X-Github-Event", vec![b"status".to_vec()]);
+    http_client.post("http://localhost:9002")
+        .body(concat!(r#" { "#,
+            r#" "state": "pending", "#,
+            r#" "target_url": "http://example.com/target_url", "#,
+            r#" "context": "ci/test", "#,
+            r#" "sha": "CMMT", "#,
+            r#" "repository": { "#,
+                r#" "name": "testp", "#,
+                r#" "owner": {"login":"AelitaBot"} "#,
+            r#" } "#,
+        r#" } "#
+        ).replace("CMMT", &commit_string).as_bytes())
+        .headers(http_headers)
+        .send()
+        .unwrap();
+
+    info!("Github sends finished notification to Aelita.");
+    let http_client = Client::new();
+    let mut http_headers = Headers::new();
+    http_headers.set_raw("X-Github-Event", vec![b"status".to_vec()]);
+    http_client.post("http://localhost:9002")
+        .body(concat!(r#" { "#,
+            r#" "state": "success", "#,
+            r#" "target_url": "http://example.com/target_url", "#,
+            r#" "context": "ci/test", "#,
+            r#" "sha": "CMMT", "#,
+            r#" "repository": { "#,
+                r#" "name": "testp", "#,
+                r#" "owner": {"login":"AelitaBot"} "#,
+            r#" } "#,
+        r#" } "#
+        ).replace("CMMT", &commit_string).as_bytes())
+        .headers(http_headers)
+        .send()
+        .unwrap();
 
     info!("Wait a sec for it to finish pushing.");
     thread::sleep(time::Duration::new(2, 0));

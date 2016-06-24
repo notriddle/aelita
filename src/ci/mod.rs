@@ -1,6 +1,7 @@
 // This file is released under the same terms as Rust itself.
 
 pub mod buildbot;
+pub mod github_status;
 pub mod jenkins;
 
 use hyper::Url;
