@@ -385,7 +385,8 @@ where P: Pr + 'static,
                 if let Some(mut running) = db.take_running(self.id) {
                     if let Some(ref merged_commit) = running.merge_commit {
                         if merged_commit != &built_commit {
-                            warn!("Finished building a different commit")
+                            warn!("Finished building a different commit");
+                            db.put_running(self.id, running.clone());
                         } else if running.canceled {
                             // Canceled; drop on the floor.
                         } else if running.built {
