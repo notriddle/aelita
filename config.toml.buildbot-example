@@ -138,3 +138,8 @@ builders = [ "runtests" ]
 # name.
 #path = "MY_PROJECT"
 
+# Add a second pipeline for this project that will test without mergeing.
+# This is disabled by default.
+# [projects.MY_PROJECT.try.buildbot]
+# poller = "git@github.com:MY_OWNER/MY_PROJECT
+# builders = [ "trytests" ]

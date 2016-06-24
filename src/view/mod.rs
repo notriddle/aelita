@@ -199,7 +199,7 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                     style { : raw!(include_str!("style.css")) }
                 }
                 body {
-                    h1 { : "Repositories" }
+                    h1 { : "Pipelines" }
                     table {
                         thead {
                             th { : "Name" }

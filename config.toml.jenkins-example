@@ -142,3 +142,8 @@ jenkins = { token = "MY_BUILD_TOKEN" }
 # the build with the web API
 #token = "MY_BUILD_TOKEN"
 
+# Add a second pipeline for this project that will test without mergeing.
+# This is disabled by default.
+# [projects.MY_PROJECT.try.jenkins]
+# name = "TRY_MY_PROJECT"
+# token = "TRY_BUILD_TOKEN"
