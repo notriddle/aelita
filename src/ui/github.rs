@@ -190,17 +190,12 @@ struct TeamAddDesc {
     repository: RepositoryDesc,
 }
 
-enum AcceptType {
-    Regular,
-    Repository,
-}
-
 impl pipeline::Worker<
     ui::Event<Pr>,
     ui::Message<Pr>,
 > for Worker {
     fn run(
-        &mut self,
+        &self,
         recv_msg: Receiver<ui::Message<Pr>>,
         mut send_event: Sender<ui::Event<Pr>>
     ) {
@@ -1001,6 +996,11 @@ impl Worker {
         self.client.request(method, url)
             .headers(headers)
     }
+}
+
+enum AcceptType {
+    Regular,
+    Repository,
 }
 
 quick_error! {

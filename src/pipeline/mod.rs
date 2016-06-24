@@ -9,7 +9,7 @@ use ui::{self, Pr};
 use vcs::{self, Commit};
 
 pub trait Worker<E: Send + Clone, M: Send + Clone> {
-    fn run(&mut self, recv_msg: Receiver<M>, send_event: Sender<E>);
+    fn run(&self, recv_msg: Receiver<M>, send_event: Sender<E>);
 }
 
 pub struct WorkerThread<E: Send + Clone + 'static, M: Send + Clone + 'static> {
@@ -18,7 +18,7 @@ pub struct WorkerThread<E: Send + Clone + 'static, M: Send + Clone + 'static> {
 }
 
 impl<E: Send + Clone + 'static, M: Send + Clone + 'static> WorkerThread<E, M> {
-    pub fn start<T: Worker<E, M> + Send + 'static>(mut worker: T) -> Self {
+    pub fn start<T: Worker<E, M> + Send + 'static>(worker: T) -> Self {
         let (send_msg, recv_msg) = channel();
         let (send_event, recv_event) = channel();
         thread::spawn(move || {

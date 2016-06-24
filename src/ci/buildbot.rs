@@ -65,7 +65,7 @@ impl<C> pipeline::Worker<ci::Event<C>, ci::Message<C>> for Worker
     where C: 'static + Commit + Sync, C::Err: Debug
 {
     fn run(
-        &mut self,
+        &self,
         recv_msg: Receiver<ci::Message<C>>,
         mut send_event: Sender<ci::Event<C>>
     ) {
