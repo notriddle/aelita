@@ -12,6 +12,12 @@ lazy_static!{
         .expect("(word) is a valid regex");
     static ref REVIEW_SELF: Regex = Regex::new(r#"\br\+(\W|$)"#)
         .expect("r+ is a valid regex");
+    static ref TRY_BEHALF: Regex = Regex::new(r#"\btry=(@?\w+)\b"#)
+        .expect("try= is a valid regex");
+    static ref TRY_SELF: Regex = Regex::new(r#"\btry\+(\W|$)"#)
+        .expect("try+ is a valid regex");
+    static ref TRY_CANCEL_SELF: Regex = Regex::new(r#"\btry-(\W|$)"#)
+        .expect("try- is a valid regex");
     static ref CANCEL_SELF: Regex = Regex::new(r#"\br-(\W|$)"#)
         .expect("r- is a valid regex");
 }
@@ -36,6 +42,26 @@ fn parse_canceled(body: &str) -> bool {
     CANCEL_SELF.is_match(body)
 }
 
+fn parse_try_approved_behalf(body: &str) -> Option<&str> {
+    TRY_BEHALF.captures(body)
+        .and_then(|capture| capture.at(1))
+        .map(|username| {
+            if username.as_bytes()[0] == b'@' {
+                &username[1..]
+            } else {
+                username
+            }
+        })
+}
+
+fn parse_try_approved_default(body: &str) -> bool {
+    TRY_SELF.is_match(body)
+}
+
+fn parse_try_canceled(body: &str) -> bool {
+    TRY_CANCEL_SELF.is_match(body)
+}
+
 fn parse_specific_commit<C: Commit>(body: &str) -> Option<C> {
     SPECIFIC_COMMIT.captures(body)
         .and_then(|capture| capture.at(1))
@@ -46,6 +72,8 @@ fn parse_specific_commit<C: Commit>(body: &str) -> Option<C> {
 pub enum Command<'a, C: Commit> {
     Approved(&'a str, Option<C>),
     Canceled,
+    TryApproved(&'a str, Option<C>),
+    TryCanceled,
 }
 
 pub fn parse<'a, C>(body: &'a str, def_user: &'a str) -> Option<Command<'a, C>>
@@ -55,10 +83,29 @@ pub fn parse<'a, C>(body: &'a str, def_user: &'a str) -> Option<Command<'a, C>>
     let approved_default = parse_approved_default(body);
     let canceled = parse_canceled(body);
     let commit = parse_specific_commit(body);
-    match (approved_behalf, approved_default, canceled) {
-        (Some(s), false, false) => Some(Command::Approved(s, commit)),
-        (None, true, false) => Some(Command::Approved(def_user, commit)),
-        (None, false, true) => Some(Command::Canceled),
+    let try_behalf = parse_try_approved_behalf(body);
+    let try_approved_default = parse_try_approved_default(body);
+    let try_canceled = parse_try_canceled(body);
+    match (
+        approved_behalf,
+        approved_default,
+        canceled,
+        try_behalf,
+        try_approved_default,
+        try_canceled,
+    ) {
+        (Some(user), false, false, None,       false, false) =>
+            Some(Command::Approved(user, commit)),
+        (None,       true, false, None,        false, false) =>
+            Some(Command::Approved(def_user, commit)),
+        (None,       false, true, None,        false, false) =>
+            Some(Command::Canceled),
+        (None,       false, false, Some(user), false, false) =>
+            Some(Command::TryApproved(user, commit)),
+        (None,       false, false, None,       true, false) =>
+            Some(Command::TryApproved(def_user, commit)),
+        (None,       false, false, None,       false, true) =>
+            Some(Command::TryCanceled),
         _ => None,
     }
 }
@@ -147,6 +194,18 @@ mod test {
                     "a4068472538866d0b603793539875dac1f962c2e"
                 ).unwrap())
             ))
+        );
+    }
+    #[test] fn test_try() {
+        assert_eq!(
+            parse("try+", "luser"),
+            Some(Command::TryApproved("luser", None))
+        );
+    }
+    #[test] fn test_try_cancel() {
+        assert_eq!(
+            parse("try-", "luser"),
+            Some(Command::TryCanceled)
         );
     }
 }
