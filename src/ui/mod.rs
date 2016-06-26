@@ -31,6 +31,7 @@ pub enum Event<P: Pr> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Status<P: Pr> {
+    Approved(P::C),
     Invalidated,
     NoCommit,
     Unmergeable(P::C),

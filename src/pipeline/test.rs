@@ -1308,7 +1308,11 @@ fn handle_runthrough() {
     assert_eq!(vcs.borrow().staging, Some(MemoryCommit::A));
     assert!(vcs.borrow().master.is_none());
     assert!(ci.borrow().build.is_none());
-    assert!(ui.borrow().results.is_empty());
+    assert_eq!(ui.borrow().results, vec![
+        (MemoryPr::A, ui::Status::Approved(
+            MemoryCommit::A,
+        )),
+    ]);
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -1334,6 +1338,9 @@ fn handle_runthrough() {
     assert!(vcs.borrow().master.is_none());
     assert_eq!(ci.borrow().build, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
+        (MemoryPr::A, ui::Status::Approved(
+            MemoryCommit::A,
+        )),
         (MemoryPr::A, ui::Status::StartingBuild(
             MemoryCommit::A,
             MemoryCommit::B,
@@ -1353,6 +1360,9 @@ fn handle_runthrough() {
     assert_eq!(vcs.borrow().staging, Some(MemoryCommit::B));
     assert_eq!(vcs.borrow().master, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
+        (MemoryPr::A, ui::Status::Approved(
+            MemoryCommit::A,
+        )),
         (MemoryPr::A, ui::Status::StartingBuild(
             MemoryCommit::A,
             MemoryCommit::B,
@@ -1376,6 +1386,9 @@ fn handle_runthrough() {
     assert_eq!(vcs.borrow().staging, Some(MemoryCommit::B));
     assert_eq!(vcs.borrow().master, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
+        (MemoryPr::A, ui::Status::Approved(
+            MemoryCommit::A,
+        )),
         (MemoryPr::A, ui::Status::StartingBuild(
             MemoryCommit::A,
             MemoryCommit::B,
@@ -1422,7 +1435,11 @@ fn handle_runthrough_next_commit() {
     assert_eq!(vcs.borrow().staging, Some(MemoryCommit::A));
     assert!(vcs.borrow().master.is_none());
     assert!(ci.borrow().build.is_none());
-    assert!(ui.borrow().results.is_empty());
+    assert_eq!(ui.borrow().results, vec![
+        (MemoryPr::A, ui::Status::Approved(
+            MemoryCommit::A,
+        )),
+    ]);
     // Add a second item to the queue. Since the first is not done merging
     // into the staging area, the build state should not have changed.
     handle_event(
@@ -1471,6 +1488,12 @@ fn handle_runthrough_next_commit() {
     assert!(vcs.borrow().master.is_none());
     assert_eq!(ci.borrow().build, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
+        (MemoryPr::A, ui::Status::Approved(
+            MemoryCommit::A,
+        )),
+        (MemoryPr::C, ui::Status::Approved(
+            MemoryCommit::C,
+        )),
         (MemoryPr::A, ui::Status::StartingBuild(
             MemoryCommit::A,
             MemoryCommit::B,
@@ -1491,6 +1514,12 @@ fn handle_runthrough_next_commit() {
     assert_eq!(vcs.borrow().staging, Some(MemoryCommit::B));
     assert_eq!(vcs.borrow().master, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
+        (MemoryPr::A, ui::Status::Approved(
+            MemoryCommit::A,
+        )),
+        (MemoryPr::C, ui::Status::Approved(
+            MemoryCommit::C,
+        )),
         (MemoryPr::A, ui::Status::StartingBuild(
             MemoryCommit::A,
             MemoryCommit::B,
@@ -1516,6 +1545,12 @@ fn handle_runthrough_next_commit() {
     assert_eq!(vcs.borrow().staging, Some(MemoryCommit::C));
     assert_eq!(vcs.borrow().master, Some(MemoryCommit::B));
     assert_eq!(ui.borrow().results, vec![
+        (MemoryPr::A, ui::Status::Approved(
+            MemoryCommit::A,
+        )),
+        (MemoryPr::C, ui::Status::Approved(
+            MemoryCommit::C,
+        )),
         (MemoryPr::A, ui::Status::StartingBuild(
             MemoryCommit::A,
             MemoryCommit::B,
@@ -1545,6 +1580,12 @@ fn handle_runthrough_next_commit() {
     );
     assert_eq!(ci.borrow().build, Some(MemoryCommit::D));
     assert_eq!(ui.borrow().results, vec![
+        (MemoryPr::A, ui::Status::Approved(
+            MemoryCommit::A,
+        )),
+        (MemoryPr::C, ui::Status::Approved(
+            MemoryCommit::C,
+        )),
         (MemoryPr::A, ui::Status::StartingBuild(
             MemoryCommit::A,
             MemoryCommit::B,

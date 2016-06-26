@@ -203,6 +203,11 @@ where P: Pr + 'static,
                     }
                 };
                 if let Some(commit) = commit {
+                    self.ui.send_result(
+                        self.id,
+                        pr.clone(),
+                        ui::Status::Approved(commit.clone()),
+                    );
                     db.cancel_by_pr(self.id, &pr);
                     db.push_queue(self.id, QueueEntry{
                         commit: commit,
