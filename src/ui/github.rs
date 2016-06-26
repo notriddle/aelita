@@ -651,6 +651,7 @@ impl Worker {
             }
         };
         let comment_body = match *status {
+            ui::Status::Approved(_) => None,
             ui::Status::StartingBuild(_, _) => None,
             ui::Status::Testing(_, _, _) => None,
             ui::Status::Success(_, _, ref url) => Some({
@@ -687,6 +688,19 @@ impl Worker {
             "continuous-integration/aelita".to_owned()
         };
         let status = match *status {
+            ui::Status::Approved(ref pull_commit) => Some((
+                pull_commit,
+                None,
+                StatusDesc {
+                    state: "pending".to_owned(),
+                    target_url: None,
+                    description: format!(
+                        "Approved {}",
+                        pull_commit,
+                    ),
+                    context: context,
+                }
+            )),
             ui::Status::StartingBuild(
                 ref pull_commit,
                 ref merge_commit,
@@ -697,9 +711,9 @@ impl Worker {
                     state: "pending".to_owned(),
                     target_url: None,
                     description: format!(
-                        "Testing {:.5} with merge commit {:.5}",
-                        pull_commit,
-                        merge_commit,
+                        "Testing {} with merge commit {}",
+                        &pull_commit.to_string()[0..5],
+                        &merge_commit.to_string()[0..5],
                     ),
                     context: context,
                 }
@@ -715,9 +729,9 @@ impl Worker {
                     state: "pending".to_owned(),
                     target_url: url.as_ref().map(ToString::to_string),
                     description: format!(
-                        "Testing {:.5} with merge commit {:.5}",
-                        pull_commit,
-                        merge_commit,
+                        "Testing {} with merge commit {}",
+                        &pull_commit.to_string()[0..5],
+                        &merge_commit.to_string()[0..5],
                     ),
                     context: context,
                 }
