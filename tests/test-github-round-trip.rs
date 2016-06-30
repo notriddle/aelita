@@ -9,9 +9,11 @@
 
 extern crate crossbeam;
 extern crate env_logger;
+extern crate hex;
 extern crate hyper;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
+extern crate openssl;
 #[macro_use] extern crate quick_error;
 extern crate regex;
 extern crate rusqlite;
@@ -21,6 +23,7 @@ extern crate toml;
 extern crate url;
 extern crate void;
 
+use hex::ToHex;
 use hyper::buffer::BufReader;
 use hyper::client::Client;
 use hyper::header::{Authorization, Basic, Headers};
@@ -119,23 +122,31 @@ fn one_item_github_round_trip() {
     let http_client = Client::new();
     let mut http_headers = Headers::new();
     http_headers.set_raw("X-Github-Event", vec![b"pull_request".to_vec()]);
-    http_client.post("http://localhost:9001")
-        .body(concat!(r#" { "#,
-            r#" "action":"opened", "#,
-            r#" "repository":{ "#,
-                r#" "name":"testp", "#,
-                r#" "owner":{"login":"AelitaBot","type":"User"} "#,
-            r#" }, "#,
-            r#" "pull_request":{ "#,
-                r#" "title":"HA!", "#,
-                r#" "html_url":"http://github.com/testu/testp/pull_request/1", "#,
-                r#" "state":"opened", "#,
-                r#" "number":1, "#,
-                r#" "head":{ "#,
-                    r#" "sha":"55016813274e906e4cbfed97be83e19e6cd93d91" "#,
-                r#" } "#,
+    let body = concat!(r#" { "#,
+        r#" "action":"opened", "#,
+        r#" "repository":{ "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{"login":"AelitaBot","type":"User"} "#,
+        r#" }, "#,
+        r#" "pull_request":{ "#,
+            r#" "title":"HA!", "#,
+            r#" "html_url":"http://github.com/testu/testp/pull_request/1", "#,
+            r#" "state":"opened", "#,
+            r#" "number":1, "#,
+            r#" "head":{ "#,
+                r#" "sha":"55016813274e906e4cbfed97be83e19e6cd93d91" "#,
             r#" } "#,
-        r#" } "#))
+        r#" } "#,
+    r#" } "#);
+    http_headers.set_raw("X-Hub-Signature", vec![
+        format!("sha1={}", openssl::crypto::hmac::hmac(
+            openssl::crypto::hash::Type::SHA1,
+            "ME_SECRET_LOL".as_bytes(),
+            body.as_bytes(),
+        ).to_hex()).into_bytes()
+    ]);
+    http_client.post("http://localhost:9001")
+        .body(body.as_bytes())
         .headers(http_headers)
         .send()
         .unwrap();
@@ -144,36 +155,44 @@ fn one_item_github_round_trip() {
     let http_client = Client::new();
     let mut http_headers = Headers::new();
     http_headers.set_raw("X-Github-Event", vec![b"issue_comment".to_vec()]);
+    let body = concat!(r#" { "#,
+        r#" "issue":{ "#,
+            r#" "number":1, "#,
+            r#" "title":"My PR!", "#,
+            r#" "body":"Test", "#,
+            r#" "pull_request":{ "#,
+                r#" "html_url":"http://github.com/testu/testp/pull_request/1" "#,
+            r#" }, "#,
+            r#" "state":"opened", "#,
+            r#" "user":{ "#,
+                r#" "login":"testu", "#,
+                r#" "type":"User" "#,
+            r#" } "#,
+        r#" }, "#,
+        r#" "comment":{ "#,
+            r#" "user":{ "#,
+                r#" "login":"testu", "#,
+                r#" "type":"User" "#,
+            r#" }, "#,
+            r#" "body":"@AelitaBot r+" "#,
+        r#" }, "#,
+        r#" "repository":{ "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{ "#,
+                r#" "login":"AelitaBot", "#,
+                r#" "type":"User" "#,
+            r#" } "#,
+        r#" } "#,
+    r#" } "#);
+    http_headers.set_raw("X-Hub-Signature", vec![
+        format!("sha1={}", openssl::crypto::hmac::hmac(
+            openssl::crypto::hash::Type::SHA1,
+            "ME_SECRET_LOL".as_bytes(),
+            body.as_bytes(),
+        ).to_hex()).into_bytes()
+    ]);
     http_client.post("http://localhost:9001")
-        .body(concat!(r#" { "#,
-            r#" "issue":{ "#,
-                r#" "number":1, "#,
-                r#" "title":"My PR!", "#,
-                r#" "body":"Test", "#,
-                r#" "pull_request":{ "#,
-                    r#" "html_url":"http://github.com/testu/testp/pull_request/1" "#,
-                r#" }, "#,
-                r#" "state":"opened", "#,
-                r#" "user":{ "#,
-                    r#" "login":"testu", "#,
-                    r#" "type":"User" "#,
-                r#" } "#,
-            r#" }, "#,
-            r#" "comment":{ "#,
-                r#" "user":{ "#,
-                    r#" "login":"testu", "#,
-                    r#" "type":"User" "#,
-                r#" }, "#,
-                r#" "body":"@AelitaBot r+" "#,
-            r#" }, "#,
-            r#" "repository":{ "#,
-                r#" "name":"testp", "#,
-                r#" "owner":{ "#,
-                    r#" "login":"AelitaBot", "#,
-                    r#" "type":"User" "#,
-                r#"} "#,
-            r#"} "#,
-        r#"}"#))
+        .body(body)
         .headers(http_headers)
         .send()
         .unwrap();
@@ -307,23 +326,31 @@ fn one_item_github_round_trip_status() {
     let http_client = Client::new();
     let mut http_headers = Headers::new();
     http_headers.set_raw("X-Github-Event", vec![b"pull_request".to_vec()]);
-    http_client.post("http://localhost:9001")
-        .body(concat!(r#" { "#,
-            r#" "action":"opened", "#,
-            r#" "repository":{ "#,
-                r#" "name":"testp", "#,
-                r#" "owner":{"login":"AelitaBot","type":"User"} "#,
-            r#" }, "#,
-            r#" "pull_request":{ "#,
-                r#" "title":"HA!", "#,
-                r#" "html_url":"http://github.com/testu/testp/pull_request/1", "#,
-                r#" "state":"opened", "#,
-                r#" "number":1, "#,
-                r#" "head":{ "#,
-                    r#" "sha":"55016813274e906e4cbfed97be83e19e6cd93d91" "#,
-                r#" } "#,
+    let body = concat!(r#" { "#,
+        r#" "action":"opened", "#,
+        r#" "repository":{ "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{"login":"AelitaBot","type":"User"} "#,
+        r#" }, "#,
+        r#" "pull_request":{ "#,
+            r#" "title":"HA!", "#,
+            r#" "html_url":"http://github.com/testu/testp/pull_request/1", "#,
+            r#" "state":"opened", "#,
+            r#" "number":1, "#,
+            r#" "head":{ "#,
+                r#" "sha":"55016813274e906e4cbfed97be83e19e6cd93d91" "#,
             r#" } "#,
-        r#" } "#))
+        r#" } "#,
+    r#" } "#);
+    http_headers.set_raw("X-Hub-Signature", vec![
+        format!("sha1={}", openssl::crypto::hmac::hmac(
+            openssl::crypto::hash::Type::SHA1,
+            "ME_SECRET_LOL".as_bytes(),
+            body.as_bytes(),
+        ).to_hex()).into_bytes()
+    ]);
+    http_client.post("http://localhost:9001")
+        .body(body)
         .headers(http_headers)
         .send()
         .unwrap();
@@ -332,36 +359,44 @@ fn one_item_github_round_trip_status() {
     let http_client = Client::new();
     let mut http_headers = Headers::new();
     http_headers.set_raw("X-Github-Event", vec![b"issue_comment".to_vec()]);
+    let body = concat!(r#" { "#,
+        r#" "issue":{ "#,
+            r#" "number":1, "#,
+            r#" "title":"My PR!", "#,
+            r#" "body":"Test", "#,
+            r#" "pull_request":{ "#,
+                r#" "html_url":"http://github.com/testu/testp/pull_request/1" "#,
+            r#" }, "#,
+            r#" "state":"opened", "#,
+            r#" "user":{ "#,
+                r#" "login":"testu", "#,
+                r#" "type":"User" "#,
+            r#" } "#,
+        r#" }, "#,
+        r#" "comment":{ "#,
+            r#" "user":{ "#,
+                r#" "login":"testu", "#,
+                r#" "type":"User" "#,
+            r#" }, "#,
+            r#" "body":"@AelitaBot r+" "#,
+        r#" }, "#,
+        r#" "repository":{ "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{ "#,
+                r#" "login":"AelitaBot", "#,
+                r#" "type":"User" "#,
+            r#" } "#,
+        r#" } "#,
+    r#" } "#);
+    http_headers.set_raw("X-Hub-Signature", vec![
+        format!("sha1={}", openssl::crypto::hmac::hmac(
+            openssl::crypto::hash::Type::SHA1,
+            "ME_SECRET_LOL".as_bytes(),
+            body.as_bytes(),
+        ).to_hex()).into_bytes()
+    ]);
     http_client.post("http://localhost:9001")
-        .body(concat!(r#" { "#,
-            r#" "issue":{ "#,
-                r#" "number":1, "#,
-                r#" "title":"My PR!", "#,
-                r#" "body":"Test", "#,
-                r#" "pull_request":{ "#,
-                    r#" "html_url":"http://github.com/testu/testp/pull_request/1" "#,
-                r#" }, "#,
-                r#" "state":"opened", "#,
-                r#" "user":{ "#,
-                    r#" "login":"testu", "#,
-                    r#" "type":"User" "#,
-                r#" } "#,
-            r#" }, "#,
-            r#" "comment":{ "#,
-                r#" "user":{ "#,
-                    r#" "login":"testu", "#,
-                    r#" "type":"User" "#,
-                r#" }, "#,
-                r#" "body":"@AelitaBot r+" "#,
-            r#" }, "#,
-            r#" "repository":{ "#,
-                r#" "name":"testp", "#,
-                r#" "owner":{ "#,
-                    r#" "login":"AelitaBot", "#,
-                    r#" "type":"User" "#,
-                r#"} "#,
-            r#"} "#,
-        r#"}"#))
+        .body(body)
         .headers(http_headers)
         .send()
         .unwrap();
@@ -382,7 +417,7 @@ fn one_item_github_round_trip_status() {
     });
 
     info!("Wait a sec for it to finish merging.");
-    thread::sleep(time::Duration::new(2, 0));
+    thread::sleep(time::Duration::new(4, 0));
 
     info!("Aelita does the merge.");
     let mut commit_string = String::new();
@@ -396,8 +431,7 @@ fn one_item_github_round_trip_status() {
     let http_client = Client::new();
     let mut http_headers = Headers::new();
     http_headers.set_raw("X-Github-Event", vec![b"status".to_vec()]);
-    http_client.post("http://localhost:9002")
-        .body(concat!(r#" { "#,
+    let body = concat!(r#" { "#,
             r#" "state": "pending", "#,
             r#" "target_url": "http://example.com/target_url", "#,
             r#" "context": "ci/test", "#,
@@ -407,7 +441,16 @@ fn one_item_github_round_trip_status() {
                 r#" "owner": {"login":"AelitaBot"} "#,
             r#" } "#,
         r#" } "#
-        ).replace("CMMT", &commit_string).as_bytes())
+        ).replace("CMMT", &commit_string);
+    http_headers.set_raw("X-Hub-Signature", vec![
+        format!("sha1={}", openssl::crypto::hmac::hmac(
+            openssl::crypto::hash::Type::SHA1,
+            "ME_SECRET_LOL".as_bytes(),
+            body.as_bytes(),
+        ).to_hex()).into_bytes()
+    ]);
+    http_client.post("http://localhost:9002")
+        .body(body.as_bytes())
         .headers(http_headers)
         .send()
         .unwrap();
@@ -416,8 +459,7 @@ fn one_item_github_round_trip_status() {
     let http_client = Client::new();
     let mut http_headers = Headers::new();
     http_headers.set_raw("X-Github-Event", vec![b"status".to_vec()]);
-    http_client.post("http://localhost:9002")
-        .body(concat!(r#" { "#,
+    let body = concat!(r#" { "#,
             r#" "state": "success", "#,
             r#" "target_url": "http://example.com/target_url", "#,
             r#" "context": "ci/test", "#,
@@ -427,7 +469,16 @@ fn one_item_github_round_trip_status() {
                 r#" "owner": {"login":"AelitaBot"} "#,
             r#" } "#,
         r#" } "#
-        ).replace("CMMT", &commit_string).as_bytes())
+        ).replace("CMMT", &commit_string);
+    http_headers.set_raw("X-Hub-Signature", vec![
+        format!("sha1={}", openssl::crypto::hmac::hmac(
+            openssl::crypto::hash::Type::SHA1,
+            "ME_SECRET_LOL".as_bytes(),
+            body.as_bytes(),
+        ).to_hex()).into_bytes()
+    ]);
+    http_client.post("http://localhost:9002")
+        .body(body.as_bytes())
         .headers(http_headers)
         .send()
         .unwrap();

@@ -9,11 +9,12 @@ use hyper::net::{HttpListener, NetworkListener, NetworkStream};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
 use pipeline::{self, PipelineId};
-use serde_json::{from_reader as json_from_reader};
+use serde_json::{from_slice as json_from_slice};
 use std::collections::HashMap;
 use std::io::BufWriter;
 use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
+use util::github_headers;
 use vcs::git::Commit;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -31,15 +32,18 @@ struct RepoConfig {
 pub struct Worker {
     listen: String,
     pipelines: HashMap<Repo, Vec<RepoConfig>>,
+    secret: String,
 }
 
 impl Worker {
     pub fn new(
         listen: String,
+        secret: String,
     ) -> Worker {
         Worker {
             listen: listen,
             pipelines: HashMap::new(),
+            secret: secret,
         }
     }
     pub fn add_pipeline(
@@ -136,24 +140,18 @@ impl Worker {
 
     fn handle_webhook(
         &self,
-        req: Request,
+        mut req: Request,
         mut res: Response,
         send_event: &Sender<ci::Event<Commit>>
     ) {
-        let x_github_event = {
-            if let Some(xges) = req.headers.get_raw("X-Github-Event") {
-                if let Some(xge) = xges.get(0) {
-                    xge.clone()
-                } else {
-                    vec![]
-                }
-            } else {
-                vec![]
-            }
+        let head = github_headers::parse(&mut req, self.secret.as_bytes());
+        let (x_github_event, body) = match head {
+            Some(head) => head,
+            None => return,
         };
         match &x_github_event[..] {
             b"status" => {
-                if let Ok(desc) = json_from_reader::<_, StatusDesc>(req) {
+                if let Ok(desc) = json_from_slice::<StatusDesc>(&body) {
                     *res.status_mut() = StatusCode::NoContent;
                     if let Err(e) = res.send(&[]) {
                         warn!(
@@ -200,8 +198,7 @@ impl Worker {
                                         commit,
                                         desc.target_url.as_ref().and_then(|u|
                                             Url::parse(&u[..]).ok()
-                                        ),
-                                    ),
+                                        ),                                    ),
                                     _ => {
                                         warn!(
                                             "Unknown status state: {}",
@@ -228,7 +225,7 @@ impl Worker {
                 }
             }
             b"ping" => {
-                if let Ok(desc) = json_from_reader::<_, PingDesc>(req) {
+                if let Ok(desc) = json_from_slice::<PingDesc>(&body) {
                     info!("Got Ping: {}", desc.zen);
                     *res.status_mut() = StatusCode::NoContent;
                 } else {

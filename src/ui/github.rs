@@ -12,7 +12,11 @@ use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
 use pipeline::{self, PipelineId};
 use serde_json;
-use serde_json::{from_reader as json_from_reader, to_vec as json_to_vec};
+use serde_json::{
+    from_reader as json_from_reader,
+    from_slice as json_from_slice,
+    to_vec as json_to_vec
+};
 use std;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -26,6 +30,7 @@ use std::sync::RwLock;
 use std::sync::mpsc::{Sender, Receiver};
 use ui::{self, comments};
 use util::USER_AGENT;
+use util::github_headers;
 use util::rate_limited_client::RateLimiter;
 use vcs::git::{Commit, Remote};
 
@@ -50,6 +55,7 @@ pub struct Worker {
     client: Client,
     rate_limiter: RateLimiter,
     user_ident: String,
+    secret: String,
 }
 
 impl Worker {
@@ -58,6 +64,7 @@ impl Worker {
         host: String,
         token: String,
         user: String,
+        secret: String,
     ) -> Worker {
         let mut authorization: Vec<u8> = b"token ".to_vec();
         authorization.extend(token.bytes());
@@ -70,6 +77,7 @@ impl Worker {
             user_ident: user_ident,
             client: Client::new(),
             rate_limiter: RateLimiter::new(),
+            secret: secret,
         }
     }
     pub fn add_project(
@@ -245,24 +253,18 @@ impl Worker {
 
     fn handle_webhook(
         &self,
-        req: Request,
+        mut req: Request,
         mut res: Response,
         send_event: &Sender<ui::Event<Pr>>
     ) {
-        let x_github_event = {
-            if let Some(xges) = req.headers.get_raw("X-Github-Event") {
-                if let Some(xge) = xges.get(0) {
-                    xge.clone()
-                } else {
-                    vec![]
-                }
-            } else {
-                vec![]
-            }
+        let head = github_headers::parse(&mut req, self.secret.as_bytes());
+        let (x_github_event, body) = match head {
+            Some(head) => head,
+            None => return,
         };
         match &x_github_event[..] {
             b"issue_comment" => {
-                if let Ok(desc) = json_from_reader::<_, CommentDesc>(req) {
+                if let Ok(desc) = json_from_slice::<CommentDesc>(&body) {
                     *res.status_mut() = StatusCode::NoContent;
                     if let Err(e) = res.send(&[]) {
                         warn!(
@@ -292,7 +294,7 @@ impl Worker {
                 }
             }
             b"pull_request" => {
-                if let Ok(desc) = json_from_reader::<_, PullRequestDesc>(req) {
+                if let Ok(desc) = json_from_slice::<PullRequestDesc>(&body) {
                     info!(
                         "Got PR message for #{}: {}",
                         desc.pull_request.number,
@@ -355,7 +357,7 @@ impl Worker {
                 }
             }
             b"ping" => {
-                if let Ok(desc) = json_from_reader::<_, PingDesc>(req) {
+                if let Ok(desc) = json_from_slice::<PingDesc>(&body) {
                     info!("Got Ping: {}", desc.zen);
                     *res.status_mut() = StatusCode::NoContent;
                 } else {
@@ -367,7 +369,7 @@ impl Worker {
                 }
             }
             b"team_add" => {
-                if let Ok(desc) = json_from_reader::<_, TeamAddDesc>(req) {
+                if let Ok(desc) = json_from_slice::<TeamAddDesc>(&body) {
                     info!("Got team add event");
                     *res.status_mut() = StatusCode::NoContent;
                     if let Err(e) = res.send(&[]) {
