@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
+use util::crypto::SHA1_LEN;
 use vcs;
 use void::Void;
 
@@ -300,7 +301,7 @@ impl Debug for Commit {
 impl FromStr for Commit {
     type Err = ParseIntError;
     fn from_str(mut s: &str) -> Result<Commit, ParseIntError> {
-        if s.len() != 40 {
+        if s.len() != SHA1_LEN {
             s = "THIS_IS_NOT_A_NUMBER_BUT_I_CANT_MAKE_PARSEINTERROR_MYSELF";
         }
         let a = try!(u64::from_str_radix(&s[0..16], 16));

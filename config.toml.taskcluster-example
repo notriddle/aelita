@@ -32,6 +32,9 @@ owner = "MY_USER_OR_ORGANIZATON"
 # Personal access token; get it in the user account section on GitHub's website
 token = "MY_PERSONAL_ACCESS_TOKEN"
 
+# Github webhook secret. Enter it in when you set up the webhook.
+secret = "ME_SECRET_LOL"
+
 # Jenkins configuration. Not required if you're not using jenkins
 [config.github.status]
 

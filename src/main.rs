@@ -8,10 +8,12 @@
 
 extern crate crossbeam;
 extern crate env_logger;
+extern crate hex;
 #[macro_use] extern crate horrorshow;
 extern crate hyper;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
+#[macro_use] extern crate openssl;
 #[macro_use] extern crate quick_error;
 extern crate regex;
 extern crate rusqlite;
@@ -271,6 +273,10 @@ impl GithubCompatibleSetup {
                 github_config.get("user"),
                 "Invalid [config.github] section: no bot username"
             ).as_string(),
+            expect_opt!(
+                github_config.get("secret"),
+                "Invalid [config.github] section: no webhook secret"
+            ).as_string(),
         );
         let mut i = 0;
         for (name, def) in projects.iter() {
@@ -412,6 +418,10 @@ impl GithubCompatibleSetup {
             expect_opt!(
                 github_status_config.get("listen"),
                 "Invalid [config.github.status] section: no listen address"
+            ).as_string(),
+            expect_opt!(
+                github_config.get("secret"),
+                "Invalid [config.github] section: no webhook secret"
             ).as_string(),
         );
         let mut i = 0;
