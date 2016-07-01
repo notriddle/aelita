@@ -6,11 +6,12 @@ use db::sqlite::SqliteDb;
 use horrorshow::prelude::*;
 use hyper::buffer::BufReader;
 use hyper::header::{ContentType, Headers};
-use hyper::net::{HttpListener, NetworkListener, NetworkStream};
+use hyper::net::{HttpListener, HttpStream, NetworkListener, NetworkStream};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
 use hyper::uri::RequestUri;
 use pipeline::PipelineId;
+use spmc;
 use std::collections::HashMap;
 use std::convert::AsRef;
 use std::error::Error;
@@ -20,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use ui::Pr;
 
-const WORKER_COUNT: usize = 1;
+const WORKER_COUNT: usize = 3;
 
 pub fn run_sqlite<P: Pr>(
     listen: String,
@@ -33,14 +34,27 @@ pub fn run_sqlite<P: Pr>(
     let path: &Path = path.as_ref();
     let listen: &str = listen.as_ref();
     crossbeam::scope(|scope| {
+        let mut workers = Vec::with_capacity(WORKER_COUNT);
         for _ in 0..WORKER_COUNT {
-            let mut worker = Worker {
-                db: SqliteDb::<P>::open(path)
-                    .expect("opening sqlite to succeed"),
-                pipelines: &pipelines,
-                _pr: PhantomData::<P>,
-            };
-            scope.spawn(move || worker.run(listen));
+            let (send, recv) = spmc::channel();
+            let pipelines_ref = &pipelines;
+            scope.spawn(move || {
+                let mut worker = Worker {
+                    db: SqliteDb::<P>::open(path)
+                        .expect("opening sqlite to succeed"),
+                    pipelines: pipelines_ref,
+                    _pr: PhantomData::<P>,
+                };
+                worker.run(recv)
+            });
+            workers.push(send);
+        }
+        let mut listener = HttpListener::new(listen).expect("a TCP socket");
+        let mut i = 0;
+        while let Ok(stream) = listener.accept() {
+            workers[i].send(stream).unwrap();
+            i += 1;
+            i %= WORKER_COUNT;
         }
     });
 }
@@ -54,9 +68,8 @@ struct Worker<'a, P, D>
 }
 
 impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
-    fn run(&mut self, listen: &str) {
-        let mut listener = HttpListener::new(listen).expect("a TCP socket");
-        while let Ok(mut stream) = listener.accept() {
+    fn run(&mut self, recv: spmc::Receiver<HttpStream>) {
+        while let Ok(mut stream) = recv.recv() {
             let addr = stream.peer_addr()
                 .expect("view client address");
             let mut stream_clone = stream.clone();

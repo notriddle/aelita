@@ -19,6 +19,7 @@ extern crate regex;
 extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
+extern crate spmc;
 extern crate toml;
 extern crate url;
 extern crate void;
