@@ -236,7 +236,7 @@ impl<'a> AuthManager<'a> {
                         ]));
                         let gh_res = try_map!(
                             client
-                                .get(&format!("https://api.github.com/org/{}/members/{}?access_token={}", org, gh_user, gh_token))
+                                .get(&format!("https://api.github.com/orgs/{}/members/{}?access_token={}", org, gh_user, gh_token))
                                 .headers(headers)
                                 .send(),
                             ErrGithubOrgCheck, res
