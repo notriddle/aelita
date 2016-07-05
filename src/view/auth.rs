@@ -3,7 +3,7 @@
 use hex::{FromHex, FromHexError, ToHex};
 use hyper;
 use hyper::client::Client;
-use hyper::header::{Accept, Cookie, CookiePair, Headers, Location, SetCookie, UserAgent, qitem};
+use hyper::header::{Accept, ContentType, Cookie, CookiePair, Headers, Location, SetCookie, UserAgent, qitem};
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
@@ -161,7 +161,7 @@ impl<'a> AuthManager<'a> {
                         };
                         if !verify_sha1_hmac(
                             self.secret.as_bytes(),
-                            &req.remote_addr.to_string().as_bytes(),
+                            &req.remote_addr.ip().to_string().as_bytes(),
                             &try_map!(
                                 Vec::from_hex(&state),
                                 InvalidGithubStateParam,
@@ -176,9 +176,10 @@ impl<'a> AuthManager<'a> {
                         // But we need to check if we're in the org
                         let mut headers = Headers::new();
                         headers.set(UserAgent(USER_AGENT.to_owned()));
+                        headers.set(ContentType::form_url_encoded());
                         headers.set(Accept(vec![
                             qitem(Mime(TopLevel::Application, SubLevel::Json,
-                                       vec![(Attr::Charset, Value::Utf8)])),
+                                       vec![])),
                         ]));
                         let gh_req = form_urlencoded::Serializer::new(String::new())
                             .append_pair("client_id", app_id)
@@ -259,11 +260,11 @@ impl<'a> AuthManager<'a> {
                     } else {
                         let state = generate_sha1_hmac(
                             self.secret.as_bytes(),
-                            req.remote_addr.to_string().as_bytes()
+                            req.remote_addr.ip().to_string().as_bytes()
                         ).to_hex();
                         res.headers_mut().set(Location(
                             format!(
-                                "https://github.com/login/oauth/authorize?client_id={}&state={}",
+                                "https://github.com/login/oauth/authorize?client_id={}&state={}&scope=read:org",
                                 app_id,
                                 state
                             )
