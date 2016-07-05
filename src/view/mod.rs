@@ -1,16 +1,19 @@
 // This file is released under the same terms as Rust itself.
 
+mod auth;
+
 use crossbeam;
 use db::{Db, PendingEntry};
 use db::sqlite::SqliteDb;
 use horrorshow::prelude::*;
 use hyper::buffer::BufReader;
 use hyper::header::{ContentType, Headers};
-use hyper::net::{HttpListener, NetworkListener, NetworkStream};
+use hyper::net::{HttpListener, HttpStream, NetworkListener, NetworkStream};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
 use hyper::uri::RequestUri;
 use pipeline::PipelineId;
+use spmc;
 use std::collections::HashMap;
 use std::convert::AsRef;
 use std::error::Error;
@@ -19,28 +22,52 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use ui::Pr;
+use view::auth::AuthManager;
 
-const WORKER_COUNT: usize = 1;
+pub use view::auth::{Auth, AuthRef};
 
-pub fn run_sqlite<P: Pr>(
+const WORKER_COUNT: usize = 3;
+
+pub fn run_sqlite<'a, P: Pr, A: Into<AuthRef<'a>>>(
     listen: String,
     path: PathBuf,
     pipelines: HashMap<String, PipelineId>,
+    secret: String,
+    auth: A,
 )
     where <P::C as FromStr>::Err: Error,
-          <P as FromStr>::Err: Error 
+          <P as FromStr>::Err: Error,
 {
     let path: &Path = path.as_ref();
     let listen: &str = listen.as_ref();
+    let secret: &str = secret.as_ref();
+    let auth = auth.into();
+    let pipelines = &pipelines;
     crossbeam::scope(|scope| {
+        let mut workers = Vec::with_capacity(WORKER_COUNT);
         for _ in 0..WORKER_COUNT {
-            let mut worker = Worker {
-                db: SqliteDb::<P>::open(path)
-                    .expect("opening sqlite to succeed"),
-                pipelines: &pipelines,
-                _pr: PhantomData::<P>,
-            };
-            scope.spawn(move || worker.run(listen));
+            let (send, recv) = spmc::channel();
+            scope.spawn(move || {
+                let mut worker = Worker {
+                    db: SqliteDb::<P>::open(path)
+                        .expect("opening sqlite to succeed"),
+                    pipelines: pipelines,
+                    auth_manager: AuthManager{
+                        auth: auth,
+                        secret: secret,
+                    },
+                    _pr: PhantomData::<P>,
+                };
+                worker.run(recv)
+            });
+            workers.push(send);
+        }
+        let mut listener = HttpListener::new(listen).expect("a TCP socket");
+        let mut i = 0;
+        while let Ok(stream) = listener.accept() {
+            workers[i].send(stream).unwrap();
+            i += 1;
+            i %= WORKER_COUNT;
         }
     });
 }
@@ -50,13 +77,13 @@ struct Worker<'a, P, D>
 {
     db: D,
     pipelines: &'a HashMap<String, PipelineId>,
+    auth_manager: AuthManager<'a>,
     _pr: PhantomData<P>,
 }
 
 impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
-    fn run(&mut self, listen: &str) {
-        let mut listener = HttpListener::new(listen).expect("a TCP socket");
-        while let Ok(mut stream) = listener.accept() {
+    fn run(&mut self, recv: spmc::Receiver<HttpStream>) {
+        while let Ok(mut stream) = recv.recv() {
             let addr = stream.peer_addr()
                 .expect("view client address");
             let mut stream_clone = stream.clone();
@@ -84,8 +111,13 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
     fn handle_req(
         &mut self,
         req: Request,
-        mut res: Response,
+        res: Response,
     ) -> Result<(), Box<Error>> {
+        let (req, mut res) = match self.auth_manager.check(req, res) {
+            auth::CheckResult::Authenticated(req, res) => (req, res),
+            auth::CheckResult::Err(e) => return Err(Box::new(e)),
+            auth::CheckResult::NotAuthenticated => return Ok(()),
+        };
         let pipeline = if let RequestUri::AbsolutePath(ref path) = req.uri {
             let mut path = &path[..];
             if path == "/" {
@@ -106,7 +138,7 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                 }
             }
         } else {
-            *res.status_mut() = StatusCode::NotFound;
+            *res.status_mut() = StatusCode::BadRequest;
             return Ok(());
         };
         res.headers_mut().set(ContentType::html());

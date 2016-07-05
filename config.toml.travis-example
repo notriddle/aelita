@@ -12,6 +12,15 @@
 [config.view]
 listen = "localhost:8000"
 
+secret = "ME_SECRET_LOL"
+
+# Block off the view so only members of an org can see it.
+# [config.view.auth]
+# type = "github"
+# app_id = "MY_APP_ID"
+# app_secret = "MY_SECRIT_LOL"
+# organization = "KAOS"
+
 [config.github]
 
 # Port to listen for websockets
