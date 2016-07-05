@@ -161,7 +161,7 @@ impl<'a> AuthManager<'a> {
                         };
                         if !verify_sha1_hmac(
                             self.secret.as_bytes(),
-                            &req.remote_addr.to_string().as_bytes(),
+                            &req.remote_addr.ip().to_string().as_bytes(),
                             &try_map!(
                                 Vec::from_hex(&state),
                                 InvalidGithubStateParam,
@@ -259,11 +259,11 @@ impl<'a> AuthManager<'a> {
                     } else {
                         let state = generate_sha1_hmac(
                             self.secret.as_bytes(),
-                            req.remote_addr.to_string().as_bytes()
+                            req.remote_addr.ip().to_string().as_bytes()
                         ).to_hex();
                         res.headers_mut().set(Location(
                             format!(
-                                "https://github.com/login/oauth/authorize?client_id={}&state={}",
+                                "https://github.com/login/oauth/authorize?client_id={}&state={}&scope=read:org",
                                 app_id,
                                 state
                             )
