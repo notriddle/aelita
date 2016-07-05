@@ -201,12 +201,50 @@ fn start_view<P: Pr, Q: Into<PathBuf>>(
             view.as_table(),
             "[config.view] must be a table"
         );
+        let secret = expect_opt!(
+            view.get("secret").map(|x| x.as_string()),
+            "config.view.secret is required"
+        );
         let listen = view.get("listen").map(|listen| {
             expect_opt!(
                 listen.as_str(),
                 "[config.view.listen] must be a string"
             )
         }).unwrap_or("localhost:80").to_owned();
+        let auth = if let Some(auth_config) = view.get("auth") {
+            let auth_config = expect_opt!(
+                auth_config.as_table(),
+                "[config.view.auth] must be a table"
+            );
+            let auth_type = expect_opt!(
+                auth_config.get("type").and_then(toml::Value::as_str),
+                "[config.view.auth] must have a type=\"\" attribute"
+            );
+            match auth_type {
+                "github" => {
+                    view::Auth::Github(
+                        expect_opt!(
+                            auth_config.get("app_id").map(toml::Value::as_string),
+                            "[config.view.auth] app_id required"
+                        ),
+                        expect_opt!(
+                            auth_config.get("app_secret").map(toml::Value::as_string),
+                            "[config.view.auth] app_secret required"
+                        ),
+                        expect_opt!(
+                            auth_config.get("organization").map(toml::Value::as_string),
+                            "[config.view.auth] organization required"
+                        )
+                    )
+                }
+                t => {
+                    println!("Unsupported view auth type specified: {}", t);
+                    exit(3);
+                }
+            }
+        } else {
+            view::Auth::None
+        };
         let mut pipelines = HashMap::new();
         let mut i = 0;
         for (project_name, project_config) in config_projects.iter() {
@@ -219,7 +257,7 @@ fn start_view<P: Pr, Q: Into<PathBuf>>(
             }
         }
         let db_path = db_path.into();
-        thread::spawn(|| view::run_sqlite::<P>(listen, db_path, pipelines));
+        thread::spawn(move || view::run_sqlite::<P, _>(listen, db_path, pipelines, secret, &auth));
     }
 }
 

@@ -1,5 +1,7 @@
 // This file is released under the same terms as Rust itself.
 
+mod auth;
+
 use crossbeam;
 use db::{Db, PendingEntry};
 use db::sqlite::SqliteDb;
@@ -20,29 +22,40 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use ui::Pr;
+use view::auth::AuthManager;
+
+pub use view::auth::{Auth, AuthRef};
 
 const WORKER_COUNT: usize = 3;
 
-pub fn run_sqlite<P: Pr>(
+pub fn run_sqlite<'a, P: Pr, A: Into<AuthRef<'a>>>(
     listen: String,
     path: PathBuf,
     pipelines: HashMap<String, PipelineId>,
+    secret: String,
+    auth: A,
 )
     where <P::C as FromStr>::Err: Error,
-          <P as FromStr>::Err: Error 
+          <P as FromStr>::Err: Error,
 {
     let path: &Path = path.as_ref();
     let listen: &str = listen.as_ref();
+    let secret: &str = secret.as_ref();
+    let auth = auth.into();
+    let pipelines = &pipelines;
     crossbeam::scope(|scope| {
         let mut workers = Vec::with_capacity(WORKER_COUNT);
         for _ in 0..WORKER_COUNT {
             let (send, recv) = spmc::channel();
-            let pipelines_ref = &pipelines;
             scope.spawn(move || {
                 let mut worker = Worker {
                     db: SqliteDb::<P>::open(path)
                         .expect("opening sqlite to succeed"),
-                    pipelines: pipelines_ref,
+                    pipelines: pipelines,
+                    auth_manager: AuthManager{
+                        auth: auth,
+                        secret: secret,
+                    },
                     _pr: PhantomData::<P>,
                 };
                 worker.run(recv)
@@ -64,6 +77,7 @@ struct Worker<'a, P, D>
 {
     db: D,
     pipelines: &'a HashMap<String, PipelineId>,
+    auth_manager: AuthManager<'a>,
     _pr: PhantomData<P>,
 }
 
@@ -97,8 +111,13 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
     fn handle_req(
         &mut self,
         req: Request,
-        mut res: Response,
+        res: Response,
     ) -> Result<(), Box<Error>> {
+        let (req, mut res) = match self.auth_manager.check(req, res) {
+            auth::CheckResult::Authenticated(req, res) => (req, res),
+            auth::CheckResult::Err(e) => return Err(Box::new(e)),
+            auth::CheckResult::NotAuthenticated => return Ok(()),
+        };
         let pipeline = if let RequestUri::AbsolutePath(ref path) = req.uri {
             let mut path = &path[..];
             if path == "/" {
@@ -119,7 +138,7 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                 }
             }
         } else {
-            *res.status_mut() = StatusCode::NotFound;
+            *res.status_mut() = StatusCode::BadRequest;
             return Ok(());
         };
         res.headers_mut().set(ContentType::html());
