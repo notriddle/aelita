@@ -13,6 +13,7 @@ use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
 use hyper::uri::RequestUri;
 use pipeline::PipelineId;
+use quickersort::sort_by;
 use spmc;
 use std::collections::HashMap;
 use std::convert::AsRef;
@@ -223,6 +224,9 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
         _req: Request,
         mut res: Response<::hyper::net::Streaming>,
     ) -> Result<(), Box<Error>> {
+        let mut pipelines: Vec<(&str, PipelineId)> =
+            self.pipelines.iter().map(|(n, p)| (&n[..], *p)).collect();
+        sort_by(&mut pipelines, &|a, b| a.0.cmp(b.0));
         let html = html!{
             html {
                 head {
@@ -241,7 +245,7 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                             th { : "Opened" }
                         }
                         tbody {
-                            @ for (n, &pid) in self.pipelines { |t| {
+                            @ for &(n, pid) in &pipelines { |t| {
                                 let opened = self.db.list_pending(pid).len();
                                 let queue = self.db.list_queue(pid).len();
                                 let running = self.db.peek_running(pid).is_some();
@@ -259,7 +263,7 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                                     }
                                 }
                             }}
-                            @ if self.pipelines.is_empty() {
+                            @ if pipelines.is_empty() {
                                 td(colspan=5) {
                                     : "No configured repositories"
                                 }

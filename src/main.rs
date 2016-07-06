@@ -15,6 +15,7 @@ extern crate hyper;
 #[macro_use] extern crate log;
 #[macro_use] extern crate openssl;
 #[macro_use] extern crate quick_error;
+extern crate quickersort;
 extern crate regex;
 extern crate rusqlite;
 extern crate serde;
