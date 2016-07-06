@@ -276,7 +276,7 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                         dt { : raw!("<code>r-</code>") }
                         dd { : "Cancel the pull request." }
                         dt { : raw!("<code>try+</code>") }
-                        dd { : "Test the pull request without mergeing it." }
+                        dd { : "Test the pull request without merging it." }
                         dt { : raw!("<code>try-</code>") }
                         dd { : "Cancel the pull request." }
                     }
