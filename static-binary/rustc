@@ -1,0 +1,8 @@
+#!/bin/sh
+# The nasty rustc hack to get our libraries coming from musl.
+if echo " $@ " | grep -- --target > /dev/null; then
+    exec /usr/local/bin/rustc -L /usr/local/musl/lib "$@"
+else
+    exec /usr/local/bin/rustc "$@"
+fi
+

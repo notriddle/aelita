@@ -328,11 +328,11 @@ impl Worker {
                             return;
                         }
                     };
-                    if let Some(try_pipeline_id) = repo_config.try_pipeline_id {
+                    if let Some(pipeline_id) = repo_config.try_pipeline_id {
                         self.handle_pr_update(
                             &desc.action[..],
                             send_event,
-                            try_pipeline_id,
+                            pipeline_id,
                             commit,
                             pr,
                             desc.pull_request.title.clone(),

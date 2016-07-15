@@ -225,15 +225,18 @@ fn start_view<P: Pr, Q: Into<PathBuf>>(
                 "github" => {
                     view::Auth::Github(
                         expect_opt!(
-                            auth_config.get("app_id").map(toml::Value::as_string),
+                            auth_config.get("app_id")
+                                .map(toml::Value::as_string),
                             "[config.view.auth] app_id required"
                         ),
                         expect_opt!(
-                            auth_config.get("app_secret").map(toml::Value::as_string),
+                            auth_config.get("app_secret")
+                                .map(toml::Value::as_string),
                             "[config.view.auth] app_secret required"
                         ),
                         expect_opt!(
-                            auth_config.get("organization").map(toml::Value::as_string),
+                            auth_config.get("organization")
+                                .map(toml::Value::as_string),
                             "[config.view.auth] organization required"
                         )
                     )
@@ -253,12 +256,17 @@ fn start_view<P: Pr, Q: Into<PathBuf>>(
             pipelines.insert(project_name.to_owned(), PipelineId(i as i32));
             i += 1;
             if project_config.get("try").is_some() {
-                pipelines.insert(project_name.to_owned() + "--try", PipelineId(i as i32));
+                pipelines.insert(
+                    project_name.to_owned() + "--try",
+                    PipelineId(i as i32)
+                );
                 i += 1;
             }
         }
         let db_path = db_path.into();
-        thread::spawn(move || view::run_sqlite::<P, _>(listen, db_path, pipelines, secret, &auth));
+        thread::spawn(move || {
+            view::run_sqlite::<P, _>(listen, db_path, pipelines, secret, &auth)
+        });
     }
 }
 
@@ -404,19 +412,27 @@ impl GithubCompatibleSetup {
                 )
             });
             if let Some(buildbot_def) = buildbot_def {
-                if let Some(try_def) = def.get("try").map(|def| def.as_table()) {
-                    let try_buildbot_def = try_def.and_then(|t| t.get("buildbot"))
+                if let Some(try_def) = def.get("try")
+                        .map(|def| def.as_table()) {
+                    let try_buildbot_def = try_def.and_then(|t| {
+                            t.get("buildbot")
+                        })
                         .map(|b| b.as_table().unwrap()).unwrap();
-                    buildbot.add_pipeline(PipelineId(i + 1 as i32), buildbot::Job{
-                        poller: try_buildbot_def.get("poller")
-                            .map(toml::Value::as_string),
-                        builders: expect_opt!(
-                            try_buildbot_def.get("builders")
-                                .and_then(toml::Value::as_slice)
-                                .into_iter().filter(|x| !x.is_empty()).next(),
-                            "Invalid [project.try.buildbot]: no builders specified"
-                        ).iter().map(toml::Value::as_string).collect(),
-                    });
+                    buildbot.add_pipeline(
+                        PipelineId(i + 1 as i32),
+                        buildbot::Job{
+                            poller: try_buildbot_def.get("poller")
+                                .map(toml::Value::as_string),
+                            builders: expect_opt!(
+                                try_buildbot_def.get("builders")
+                                    .and_then(toml::Value::as_slice)
+                                    .into_iter()
+                                    .filter(|x| !x.is_empty())
+                                    .next(),
+                                "Invalid [project.try.buildbot]: no builders"
+                            ).iter().map(toml::Value::as_string).collect(),
+                        }
+                    );
                 }
                 buildbot.add_pipeline(PipelineId(i as i32), buildbot::Job{
                     poller: buildbot_def.get("poller")
@@ -564,17 +580,22 @@ impl GithubCompatibleSetup {
                     jenkins_def.get("token"),
                     "Invalid [project.jenkins]: no token specified"
                 ).as_string();
-                if let Some(try_def) = def.get("try").map(|def| def.as_table()) {
-                    let try_jenkins_def = try_def.and_then(|t| t.get("jenkins"))
+                if let Some(try_def) = def.get("try")
+                        .map(|def| def.as_table()) {
+                    let try_jenkins_def = try_def
+                        .and_then(|t| t.get("jenkins"))
                         .map(|j| j.as_table().unwrap());
-                    jenkins.add_pipeline(PipelineId(i + 1 as i32), jenkins::Job{
-                        name: try_jenkins_def.and_then(|j| j.get("job"))
-                            .map(|r| r.as_string())
-                            .unwrap_or_else(|| name.clone() + "--try"),
-                        token: try_jenkins_def.and_then(|j| j.get("token"))
-                            .map(|r| r.as_string())
-                            .unwrap_or_else(|| token.clone()),
-                    });
+                    jenkins.add_pipeline(
+                        PipelineId(i + 1 as i32),
+                        jenkins::Job{
+                            name: try_jenkins_def.and_then(|j| j.get("job"))
+                                .map(|r| r.as_string())
+                                .unwrap_or_else(|| name.clone() + "--try"),
+                            token: try_jenkins_def.and_then(|j| j.get("token"))
+                                .map(|r| r.as_string())
+                                .unwrap_or_else(|| token.clone()),
+                        }
+                    );
                 }
                 jenkins.add_pipeline(PipelineId(i as i32), jenkins::Job{
                     name: name,

@@ -78,7 +78,7 @@ fn one_item_github_round_trip() {
     let mut github_server = HttpListener::new(&"localhost:9011").unwrap();
     let mut jenkins_server = HttpListener::new(&"localhost:9012").unwrap();
 
-    Command::new("/usr/bin/tar")
+    Command::new("/bin/tar")
         .current_dir("./tests/")
         .arg("-xvf")
         .arg("cache.tar.gz")
@@ -282,7 +282,7 @@ fn one_item_github_round_trip_status() {
 
     let mut github_server = HttpListener::new(&"localhost:9011").unwrap();
 
-    Command::new("/usr/bin/tar")
+    Command::new("/bin/tar")
         .current_dir("./tests/")
         .arg("-xvf")
         .arg("cache.tar.gz")

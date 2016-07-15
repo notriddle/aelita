@@ -1,0 +1,30 @@
+language: python
+matrix:
+  fast_finish: true
+  include:
+    - sudo: false
+      script: sh infra/find_overlong_lines.sh
+    - sudo: false
+      addons:
+        apt:
+          packages:
+            - libsqlite3-dev
+            - libssl-dev
+      cache:
+        directories:
+          - $HOME/.cargo
+          - $HOME/.rust
+          - $TRAVIS_BUILD_DIR/target
+      script: sh infra/build_dynamic.sh
+    - sudo: required
+      services:
+        - docker
+      cache:
+        directories:
+          - $HOME/.cargo
+          - $HOME/.rust
+          - $TRAVIS_BUILD_DIR/target
+      script: 
+        - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then sh infra/build_static.sh; fi
+        - if [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "master" ]; then sh infr/deploy.sh; fi
+

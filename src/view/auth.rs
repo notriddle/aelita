@@ -3,7 +3,8 @@
 use hex::{FromHex, FromHexError, ToHex};
 use hyper;
 use hyper::client::Client;
-use hyper::header::{Accept, ContentType, Cookie, CookiePair, Headers, Location, SetCookie, UserAgent, qitem};
+use hyper::header::{Accept, ContentType, Cookie, CookiePair, Headers};
+use hyper::header::{Location, SetCookie, UserAgent, qitem};
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
@@ -13,6 +14,13 @@ use std::convert::AsRef;
 use url::form_urlencoded;
 use util::USER_AGENT;
 use util::crypto::{generate_sha1_hmac, verify_sha1_hmac};
+
+const GH_TOKEN_URI: &'static str =
+    "https://github.com/login/oauth/access_token";
+const GH_AUTH_URI: &'static str =
+    "https://github.com/login/oauth/authorize";
+const GH_API_URI: &'static str =
+    "https://api.github.com";
 
 pub enum Auth {
     None,
@@ -29,8 +37,13 @@ impl<'a> From<&'a Auth> for AuthRef<'a> {
     fn from(a: &'a Auth) -> AuthRef<'a> {
         match *a {
             Auth::None => AuthRef::None,
-            Auth::Github(ref app_id, ref app_secret, ref org) =>
-                AuthRef::Github(app_id.as_ref(), app_secret.as_ref(), org.as_ref()),
+            Auth::Github(ref app_id, ref app_secret, ref org) => {
+                AuthRef::Github(
+                    app_id.as_ref(),
+                    app_secret.as_ref(),
+                    org.as_ref()
+                )
+            }
         }
     }
 }
@@ -130,12 +143,13 @@ impl<'a> AuthManager<'a> {
                     })
                     .unwrap_or(false);
                 if !authed {
-                    let path = if let RequestUri::AbsolutePath(ref path) = req.uri {
-                        path
-                    } else {
-                        *res.status_mut() = StatusCode::BadRequest;
-                        return CheckResult::NotAuthenticated;
-                    };
+                    let path =
+                        if let RequestUri::AbsolutePath(ref path) = req.uri {
+                            path
+                        } else {
+                            *res.status_mut() = StatusCode::BadRequest;
+                            return CheckResult::NotAuthenticated;
+                        };
                     let path = path.as_bytes();
                     if path.len() > 11 && &path[..11] == b"/_gh_login?" {
                         let query = &path[11..];
@@ -153,12 +167,15 @@ impl<'a> AuthManager<'a> {
                                 }
                             }
                         }
-                        let (code, state) = if let (Some(code), Some(state)) = (code, state) {
-                            (code, state)
-                        } else {
-                            *res.status_mut() = StatusCode::BadRequest;
-                            return CheckResult::Err(CheckResultError::MissingGithubParam);
-                        };
+                        let (code, state) =
+                            if let (Some(code), Some(state)) = (code, state) {
+                                (code, state)
+                            } else {
+                                *res.status_mut() = StatusCode::BadRequest;
+                                return CheckResult::Err(
+                                    CheckResultError::MissingGithubParam
+                                );
+                            };
                         if !verify_sha1_hmac(
                             self.secret.as_bytes(),
                             &req.remote_addr.ip().to_string().as_bytes(),
@@ -169,7 +186,9 @@ impl<'a> AuthManager<'a> {
                             )
                         ) {
                             *res.status_mut() = StatusCode::BadRequest;
-                            return CheckResult::Err(CheckResultError::BadGithubStateParam);
+                            return CheckResult::Err(
+                                CheckResultError::BadGithubStateParam
+                            );
                         }
                         let client = Client::default();
                         // We got successfully authed to GitHub
@@ -181,15 +200,16 @@ impl<'a> AuthManager<'a> {
                             qitem(Mime(TopLevel::Application, SubLevel::Json,
                                        vec![])),
                         ]));
-                        let gh_req = form_urlencoded::Serializer::new(String::new())
-                            .append_pair("client_id", app_id)
-                            .append_pair("client_secret", app_secret)
-                            .append_pair("code", &code)
-                            .append_pair("state", &state)
-                            .finish();
+                        let gh_req =
+                            form_urlencoded::Serializer::new(String::new())
+                                .append_pair("client_id", app_id)
+                                .append_pair("client_secret", app_secret)
+                                .append_pair("code", &code)
+                                .append_pair("state", &state)
+                                .finish();
                         let gh_res = try_map!(
                             client
-                                .post("https://github.com/login/oauth/access_token")
+                                .post(GH_TOKEN_URI)
                                 .body(gh_req.as_bytes())
                                 .headers(headers)
                                 .send(),
@@ -204,7 +224,8 @@ impl<'a> AuthManager<'a> {
                             BadGithubTokenResult, res
                         );
                         let gh_token = gh_token.access_token;
-                        // Now that we're actually authed as this user, we need their name.
+                        // Now that we're actually authed as this user,
+                        // we need their name.
                         let mut headers = Headers::new();
                         headers.set(UserAgent(USER_AGENT.to_owned()));
                         headers.set(Accept(vec![
@@ -213,7 +234,11 @@ impl<'a> AuthManager<'a> {
                         ]));
                         let gh_res = try_map!(
                             client
-                                .get(&format!("https://api.github.com/user?access_token={}", gh_token))
+                                .get(&format!(
+                                    "{}/user?access_token={}",
+                                    GH_API_URI,
+                                    gh_token
+                                ))
                                 .headers(headers)
                                 .send(),
                             ErrGithubUsername, res
@@ -227,7 +252,8 @@ impl<'a> AuthManager<'a> {
                             BadGithubUsernameResult, res
                         );
                         let gh_user = gh_user.login;
-                        // Note: the user may need to request (or give) this app org perms to do this.
+                        // Note: the user may need to request (or give)
+                        // this app org perms to do this.
                         let mut headers = Headers::new();
                         headers.set(UserAgent(USER_AGENT.to_owned()));
                         headers.set(Accept(vec![
@@ -236,7 +262,13 @@ impl<'a> AuthManager<'a> {
                         ]));
                         let gh_res = try_map!(
                             client
-                                .get(&format!("https://api.github.com/orgs/{}/members/{}?access_token={}", org, gh_user, gh_token))
+                                .get(&format!(
+                                    "{}/orgs/{}/members/{}?access_token={}",
+                                    GH_API_URI,
+                                    org,
+                                    gh_user,
+                                    gh_token
+                                ))
                                 .headers(headers)
                                 .send(),
                             ErrGithubOrgCheck, res
@@ -254,7 +286,7 @@ impl<'a> AuthManager<'a> {
                             res.headers_mut().set(Location(".".to_owned()));
                             *res.status_mut() = StatusCode::Found;
                         } else {
-                            warn!("Got Github user that's not member: {:?}", gh_user);
+                            warn!("Got Github non-member user: {:?}", gh_user);
                             *res.status_mut() = StatusCode::Forbidden;
                         }
                     } else {
@@ -264,7 +296,8 @@ impl<'a> AuthManager<'a> {
                         ).to_hex();
                         res.headers_mut().set(Location(
                             format!(
-                                "https://github.com/login/oauth/authorize?client_id={}&state={}&scope=read:org",
+                                "{}?client_id={}&state={}&scope=read:org",
+                                GH_AUTH_URI,
                                 app_id,
                                 state
                             )
