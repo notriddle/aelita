@@ -1,6 +1,7 @@
 // This file is released under the same terms as Rust itself.
 
 pub mod git;
+pub mod github;
 
 use pipeline::{GetPipelineId, PipelineId};
 use std::cmp::Eq;

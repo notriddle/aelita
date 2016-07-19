@@ -1,7 +1,6 @@
 # This file is released under the same terms as Rust itself
 
 [config]
-git = {}
 
 [config.github]
 listen = "localhost:9001"
@@ -11,10 +10,16 @@ owner = "AelitaBot"
 token = "MY_PERSONAL_ACCESS_TOKEN"
 secret = "ME_SECRET_LOL"
 
-[config.github.status]
+[config.github.git]
+host = "http://localhost:9013"
+
+[config.jenkins]
 listen = "localhost:9002"
+host = "http://localhost:9012"
+user = "AelitaBot"
+token = "MY_JENKINS_API_TOKEN"
 
 [projects.testp]
-github = { status = "ci/test" }
-git = { origin = "../origin/" }
+github = {}
+jenkins = { token = "MY_BUILD_TOKEN" }
 

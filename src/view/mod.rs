@@ -248,7 +248,8 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                             @ for &(n, pid) in &pipelines { |t| {
                                 let opened = self.db.list_pending(pid).len();
                                 let queue = self.db.list_queue(pid).len();
-                                let running = self.db.peek_running(pid).is_some();
+                                let running = self.db.peek_running(pid)
+                                    .is_some();
                                 let running = if running { 1 } else { 0 };
                                 let review = opened - queue - running;
                                 t << html!{
@@ -276,7 +277,7 @@ impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
                         dt { : raw!("<code>r+</code>") }
                         dd { : "Add the pull request to the merge queue." }
                         dt { : raw!("<code>r=@username</code>") }
-                        dd { : "Add the pull request on behalf of \"username.\"" }
+                        dd { : "Add the pull request as \"username.\"" }
                         dt { : raw!("<code>r-</code>") }
                         dd { : "Cancel the pull request." }
                         dt { : raw!("<code>try+</code>") }

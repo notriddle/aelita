@@ -11,8 +11,8 @@ use hyper::net::{HttpListener, NetworkListener, NetworkStream};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
 use pipeline::{self, PipelineId};
-use serde_json;
 use serde_json::{
+    self,
     from_reader as json_from_reader,
     from_slice as json_from_slice,
     to_vec as json_to_vec
@@ -328,11 +328,11 @@ impl Worker {
                             return;
                         }
                     };
-                    if let Some(try_pipeline_id) = repo_config.try_pipeline_id {
+                    if let Some(pipeline_id) = repo_config.try_pipeline_id {
                         self.handle_pr_update(
                             &desc.action[..],
                             send_event,
-                            try_pipeline_id,
+                            pipeline_id,
                             commit,
                             pr,
                             desc.pull_request.title.clone(),

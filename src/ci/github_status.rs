@@ -198,7 +198,8 @@ impl Worker {
                                         commit,
                                         desc.target_url.as_ref().and_then(|u|
                                             Url::parse(&u[..]).ok()
-                                        ),                                    ),
+                                        ),
+                                    ),
                                     _ => {
                                         warn!(
                                             "Unknown status state: {}",
