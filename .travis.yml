@@ -26,5 +26,5 @@ matrix:
           - $TRAVIS_BUILD_DIR/target
       script: 
         - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then sh infra/build_static.sh; fi
-        - if [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "master" ]; then sh infr/deploy.sh; fi
+        - if [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "master" ]; then sh infra/deploy.sh; fi
 
