@@ -1,6 +1,7 @@
 # This file is released under the same terms as Rust itself
 
 [config]
+git = {}
 
 [config.github]
 listen = "localhost:9001"

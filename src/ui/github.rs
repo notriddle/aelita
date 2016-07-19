@@ -11,8 +11,8 @@ use hyper::net::{HttpListener, NetworkListener, NetworkStream};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
 use pipeline::{self, PipelineId};
-use serde_json;
 use serde_json::{
+    self,
     from_reader as json_from_reader,
     from_slice as json_from_slice,
     to_vec as json_to_vec

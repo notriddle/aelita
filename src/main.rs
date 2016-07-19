@@ -50,6 +50,7 @@ use std::thread;
 use ui::github;
 use ui::Pr;
 use vcs::git;
+use vcs::github as github_git;
 
 macro_rules! try_opt {
     ($e:expr) => (
@@ -288,6 +289,10 @@ struct GithubCompatibleSetup {
         ci::Message<git::Commit>,
     >>,
     git: Option<WorkerThread<
+        vcs::Event<git::Commit>,
+        vcs::Message<git::Commit>,
+    >>,
+    github_git: Option<WorkerThread<
         vcs::Event<git::Commit>,
         vcs::Message<git::Commit>,
     >>,
@@ -614,12 +619,12 @@ impl GithubCompatibleSetup {
         config: &toml::Table,
         config_projects: &toml::Table,
     ) -> Option<git::Worker> {
-        let git_config = config.get("git").map(|git_config| {
+        let git_config = try_opt!(config.get("git").map(|git_config| {
             expect_opt!(
                 git_config.as_table(),
                 "Invalid [config.git] section: must be a table"
             )
-        });
+        }));
         let github_config = config.get("github").map(|github_config| {
             expect_opt!(
                 github_config.as_table(),
@@ -627,18 +632,16 @@ impl GithubCompatibleSetup {
             )
         });
         let mut git = git::Worker::new(
-            git_config.and_then(|git_config| git_config.get("executable"))
+            git_config.get("executable")
                 .map(|e| e.as_string())
                 .unwrap_or_else(|| "git".to_owned()),
-            git_config
-                .and_then(|git_config| git_config.get("name"))
+            git_config.get("name")
                 .or_else(|| {
                     github_config.and_then(|gc| gc.get("user"))
                 })
                 .expect("Invalid [config.git] section: no name")
                 .as_string(),
-            git_config
-                .and_then(|git_config| git_config.get("email"))
+            git_config.get("email")
                 .map(|o| o.as_string())
                 .or_else(|| {
                     github_config.and_then(|gc| {
@@ -650,7 +653,7 @@ impl GithubCompatibleSetup {
                 }).expect("Invalid [config.git] section: no email"),
         );
         let base_path =
-            git_config.and_then(|git_config| git_config.get("path"))
+            git_config.get("path")
             .map(|p| p.as_string())
             .unwrap_or_else(|| "./cache/".to_owned());
         let mut i = 0;
@@ -716,7 +719,7 @@ impl GithubCompatibleSetup {
                 })
                 .unwrap_or_else(|| "staging".to_owned());
             if let Some(try_def) = def.get("try").map(|def| def.as_table()) {
-                let try_git_def = try_def.and_then(|t| t.get("get"))
+                let try_git_def = try_def.and_then(|t| t.get("git"))
                     .map(|b| b.as_table().unwrap());
                 let try_path = PathBuf::from(&base_path).join(
                     try_git_def.and_then(
@@ -752,6 +755,105 @@ impl GithubCompatibleSetup {
         Some(git)
     }
 
+    fn setup_github_git(
+        config: &toml::Table,
+        projects: &toml::Table,
+    ) -> Option<github_git::Worker> {
+        if config.get("git").is_some() {
+            return None;
+        }
+        let github_config = try_opt!(config.get("github").map(|github_config| {
+            expect_opt!(
+                github_config.as_table(),
+                "Invalid [config.github] section: must be a table"
+            )
+        }));
+        let github_git_config = github_config.get("git").map(|git_config| {
+            expect_opt!(
+                git_config.as_table(),
+                "Invalid [config.github.git] section: must be a table"
+            )
+        });
+        let host = github_git_config
+            .and_then(|g| g.get("host"))
+            .or_else(|| github_config.get("host"))
+            .map(|x| x.as_string())
+            .unwrap_or_else(|| "https://api.github.com".to_owned());
+        let token = github_git_config
+            .and_then(|g| g.get("token"))
+            .or_else(|| github_config.get("token"))
+            .map(|x| x.as_string());
+        let mut github_git = github_git::Worker::new(
+            host,
+            expect_opt!(
+                token,
+                "Invalid [config.github] section: no authorization token"
+            ),
+        );
+        let mut i = 0;
+        for (name, def) in projects.iter() {
+            let def = expect_opt!(
+                def.as_table(),
+                "[project] declarations must be tables"
+            );
+            let github_def = expect_opt!(
+                def.get("github")
+                    .and_then(toml::Value::as_table),
+                "[project.github] is required for the Github-cloud VCS"
+            );
+            let owner = github_def.get("owner")
+                .unwrap_or_else(|| {
+                    expect_opt!(
+                        github_config.get("owner"),
+                        "No [config.github.owner] or
+                        [project.github.owner]"
+                    )
+                })
+                .as_string();
+            let repo = github_def.get("repo").map(|r| r.as_string())
+                .unwrap_or_else(|| name.to_owned());
+            let master_branch = github_def.get("master_branch")
+                .map(|r| r.as_string())
+                .unwrap_or_else(|| "master".to_owned());
+            let staging_branch = github_def.get("staging_branch")
+                .map(|r| r.as_string())
+                .unwrap_or_else(|| "staging".to_owned());
+            if let Some(try_def) = def.get("try").map(|def| def.as_table()) {
+                let try_github_def = try_def.and_then(|t| t.get("github"))
+                    .map(|b| b.as_table().unwrap());
+                let try_branch = try_github_def
+                    .and_then(|github_def| {
+                        github_def.get("branch").map(|m| m.as_string())
+                    })
+                    .unwrap_or_else(|| "trying".to_owned());
+                github_git.add_pipeline(
+                    PipelineId(i + 1 as i32),
+                    github_git::Repo{
+                        owner: owner.clone(),
+                        repo: repo.clone(),
+                        master_branch: master_branch.clone(),
+                        staging_branch: try_branch,
+                        push_to_master: false,
+                    }
+                );
+            }
+            github_git.add_pipeline(
+                PipelineId(i as i32),
+                github_git::Repo{
+                    owner: owner,
+                    repo: repo,
+                    master_branch: master_branch,
+                    staging_branch: staging_branch,
+                    push_to_master: true,
+                },
+            );
+            if def.get("try").is_some() {
+                i += 1;
+            }
+            i += 1;
+        }
+        Some(github_git)
+    }
 }
 
 impl CompatibleSetup for GithubCompatibleSetup {
@@ -769,6 +871,9 @@ impl CompatibleSetup for GithubCompatibleSetup {
                 .map(|w| WorkerThread::start(w)),
             git: GithubCompatibleSetup::setup_git(config, projects)
                 .map(|w| WorkerThread::start(w)),
+            github_git:
+                GithubCompatibleSetup::setup_github_git(config, projects)
+                    .map(|w| WorkerThread::start(w)),
         }
     }
     fn start<'a>(&'a self, _config: &toml::Table, projects: &toml::Table)
@@ -805,6 +910,7 @@ impl CompatibleSetup for GithubCompatibleSetup {
         if let Some(ref j) = self.jenkins { cis.push(j); }
         let mut vcss = vec![];
         if let Some(ref g) = self.git { vcss.push(g); }
+        if let Some(ref g) = self.github_git { vcss.push(g); }
         let mut pipelines = vec![];
         let mut i = 0;
         for (_name, def) in projects.iter() {
@@ -859,7 +965,18 @@ impl CompatibleSetup for GithubCompatibleSetup {
                 println!("Project requires at least one CI configured");
                 exit(3);
             };
-            let vcs = self.git.as_ref().expect("No git setup configured?");
+            if self.git.is_some() && self.github_git.is_some() {
+                println!("Using both git and github.git is not supported.");
+                exit(3);
+            }
+            let vcs = if let Some(g) = self.git.as_ref() {
+                g
+            } else if let Some(g) = self.github_git.as_ref() {
+                g
+            } else {
+                println!("Project requires at least one VCS configured");
+                exit(3);
+            };
             pipelines.push(Pipeline::new(
                 PipelineId(i as i32),
                 ci,
