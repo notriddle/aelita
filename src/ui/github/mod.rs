@@ -1,5 +1,7 @@
 // This file is released under the same terms as Rust itself.
 
+mod cache;
+
 use crossbeam;
 use hyper;
 use hyper::Url;
@@ -19,20 +21,25 @@ use serde_json::{
 };
 use std;
 use std::borrow::Cow;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::convert::AsRef;
 use std::fmt::{self, Display, Formatter};
 use std::io::BufWriter;
 use std::iter;
 use std::num::ParseIntError;
+use std::path::Path;
 use std::str::FromStr;
-use std::sync::RwLock;
+use std::sync::Mutex;
 use std::sync::mpsc::{Sender, Receiver};
 use ui::{self, comments};
+use ui::github::cache::{Cache, SqliteCache};
 use util::USER_AGENT;
 use util::github_headers;
 use util::rate_limited_client::RateLimiter;
 use vcs::git::{Commit, Remote};
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct TeamId(pub u32);
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Repo {
@@ -44,7 +51,6 @@ pub struct Repo {
 struct RepoConfig {
     pipeline_id: PipelineId,
     try_pipeline_id: Option<PipelineId>,
-    teams_with_write: Option<RwLock<HashSet<u32>>>,
 }
 
 pub struct Worker {
@@ -56,15 +62,17 @@ pub struct Worker {
     rate_limiter: RateLimiter,
     user_ident: String,
     secret: String,
+    cache: Mutex<cache::SqliteCache>,
 }
 
 impl Worker {
-    pub fn new(
+    pub fn new<Q: AsRef<Path>>(
         listen: String,
         host: String,
         token: String,
         user: String,
         secret: String,
+        cache_path: Q,
     ) -> Worker {
         let mut authorization: Vec<u8> = b"token ".to_vec();
         authorization.extend(token.bytes());
@@ -78,6 +86,9 @@ impl Worker {
             client: Client::new(),
             rate_limiter: RateLimiter::new(),
             secret: secret,
+            cache: Mutex::new(
+                SqliteCache::open(cache_path).expect("FS to work")
+            ),
         }
     }
     pub fn add_project(
@@ -86,17 +97,22 @@ impl Worker {
         try_pipeline_id: Option<PipelineId>,
         repo: Repo,
     ) {
-        let teams_with_write = if self.repo_is_org(&repo).expect("if org") {
-            Some(RwLock::new(
-                self.get_all_teams_with_write(&repo).expect("Get team info")
-            ))
-        } else {
-            None
-        };
+        if self.cache.get_mut().unwrap().is_org(pipeline_id).is_none() {
+            if self.repo_is_org(&repo).expect("Github to respond") {
+                let teams = self.get_all_teams_with_write(&repo)
+                    .expect("Github to be up");
+                let teams = teams.iter().cloned();
+                let cache = self.cache.get_mut().unwrap();
+                cache.set_teams_with_write(pipeline_id, teams);
+                cache.set_is_org(pipeline_id, true);
+            } else {
+                let cache = self.cache.get_mut().unwrap();
+                cache.set_is_org(pipeline_id, false);
+            }
+        }
         self.repos.insert(repo, RepoConfig{
             pipeline_id: pipeline_id,
             try_pipeline_id: try_pipeline_id,
-            teams_with_write: teams_with_write,
         });
     }
 }
@@ -389,16 +405,18 @@ impl Worker {
                             return;
                         }
                     };
-                    if let Some(ref teams) = repo_config.teams_with_write {
-                        let mut teams = teams.write().unwrap();
-                        match self.get_all_teams_with_write(&repo) {
-                            Ok(t) => *teams = t,
-                            Err(e) => {
-                                warn!("Failed to refresh teams: {:?}", e);
-                                return;
-                            }
+                    let mut cache = self.cache.lock().unwrap();
+                    let teams = match self.get_all_teams_with_write(&repo) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            warn!("Failed to refresh teams: {:?}", e);
+                            return;
                         }
-                    }
+                    };
+                    cache.set_teams_with_write(
+                        repo_config.pipeline_id,
+                        teams.iter().cloned(),
+                    );
                 } else {
                     warn!("Got invalid team add event");
                     *res.status_mut() = StatusCode::BadRequest;
@@ -613,12 +631,13 @@ impl Worker {
         repo: &Repo,
         repo_config: &RepoConfig,
     ) -> Result<bool, GithubRequestError> {
-        if let Some(ref teams_with_write) = repo_config.teams_with_write {
+        let mut cache = self.cache.lock().unwrap();
+        if cache.is_org(repo_config.pipeline_id) == Some(true) {
             info!("Using teams permission check");
+            let teams = cache.teams_with_write(repo_config.pipeline_id);
             let mut allowed = false;
-            let teams_with_write = teams_with_write.read().unwrap();
-            for team in &*teams_with_write {
-                if try!(self.user_is_member_of(user, *team)) {
+            for team in teams {
+                if try!(self.user_is_member_of(user, team)) {
                     allowed = true;
                     break;
                 }
@@ -856,12 +875,12 @@ impl Worker {
     fn user_is_member_of(
         &self,
         user: &str,
-        team: u32,
+        team: TeamId,
     ) -> Result<bool, GithubRequestError> {
         let url = format!(
             "{}/teams/{}/members/{}",
             self.host,
-            team,
+            team.0,
             user,
         );
         let resp = try!(self.rate_limiter.retry_send(|| {
@@ -946,7 +965,7 @@ impl Worker {
     fn get_all_teams_with_write(
         &self,
         repo: &Repo,
-    ) -> Result<HashSet<u32>, GithubRequestError> {
+    ) -> Result<HashSet<TeamId>, GithubRequestError> {
         let url = format!(
             "{}/orgs/{}/teams",
             self.host,
@@ -982,7 +1001,7 @@ impl Worker {
                 ));
                 if let Some(ref permissions) = team_repo.permissions {
                     if permissions.admin || permissions.push {
-                        writing_teams.insert(team.id);
+                        writing_teams.insert(TeamId(team.id));
                     }
                 }
             }

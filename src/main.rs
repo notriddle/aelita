@@ -310,6 +310,10 @@ impl GithubCompatibleSetup {
                 "Invalid [config.github] section: must be a table"
             )
         }));
+        let db = github_config.get("db")
+            .or_else(|| config.get("db"))
+            .map(|d| d.as_string())
+            .unwrap_or_else(|| "db.sqlite".to_owned());
         let mut github = github::Worker::new(
             expect_opt!(
                 github_config.get("listen"),
@@ -330,6 +334,7 @@ impl GithubCompatibleSetup {
                 github_config.get("secret"),
                 "Invalid [config.github] section: no webhook secret"
             ).as_string(),
+            db,
         );
         let mut i = 0;
         for (name, def) in projects.iter() {

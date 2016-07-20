@@ -20,7 +20,7 @@ impl RateLimiter {
         &self,
         mut f: T,
     ) -> hyper::error::Result<hyper::client::Response> {
-        const INIT_RETRY_DELAY_MS: u64 = 500;
+        const INIT_RETRY_DELAY_MS: u64 = 50;
         const MAX_RETRY_DELAY_SEC: u64 = 60;
         const MIN_RATE_LIMIT_SEC: u64 = 60;
         let mut rate_limit_until = self.rate_limit_until.lock()
