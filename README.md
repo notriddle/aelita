@@ -1,5 +1,5 @@
 [![@TravisCI]][Build Status]
-[![@Aelita]][Build Queue]
+[![@AelitaBot]][Build Queue]
 
 > ### The Not Rocket Science Rule Of Software Engineering
 >
