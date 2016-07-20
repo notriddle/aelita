@@ -42,11 +42,7 @@ kind: Deployment
 metadata:
   name: aelita
 spec:
-  # TODO #42
-  # We cannot properly replicate because the GitHub team cache is stored in-
-  # memory and update by webhooks, so the different instances will fall out
-  # of sync.
-  replicas: 1
+  replicas: 3
   template:
     metadata:
       labels:
