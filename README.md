@@ -1,3 +1,6 @@
+[![@TravisCI]][Build Status]
+[![@Aelita]][Build Queue]
+
 > ### The Not Rocket Science Rule Of Software Engineering
 >
 > Automatically maintain a repository of code that always passes all the tests.
@@ -28,4 +31,10 @@ Unless you explicitly state otherwise, any contribution intentionally
 submitted for inclusion in the work by you, as defined in the Apache-2.0
 license, shall be dual licensed as above, without any additional terms or
 conditions.
+
+
+[@TravisCI]: https://travis-ci.org/AelitaBot/aelita.svg?branch=master
+[Build Status]: https://travis-ci.org/AelitaBot/aelita
+[@AelitaBot]: https://img.shields.io/badge/passing-automatically-FF69b4.svg
+[Build Queue]: http://104.197.185.190/aelita/
 
