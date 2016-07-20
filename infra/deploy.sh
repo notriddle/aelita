@@ -14,7 +14,6 @@ docker build -t=gcr.io/$PROJECT_NAME/aelita:$VERSION .
 cd ../infra/
 wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-117.0.0-linux-x86_64.tar.gz
 tar -xvf google-cloud-sdk-*
-./google-cloud-sdk/install.sh
 export PATH="`pwd`/google-cloud-sdk/bin/:$PATH"
 gcloud --quiet components update
 gcloud --quiet components update kubectl
