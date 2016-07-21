@@ -14,6 +14,7 @@ extern crate hyper;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 #[macro_use] extern crate openssl;
+extern crate postgres;
 #[macro_use] extern crate quick_error;
 extern crate quickersort;
 extern crate regex;
@@ -127,7 +128,11 @@ fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
     let db_path = config.get("db")
         .map(|file| file.as_string())
         .unwrap_or_else(|| "db.sqlite".to_owned());
-    let mut db = db::sqlite::SqliteDb::open(&db_path).expect("to open up db");
+    let db_build = db::Builder::from_str(&db_path)
+        .expect("to parse db path");
+    let mut db = db_build
+        .open()
+        .expect("to open up db");
     let workers = S::setup_workers(config, config_projects);
     let (mut pipelines, cis, uis, vcss) =
         workers.start(config, config_projects);
@@ -138,10 +143,10 @@ fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
         uis.len(),
         vcss.len(),
     );
-    start_view::<S::P, _>(
+    start_view::<S::P>(
         config,
         config_projects,
-        PathBuf::from(db_path)
+        db_build
     );
     unsafe {
         let select = Select::new();
@@ -165,7 +170,7 @@ fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
         'outer: loop {
             if let Some(event) = pending.take() {
                 let pipeline_id = event.pipeline_id();
-                pipelines[pipeline_id.0 as usize].handle_event(&mut db, event);
+                pipelines[pipeline_id.0 as usize].handle_event(&mut *db, event);
             }
             let id = select.wait();
             for h in &mut ci_handles {
@@ -190,10 +195,10 @@ fn run_workers<S>(config: &toml::Table, config_projects: &toml::Table) -> !
     }
 }
 
-fn start_view<P: Pr, Q: Into<PathBuf>>(
+fn start_view<P: Pr + 'static>(
     config: &toml::Table,
     config_projects: &toml::Table,
-    db_path: Q,
+    db_build: db::Builder,
 )
     where <P::C as FromStr>::Err: Error,
           <P as FromStr>::Err: Error,
@@ -264,9 +269,8 @@ fn start_view<P: Pr, Q: Into<PathBuf>>(
                 i += 1;
             }
         }
-        let db_path = db_path.into();
         thread::spawn(move || {
-            view::run_sqlite::<P, _>(listen, db_path, pipelines, secret, &auth)
+            view::run::<P, _>(listen, &db_build, pipelines, secret, &auth)
         });
     }
 }
@@ -334,7 +338,7 @@ impl GithubCompatibleSetup {
                 github_config.get("secret"),
                 "Invalid [config.github] section: no webhook secret"
             ).as_string(),
-            db,
+            db::Builder::from_str(&db).expect("valid DB definition"),
         );
         let mut i = 0;
         for (name, def) in projects.iter() {

@@ -3,8 +3,7 @@
 mod auth;
 
 use crossbeam;
-use db::{Db, PendingEntry};
-use db::sqlite::SqliteDb;
+use db::{self, Db, PendingEntry};
 use horrorshow::prelude::*;
 use hyper::buffer::BufReader;
 use hyper::header::{ContentType, Headers};
@@ -20,7 +19,6 @@ use std::convert::AsRef;
 use std::error::Error;
 use std::io::{BufWriter, Write};
 use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use ui::Pr;
 use view::auth::AuthManager;
@@ -29,9 +27,9 @@ pub use view::auth::{Auth, AuthRef};
 
 const WORKER_COUNT: usize = 3;
 
-pub fn run_sqlite<'a, P: Pr, A: Into<AuthRef<'a>>>(
+pub fn run<'a, P: Pr + 'static, A: Into<AuthRef<'a>>>(
     listen: String,
-    path: PathBuf,
+    db_build: &db::Builder,
     pipelines: HashMap<String, PipelineId>,
     secret: String,
     auth: A,
@@ -39,7 +37,6 @@ pub fn run_sqlite<'a, P: Pr, A: Into<AuthRef<'a>>>(
     where <P::C as FromStr>::Err: Error,
           <P as FromStr>::Err: Error,
 {
-    let path: &Path = path.as_ref();
     let listen: &str = listen.as_ref();
     let secret: &str = secret.as_ref();
     let auth = auth.into();
@@ -50,8 +47,8 @@ pub fn run_sqlite<'a, P: Pr, A: Into<AuthRef<'a>>>(
             let (send, recv) = spmc::channel();
             scope.spawn(move || {
                 let mut worker = Worker {
-                    db: SqliteDb::<P>::open(path)
-                        .expect("opening sqlite to succeed"),
+                    db: db_build.open()
+                        .expect("opening DB to succeed"),
                     pipelines: pipelines,
                     auth_manager: AuthManager{
                         auth: auth,
@@ -73,16 +70,16 @@ pub fn run_sqlite<'a, P: Pr, A: Into<AuthRef<'a>>>(
     });
 }
 
-struct Worker<'a, P, D>
-    where P: Pr, D: Db<P>
+struct Worker<'a, P>
+    where P: Pr
 {
-    db: D,
+    db: Box<Db<P> + Send>,
     pipelines: &'a HashMap<String, PipelineId>,
     auth_manager: AuthManager<'a>,
     _pr: PhantomData<P>,
 }
 
-impl<'a, P: Pr, D: Db<P>> Worker<'a, P, D> {
+impl<'a, P: Pr> Worker<'a, P> {
     fn run(&mut self, recv: spmc::Receiver<HttpStream>) {
         while let Ok(mut stream) = recv.recv() {
             let addr = stream.peer_addr()

@@ -3,6 +3,7 @@
 mod cache;
 
 use crossbeam;
+use db;
 use hyper;
 use hyper::Url;
 use hyper::buffer::BufReader;
@@ -22,17 +23,14 @@ use serde_json::{
 use std;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::convert::AsRef;
 use std::fmt::{self, Display, Formatter};
 use std::io::BufWriter;
 use std::iter;
 use std::num::ParseIntError;
-use std::path::Path;
 use std::str::FromStr;
 use std::sync::Mutex;
 use std::sync::mpsc::{Sender, Receiver};
 use ui::{self, comments};
-use ui::github::cache::{Cache, SqliteCache};
 use util::USER_AGENT;
 use util::github_headers;
 use util::rate_limited_client::RateLimiter;
@@ -62,17 +60,17 @@ pub struct Worker {
     rate_limiter: RateLimiter,
     user_ident: String,
     secret: String,
-    cache: Mutex<cache::SqliteCache>,
+    cache: Mutex<cache::Cache>,
 }
 
 impl Worker {
-    pub fn new<Q: AsRef<Path>>(
+    pub fn new(
         listen: String,
         host: String,
         token: String,
         user: String,
         secret: String,
-        cache_path: Q,
+        cache_builder: db::Builder,
     ) -> Worker {
         let mut authorization: Vec<u8> = b"token ".to_vec();
         authorization.extend(token.bytes());
@@ -87,7 +85,7 @@ impl Worker {
             rate_limiter: RateLimiter::new(),
             secret: secret,
             cache: Mutex::new(
-                SqliteCache::open(cache_path).expect("FS to work")
+                cache::from_builder(&cache_builder).expect("to get a cache")
             ),
         }
     }

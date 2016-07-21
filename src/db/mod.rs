@@ -4,10 +4,42 @@
  */
 
 pub mod sqlite;
+pub mod postgres;
 
 use hyper::Url;
 use ui::Pr;
 use pipeline::PipelineId;
+use std::error::Error;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use postgres::{ConnectParams, IntoConnectParams};
+
+pub enum Builder {
+    Sqlite(PathBuf),
+    Postgres(ConnectParams),
+}
+
+impl Builder {
+    pub fn from_str(desc: &str) -> Result<Builder, Box<Error + Send + Sync>> {
+        Ok(if desc.starts_with("postgresql:") {
+            Builder::Postgres(try!(desc.into_connect_params()))
+        } else {
+            Builder::Sqlite(Path::new(desc).to_owned())
+        })
+    }
+    pub fn open<P: Pr + 'static>(
+        &self
+    ) -> Result<Box<Db<P> + Send>, Box<Error + Send + Sync>>
+        where <<P as Pr>::C as FromStr>::Err: Error,
+              <P as FromStr>::Err: Error
+    {
+        Ok(match *self {
+            Builder::Sqlite(ref p) => Box::new(try!(sqlite::SqliteDb::open(p))),
+            Builder::Postgres(ref c) => Box::new(try!(postgres::PostgresDb::open(c.clone()))),
+        })
+    }
+}
+
 
 /// A build queue
 pub trait Db<P: Pr> {
