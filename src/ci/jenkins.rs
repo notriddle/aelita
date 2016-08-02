@@ -6,11 +6,15 @@ use hyper::client::{Client, IntoUrl};
 use hyper::header::{Authorization, Basic};
 use pipeline::{self, PipelineId};
 use serde_json::from_reader as json_from_reader;
-use std::collections::HashMap;
 use std::net::TcpListener;
 use std::sync::mpsc::{Sender, Receiver};
 use util::rate_limited_client::RateLimiter;
 use vcs::Commit;
+
+pub trait PipelinesConfig: Send + Sync + 'static {
+    fn job_by_pipeline(&self, PipelineId) -> Option<Job>;
+    fn pipelines_by_job_name(&self, &str) -> Vec<PipelineId>;
+}
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Job {
@@ -21,7 +25,7 @@ pub struct Job {
 pub struct Worker {
     listen: String,
     host: String,
-    jobs: HashMap<PipelineId, Job>,
+    pipelines: Box<PipelinesConfig>,
     auth: Option<(String, String)>,
     client: Client,
     rate_limiter: RateLimiter,
@@ -32,18 +36,16 @@ impl Worker {
         listen: String,
         host: String,
         auth: Option<(String, String)>,
+        pipelines: Box<PipelinesConfig>,
     ) -> Self {
         Worker {
             listen: listen,
             host: host,
-            jobs: HashMap::new(),
+            pipelines: pipelines,
             auth: auth,
             client: Client::default(),
             rate_limiter: RateLimiter::new(),
         }
-    }
-    pub fn add_pipeline(&mut self, pipeline_id: PipelineId, job: Job) {
-        self.jobs.insert(pipeline_id, job);
     }
 }
 
@@ -109,62 +111,50 @@ impl Worker {
                 info!("Build not completed or started");
                 continue;
             }
-            let commit = match C::from_str(&desc.build.scm.commit) {
-                Ok(commit) => commit,
-                Err(_) => {
-                    warn!(
-                        "Result commit parse failed: {}",
-                        desc.build.scm.commit
-                    );
-                    continue;
-                }
-            };
-            let pipeline_id = {
-                let mut pipeline_id = None;
-                for (p, job) in &self.jobs {
-                    if &job.name == &desc.name {
-                        pipeline_id = Some(p);
-                        break;
+            let pipelines = self.pipelines.pipelines_by_job_name(&desc.name);
+            if pipelines.is_empty() {
+                warn!("Got result of unknown job: {}", desc.name);
+            }
+            for pipeline_id in pipelines {
+                let commit = match C::from_str(&desc.build.scm.commit) {
+                    Ok(commit) => commit,
+                    Err(_) => {
+                        warn!(
+                            "Result commit parse failed: {}",
+                            desc.build.scm.commit
+                        );
+                        continue;
                     }
-                }
-                if let Some(pipeline_id) = pipeline_id {
-                    pipeline_id
-                } else {
-                    warn!(
-                        "Got request for nonexistant job: {}",
-                        desc.name
-                    );
-                    continue;
-                }
-            };
-            if desc.build.phase == "STARTED" {
-                send_event.send(
-                    ci::Event::BuildStarted(
-                        *pipeline_id,
-                        commit,
-                        desc.build.full_url.into_url().ok(),
-                    )
-                ).expect("Pipeline");
-            } else if let Some(status) = desc.build.status {
-                match &status[..] {
-                    "SUCCESS" => {
-                        send_event.send(
-                            ci::Event::BuildSucceeded(
-                                *pipeline_id,
-                                commit,
-                                desc.build.full_url.into_url().ok(),
-                            )
-                        ).expect("Pipeline");
-                    }
-                    e => {
-                        info!("Build failed: {}", e);
-                        send_event.send(
-                            ci::Event::BuildFailed(
-                                *pipeline_id,
-                                commit,
-                                desc.build.full_url.into_url().ok(),
-                            )
-                        ).expect("Pipeline");
+                };
+                if desc.build.phase == "STARTED" {
+                    send_event.send(
+                        ci::Event::BuildStarted(
+                            pipeline_id,
+                            commit,
+                            desc.build.full_url.into_url().ok(),
+                        )
+                    ).expect("Pipeline");
+                } else if let Some(ref status) = desc.build.status {
+                    match &status[..] {
+                        "SUCCESS" => {
+                            send_event.send(
+                                ci::Event::BuildSucceeded(
+                                    pipeline_id,
+                                    commit,
+                                    desc.build.full_url.into_url().ok(),
+                                )
+                            ).expect("Pipeline");
+                        }
+                        e => {
+                            info!("Build failed: {}", e);
+                            send_event.send(
+                                ci::Event::BuildFailed(
+                                    pipeline_id,
+                                    commit,
+                                    desc.build.full_url.into_url().ok(),
+                                )
+                            ).expect("Pipeline");
+                        }
                     }
                 }
             }
@@ -178,7 +168,7 @@ impl Worker {
     ) {
         match msg {
             ci::Message::StartBuild(pipeline_id, commit) => {
-                let job = match self.jobs.get(&pipeline_id) {
+                let job = match self.pipelines.job_by_pipeline(pipeline_id) {
                     Some(job) => job,
                     None => {
                         warn!(

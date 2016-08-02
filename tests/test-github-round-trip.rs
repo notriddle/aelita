@@ -98,23 +98,6 @@ fn one_item_github_round_trip() {
         .spawn()
         .unwrap();
 
-    info!("Aelita asks if we're an organization. We're not, for this test.");
-    single_request(&mut github_server, |req, mut res| {
-        assert_eq!(
-            req.uri,
-            RequestUri::AbsolutePath("/repos/AelitaBot/testp".to_owned())
-        );
-        assert_eq!(
-            &req.headers.get_raw("Authorization").unwrap()[0][..],
-            b"token MY_PERSONAL_ACCESS_TOKEN"
-        );
-        *res.status_mut() = StatusCode::Ok;
-        res.send(concat!(r#" { "#,
-            r#" "name":"testp", "#,
-            r#" "owner":{"login":"AelitaBot","type":"User"} "#,
-            r#" } "#).as_bytes()).unwrap();
-    });
-
     info!("Wait a sec for it to finish starting.");
     thread::sleep(time::Duration::new(2, 0));
 
@@ -196,6 +179,23 @@ fn one_item_github_round_trip() {
         .headers(http_headers)
         .send()
         .unwrap();
+
+    info!("Aelita asks if we're an organization. We're not, for this test.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath("/repos/AelitaBot/testp".to_owned())
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(concat!(r#" { "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{"login":"AelitaBot","type":"User"} "#,
+            r#" } "#).as_bytes()).unwrap();
+    });
 
     info!("Aelita checks if user has permission to do that.");
     single_request(&mut github_server, |req, mut res| {
@@ -303,57 +303,6 @@ fn one_item_team_github_round_trip() {
         .spawn()
         .unwrap();
 
-    info!("Aelita asks if we're an organization. We are, for this test.");
-    single_request(&mut github_server, |req, mut res| {
-        assert_eq!(
-            req.uri,
-            RequestUri::AbsolutePath("/repos/AelitaBot/testp".to_owned())
-        );
-        assert_eq!(
-            &req.headers.get_raw("Authorization").unwrap()[0][..],
-            b"token MY_PERSONAL_ACCESS_TOKEN"
-        );
-        *res.status_mut() = StatusCode::Ok;
-        res.send(concat!(r#" { "#,
-            r#" "name":"testp", "#,
-            r#" "owner":{"login":"AelitaBot","type":"Organization"} "#,
-            r#" } "#).as_bytes()).unwrap();
-    });
-
-    info!("Aelita gets a list of teams.");
-    single_request(&mut github_server, |req, mut res| {
-        assert_eq!(
-            req.uri,
-            RequestUri::AbsolutePath("/orgs/AelitaBot/teams".to_owned())
-        );
-        assert_eq!(
-            &req.headers.get_raw("Authorization").unwrap()[0][..],
-            b"token MY_PERSONAL_ACCESS_TOKEN"
-        );
-        *res.status_mut() = StatusCode::Ok;
-        res.send(concat!(r#" [ "#,
-            r#" { "id":1, "slug":"Potato" } "#,
-            r#" ] "#).as_bytes()).unwrap();
-    });
-
-    info!("Aelita checks if Potato has write permission. It does.");
-    single_request(&mut github_server, |req, mut res| {
-        assert_eq!(
-            req.uri,
-            RequestUri::AbsolutePath(
-                "/teams/1/repos/AelitaBot/testp".to_owned()
-            )
-        );
-        assert_eq!(
-            &req.headers.get_raw("Authorization").unwrap()[0][..],
-            b"token MY_PERSONAL_ACCESS_TOKEN"
-        );
-        *res.status_mut() = StatusCode::Ok;
-        res.send(concat!(r#" { "#,
-            r#" "permissions": { "pull":true,"push":true,"admin":false } "#,
-            r#" } "#).as_bytes()).unwrap();
-    });
-
     info!("Wait a sec for it to finish writing.");
     thread::sleep(time::Duration::new(1, 0));
 
@@ -447,6 +396,57 @@ fn one_item_team_github_round_trip() {
         .headers(http_headers)
         .send()
         .unwrap();
+
+    info!("Aelita asks if we're an organization. We are, for this test.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath("/repos/AelitaBot/testp".to_owned())
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(concat!(r#" { "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{"login":"AelitaBot","type":"Organization"} "#,
+            r#" } "#).as_bytes()).unwrap();
+    });
+
+    info!("Aelita gets a list of teams.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath("/orgs/AelitaBot/teams".to_owned())
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(concat!(r#" [ "#,
+            r#" { "id":1, "slug":"Potato" } "#,
+            r#" ] "#).as_bytes()).unwrap();
+    });
+
+    info!("Aelita checks if Potato has write permission. It does.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath(
+                "/teams/1/repos/AelitaBot/testp".to_owned()
+            )
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(concat!(r#" { "#,
+            r#" "permissions": { "pull":true,"push":true,"admin":false } "#,
+            r#" } "#).as_bytes()).unwrap();
+    });
 
     info!("Aelita checks if user is member of Potato.");
     single_request(&mut github_server, |req, mut res| {
@@ -553,23 +553,6 @@ fn one_item_github_round_trip_status() {
         .spawn()
         .unwrap();
 
-    info!("Aelita asks if we're an organization. We're not, for this test.");
-    single_request(&mut github_server, |req, mut res| {
-        assert_eq!(
-            req.uri,
-            RequestUri::AbsolutePath("/repos/AelitaBot/testp".to_owned())
-        );
-        assert_eq!(
-            &req.headers.get_raw("Authorization").unwrap()[0][..],
-            b"token MY_PERSONAL_ACCESS_TOKEN"
-        );
-        *res.status_mut() = StatusCode::Ok;
-        res.send(concat!(r#" { "#,
-            r#" "name":"testp", "#,
-            r#" "owner":{"login":"AelitaBot","type":"User"} "#,
-            r#" } "#).as_bytes()).unwrap();
-    });
-
     info!("Wait a sec for it to finish starting.");
     thread::sleep(time::Duration::new(2, 0));
 
@@ -651,6 +634,23 @@ fn one_item_github_round_trip_status() {
         .headers(http_headers)
         .send()
         .unwrap();
+
+    info!("Aelita asks if we're an organization. We're not, for this test.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath("/repos/AelitaBot/testp".to_owned())
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(concat!(r#" { "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{"login":"AelitaBot","type":"User"} "#,
+            r#" } "#).as_bytes()).unwrap();
+    });
 
     info!("Aelita checks if user has permission to do that.");
     single_request(&mut github_server, |req, mut res| {
@@ -775,23 +775,6 @@ fn one_item_github_round_trip_cloud() {
         .spawn()
         .unwrap();
 
-    info!("Aelita asks if we're an organization. We're not, for this test.");
-    single_request(&mut github_server, |req, mut res| {
-        assert_eq!(
-            req.uri,
-            RequestUri::AbsolutePath("/repos/AelitaBot/testp".to_owned())
-        );
-        assert_eq!(
-            &req.headers.get_raw("Authorization").unwrap()[0][..],
-            b"token MY_PERSONAL_ACCESS_TOKEN"
-        );
-        *res.status_mut() = StatusCode::Ok;
-        res.send(concat!(r#" { "#,
-            r#" "name":"testp", "#,
-            r#" "owner":{"login":"AelitaBot","type":"User"} "#,
-            r#" } "#).as_bytes()).unwrap();
-    });
-
     info!("Wait a sec for it to finish starting.");
     thread::sleep(time::Duration::new(2, 0));
 
@@ -873,6 +856,23 @@ fn one_item_github_round_trip_cloud() {
         .headers(http_headers)
         .send()
         .unwrap();
+
+    info!("Aelita asks if we're an organization. We're not, for this test.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath("/repos/AelitaBot/testp".to_owned())
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(concat!(r#" { "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{"login":"AelitaBot","type":"User"} "#,
+            r#" } "#).as_bytes()).unwrap();
+    });
 
     info!("Aelita checks if user has permission to do that.");
     single_request(&mut github_server, |req, mut res| {

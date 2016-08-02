@@ -11,75 +11,114 @@ use hyper::net::{HttpListener, HttpStream, NetworkListener, NetworkStream};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
 use hyper::uri::RequestUri;
-use pipeline::PipelineId;
+use pipeline::{self, PipelineId};
 use quickersort::sort_by;
 use spmc;
-use std::collections::HashMap;
 use std::convert::AsRef;
 use std::error::Error;
 use std::io::{BufWriter, Write};
 use std::marker::PhantomData;
 use std::str::FromStr;
+use std::sync::mpsc::{Receiver, Sender};
 use ui::Pr;
 use view::auth::AuthManager;
 
+pub trait PipelinesConfig: Send + Sync + 'static {
+    fn pipeline_by_name(&self, &str) -> Option<PipelineId>;
+    fn all(&self) -> Vec<(&str, PipelineId)>;
+}
+
 pub use view::auth::{Auth, AuthRef};
 
-const WORKER_COUNT: usize = 3;
+const THREAD_COUNT: usize = 3;
 
-pub fn run<'a, P: Pr + 'static, A: Into<AuthRef<'a>>>(
+pub struct Worker<P: Pr + 'static> {
     listen: String,
-    db_build: &db::Builder,
-    pipelines: HashMap<String, PipelineId>,
+    db_build: db::Builder,
+    pipelines: Box<PipelinesConfig>,
     secret: String,
-    auth: A,
-)
+    auth: Auth,
+    _pr: PhantomData<P>,
+}
+
+impl<P: Pr + 'static> Worker<P>
     where <P::C as FromStr>::Err: Error,
           <P as FromStr>::Err: Error,
 {
-    let listen: &str = listen.as_ref();
-    let secret: &str = secret.as_ref();
-    let auth = auth.into();
-    let pipelines = &pipelines;
-    crossbeam::scope(|scope| {
-        let mut workers = Vec::with_capacity(WORKER_COUNT);
-        for _ in 0..WORKER_COUNT {
-            let (send, recv) = spmc::channel();
-            scope.spawn(move || {
-                let mut worker = Worker {
-                    db: db_build.open()
-                        .expect("opening DB to succeed"),
-                    pipelines: pipelines,
-                    auth_manager: AuthManager{
-                        auth: auth,
-                        secret: secret,
-                    },
-                    _pr: PhantomData::<P>,
-                };
-                worker.run(recv)
-            });
-            workers.push(send);
+    pub fn new(
+        listen: String,
+        db_build: db::Builder,
+        pipelines: Box<PipelinesConfig>,
+        secret: String,
+        auth: Auth,
+    ) -> Self {
+        Worker {
+            listen: listen,
+            db_build: db_build,
+            pipelines: pipelines,
+            secret: secret,
+            auth: auth.into(),
+            _pr: PhantomData,
         }
-        let mut listener = HttpListener::new(listen).expect("a TCP socket");
-        let mut i = 0;
-        while let Ok(stream) = listener.accept() {
-            workers[i].send(stream).unwrap();
-            i += 1;
-            i %= WORKER_COUNT;
-        }
-    });
+    }
 }
 
-struct Worker<'a, P>
+#[derive(Clone)]
+pub enum Event {}
+
+#[derive(Clone)]
+pub enum Message {}
+
+impl<P: Pr + 'static> pipeline::Worker<Event, Message> for Worker<P>
+    where <P::C as FromStr>::Err: Error,
+          <P as FromStr>::Err: Error,
+{
+    fn run(&self, _recv: Receiver<Message>, _send: Sender<Event>) {
+        let listen: &str = self.listen.as_ref();
+        let secret: &str = self.secret.as_ref();
+        let auth: AuthRef = (&self.auth).into();
+        let pipelines = &*self.pipelines;
+        let db_build = &self.db_build;
+        crossbeam::scope(|scope| {
+            let mut threads = Vec::with_capacity(THREAD_COUNT);
+            for _ in 0..THREAD_COUNT {
+                let (send, recv) = spmc::channel();
+                scope.spawn(move || {
+                    let mut thread = Thread {
+                        db: db_build.open()
+                            .expect("opening DB to succeed"),
+                        pipelines: pipelines,
+                        auth_manager: AuthManager{
+                            auth: auth,
+                            secret: secret,
+                        },
+                        _pr: PhantomData::<P>,
+                    };
+                    thread.run(recv)
+                });
+                threads.push(send);
+            }
+            let mut listener = HttpListener::new(listen).expect("a TCP socket");
+            let mut i = 0;
+            while let Ok(stream) = listener.accept() {
+                threads[i].send(stream).unwrap();
+                i += 1;
+                i %= THREAD_COUNT;
+            }
+        });
+    }
+}
+
+struct Thread<'a, P>
     where P: Pr
 {
     db: Box<Db<P> + Send>,
-    pipelines: &'a HashMap<String, PipelineId>,
+    pipelines: &'a PipelinesConfig,
     auth_manager: AuthManager<'a>,
     _pr: PhantomData<P>,
 }
 
-impl<'a, P: Pr> Worker<'a, P> {
+impl<'a, P: Pr> Thread<'a, P> {
     fn run(&mut self, recv: spmc::Receiver<HttpStream>) {
         while let Ok(mut stream) = recv.recv() {
             let addr = stream.peer_addr()
@@ -124,10 +163,10 @@ impl<'a, P: Pr> Worker<'a, P> {
                 if path.as_bytes()[0] == b'/' {
                     path = &path[1..];
                 }
-                match self.pipelines.get(path) {
+                match self.pipelines.pipeline_by_name(path) {
                     Some(pipeline_id) => {
                         *res.status_mut() = StatusCode::Ok;
-                        Some((path.to_owned(), *pipeline_id))
+                        Some((path.to_owned(), pipeline_id))
                     }
                     None => {
                         *res.status_mut() = StatusCode::NotFound;
@@ -221,8 +260,7 @@ impl<'a, P: Pr> Worker<'a, P> {
         _req: Request,
         mut res: Response<::hyper::net::Streaming>,
     ) -> Result<(), Box<Error>> {
-        let mut pipelines: Vec<(&str, PipelineId)> =
-            self.pipelines.iter().map(|(n, p)| (&n[..], *p)).collect();
+        let mut pipelines = self.pipelines.all();
         sort_by(&mut pipelines, &|a, b| a.0.cmp(b.0));
         let html = html!{
             html {

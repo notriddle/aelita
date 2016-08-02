@@ -22,7 +22,7 @@ use serde_json::{
 };
 use std;
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
 use std::io::BufWriter;
 use std::iter;
@@ -45,16 +45,27 @@ pub struct Repo {
     pub repo: String,
 }
 
-#[derive(Debug)]
-struct RepoConfig {
-    pipeline_id: PipelineId,
-    try_pipeline_id: Option<PipelineId>,
+#[derive(Clone, Debug)]
+pub struct RepoPipelines {
+    pub pipeline_id: PipelineId,
+    pub try_pipeline_id: Option<PipelineId>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum PipelineType {
+    Stage,
+    Try,
+}
+
+pub trait ProjectsConfig: Send + Sync + 'static {
+    fn pipelines_by_repo(&self, &Repo) -> Option<RepoPipelines>;
+    fn repo_by_pipeline(&self, PipelineId) -> Option<(Repo, PipelineType)>;
 }
 
 pub struct Worker {
     listen: String,
     host: String,
-    repos: HashMap<Repo, RepoConfig>,
+    projects: Box<ProjectsConfig>,
     authorization: Vec<u8>,
     client: Client,
     rate_limiter: RateLimiter,
@@ -70,6 +81,7 @@ impl Worker {
         token: String,
         user: String,
         secret: String,
+        projects: Box<ProjectsConfig>,
         cache_builder: db::Builder,
     ) -> Worker {
         let mut authorization: Vec<u8> = b"token ".to_vec();
@@ -78,7 +90,7 @@ impl Worker {
         Worker {
             listen: listen,
             host: host,
-            repos: HashMap::new(),
+            projects: projects,
             authorization: authorization,
             user_ident: user_ident,
             client: Client::new(),
@@ -88,30 +100,6 @@ impl Worker {
                 cache::from_builder(&cache_builder).expect("to get a cache")
             ),
         }
-    }
-    pub fn add_project(
-        &mut self,
-        pipeline_id: PipelineId,
-        try_pipeline_id: Option<PipelineId>,
-        repo: Repo,
-    ) {
-        if self.cache.get_mut().unwrap().is_org(pipeline_id).is_none() {
-            if self.repo_is_org(&repo).expect("Github to respond") {
-                let teams = self.get_all_teams_with_write(&repo)
-                    .expect("Github to be up");
-                let teams = teams.iter().cloned();
-                let cache = self.cache.get_mut().unwrap();
-                cache.set_teams_with_write(pipeline_id, teams);
-                cache.set_is_org(pipeline_id, true);
-            } else {
-                let cache = self.cache.get_mut().unwrap();
-                cache.set_is_org(pipeline_id, false);
-            }
-        }
-        self.repos.insert(repo, RepoConfig{
-            pipeline_id: pipeline_id,
-            try_pipeline_id: try_pipeline_id,
-        });
     }
 }
 
@@ -323,16 +311,17 @@ impl Worker {
                         repo: desc.repository.name,
                     };
                     let pr = Pr(desc.pull_request.number);
-                    let repo_config = match self.repos.get(&repo) {
-                        Some(repo_config) => repo_config,
-                        None => {
-                            warn!(
-                                "Got bad repo {:?}",
-                                repo
-                            );
-                            return;
-                        }
-                    };
+                    let repo_pipelines =
+                        match self.projects.pipelines_by_repo(&repo) {
+                            Some(repo_pipelines) => repo_pipelines,
+                            None => {
+                                warn!(
+                                    "Got bad repo {:?}",
+                                    repo
+                                );
+                                return;
+                            }
+                        };
                     let commit = match Commit::from_str(
                         &desc.pull_request.head.sha
                     ) {
@@ -342,7 +331,7 @@ impl Worker {
                             return;
                         }
                     };
-                    if let Some(pipeline_id) = repo_config.try_pipeline_id {
+                    if let Some(pipeline_id) = repo_pipelines.try_pipeline_id {
                         self.handle_pr_update(
                             &desc.action[..],
                             send_event,
@@ -356,7 +345,7 @@ impl Worker {
                     self.handle_pr_update(
                         &desc.action[..],
                         send_event,
-                        repo_config.pipeline_id,
+                        repo_pipelines.pipeline_id,
                         commit,
                         pr,
                         desc.pull_request.title,
@@ -396,8 +385,8 @@ impl Worker {
                         owner: desc.repository.owner.login,
                         repo: desc.repository.name,
                     };
-                    let repo_config = match self.repos.get(&repo) {
-                        Some(repo_config) => repo_config,
+                    let repo_pipelines = match self.projects.pipelines_by_repo(&repo) {
+                        Some(repo_pipelines) => repo_pipelines,
                         None => {
                             warn!("Got team add event for nonexistant repo");
                             return;
@@ -412,7 +401,7 @@ impl Worker {
                         }
                     };
                     cache.set_teams_with_write(
-                        repo_config.pipeline_id,
+                        repo_pipelines.pipeline_id,
                         teams.iter().cloned(),
                     );
                 } else {
@@ -488,8 +477,8 @@ impl Worker {
             repo: desc.repository.name,
         };
         let pr = Pr(desc.issue.number);
-        let repo_config = match self.repos.get(&repo) {
-            Some(repo_config) => repo_config,
+        let repo_pipelines = match self.projects.pipelines_by_repo(&repo) {
+            Some(repo_pipelines) => repo_pipelines,
             None => {
                 warn!(
                     "Got bad repo {:?}",
@@ -500,7 +489,8 @@ impl Worker {
         };
         let user = &desc.comment.user.login;
         let body = &desc.comment.body;
-        let allowed = self.user_has_write(user, &repo, repo_config)
+        let pipeline_id = repo_pipelines.pipeline_id;
+        let allowed = self.user_has_write(user, &repo, pipeline_id)
             .unwrap_or_else(|e| {
                 warn!("Failed to check if {} has permission: {:?}", user, e);
                 false
@@ -512,7 +502,7 @@ impl Worker {
                 send_event,
                 command,
                 &desc.issue,
-                repo_config,
+                &repo_pipelines,
                 &pr,
             );
         } else {
@@ -525,13 +515,13 @@ impl Worker {
         send_event: &Sender<ui::Event<Pr>>,
         command: comments::Command<Commit>,
         issue: &IssueCommentIssue,
-        repo_config: &RepoConfig,
+        repo_pipelines: &RepoPipelines,
         pr: &Pr,
     ) {
         match command {
             comments::Command::Approved(user, commit) => {
                 self.handle_approved_pr(
-                    repo_config.pipeline_id,
+                    repo_pipelines.pipeline_id,
                     send_event,
                     issue,
                     pr,
@@ -541,13 +531,13 @@ impl Worker {
             }
             comments::Command::Canceled => {
                 self.handle_canceled_pr(
-                    repo_config.pipeline_id,
+                    repo_pipelines.pipeline_id,
                     send_event,
                     pr,
                 );
             }
             comments::Command::TryApproved(user, commit) => {
-                if let Some(try_pipeline_id) = repo_config.try_pipeline_id {
+                if let Some(try_pipeline_id) = repo_pipelines.try_pipeline_id {
                     self.handle_approved_pr(
                         try_pipeline_id,
                         send_event,
@@ -559,7 +549,7 @@ impl Worker {
                 }
             }
             comments::Command::TryCanceled => {
-                if let Some(try_pipeline_id) = repo_config.try_pipeline_id {
+                if let Some(try_pipeline_id) = repo_pipelines.try_pipeline_id {
                     self.handle_canceled_pr(
                         try_pipeline_id,
                         send_event,
@@ -627,23 +617,41 @@ impl Worker {
         &self,
         user: &str,
         repo: &Repo,
-        repo_config: &RepoConfig,
+        pipeline_id: PipelineId,
     ) -> Result<bool, GithubRequestError> {
         let mut cache = self.cache.lock().unwrap();
-        if cache.is_org(repo_config.pipeline_id) == Some(true) {
-            info!("Using teams permission check");
-            let teams = cache.teams_with_write(repo_config.pipeline_id);
-            let mut allowed = false;
-            for team in teams {
-                if try!(self.user_is_member_of(user, team)) {
-                    allowed = true;
-                    break;
+        match cache.is_org(pipeline_id) {
+            Some(true) => {
+                info!("Using teams permission check");
+                let teams = cache.teams_with_write(pipeline_id);
+                let mut allowed = false;
+                for team in teams {
+                    if try!(self.user_is_member_of(user, team)) {
+                        allowed = true;
+                        break;
+                    }
                 }
+                Ok(allowed)
             }
-            Ok(allowed)
-        } else {
-            info!("Using users permission check");
-            self.user_is_collaborator_for(user, repo)
+            Some(false) => {
+                info!("Using users permission check");
+                self.user_is_collaborator_for(user, repo)
+            }
+            None => {
+                info!("Loading teams");
+                let is_org = try!(self.repo_is_org(repo));
+                cache.set_is_org(pipeline_id, is_org);
+                if is_org {
+                    cache.set_teams_with_write(
+                        pipeline_id,
+                        try!(self.get_all_teams_with_write(repo))
+                            .iter()
+                            .cloned()
+                    );
+                }
+                drop(cache);
+                self.user_has_write(user, repo, pipeline_id)
+            }
         }
     }
 
@@ -653,22 +661,13 @@ impl Worker {
         pr: Pr,
         status: &ui::Status<Pr>,
     ) -> Result<(), GithubRequestError> {
-        let mut repo = None;
-        let mut is_try = false;
-        for (r, c) in &self.repos {
-            if c.pipeline_id == pipeline_id {
-                repo = Some(r);
-            } else if c.try_pipeline_id == Some(pipeline_id) {
-                repo = Some(r);
-                is_try = true;
-            }
-        }
-        let repo = match repo {
-            Some(repo) => repo,
-            None => {
-                return Err(GithubRequestError::Pipeline(pipeline_id));
-            }
-        };
+        let (repo, pipeline_type) =
+            match self.projects.repo_by_pipeline(pipeline_id) {
+                Some(result) => result,
+                None => {
+                    return Err(GithubRequestError::Pipeline(pipeline_id));
+                }
+            };
         let comment_body = match *status {
             ui::Status::Approved(_) => None,
             ui::Status::StartingBuild(_, _) => None,
@@ -701,11 +700,10 @@ impl Worker {
             )),
             ui::Status::Completed(_, _) => None,
         };
-        let context = if is_try {
-            "continuous-integration/aelita/try".to_owned()
-        } else {
-            "continuous-integration/aelita".to_owned()
-        };
+        let context = match pipeline_type {
+            PipelineType::Stage => "continuous-integration/aelita",
+            PipelineType::Try => "continuous-integration/aelita/try",
+        }.to_owned();
         let status = match *status {
             ui::Status::Approved(ref pull_commit) => Some((
                 pull_commit,
