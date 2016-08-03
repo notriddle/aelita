@@ -68,7 +68,7 @@ impl Sqlite {
                 UNIQUE (pipeline_id, team_id)
             );
             CREATE TABLE IF NOT EXISTS github_is_org (
-                pipeline_id INTEGER PUBLIC KEY,
+                pipeline_id INTEGER PRIMARY KEY,
                 is_org BOOLEAN
             )
         "###));
@@ -86,14 +86,14 @@ impl Sqlite {
             .expect("Start pop-from-queue transaction");
         let sql = r###"
             DELETE FROM github_teams_with_write
-            WHERE pipeline_id = ?;
+            WHERE pipeline_id = ?
         "###;
         trans.execute(sql, &[
             &pipeline_id.0,
         ]).expect("to clear all teams");
         let sql = r###"
             REPLACE INTO github_teams_with_write (pipeline_id, team_id)
-            VALUES (?, ?);
+            VALUES (?, ?)
         "###;
         for team_id in team_ids {
             assert!(team_id.0 != 0);
@@ -111,7 +111,7 @@ impl Sqlite {
         let sql = r###"
             SELECT team_id
             FROM github_teams_with_write
-            WHERE pipeline_id = ?;
+            WHERE pipeline_id = ?
         "###;
         let mut stmt = self.conn.prepare(&sql)
             .expect("Prepare peek-running query");
@@ -129,7 +129,7 @@ impl Sqlite {
         let sql = r###"
             SELECT is_org
             FROM github_is_org
-            WHERE pipeline_id = ?;
+            WHERE pipeline_id = ?
         "###;
         let mut stmt = self.conn.prepare(&sql)
             .expect("Prepare peek-running query");
@@ -141,7 +141,7 @@ impl Sqlite {
     fn set_is_org(&mut self, pipeline_id: PipelineId, is_org: bool) {
         let sql = r###"
             REPLACE INTO github_is_org (pipeline_id, is_org)
-            VALUES (?, ?);
+            VALUES (?, ?)
         "###;
         self.conn.execute(sql, &[
             &pipeline_id.0, &is_org
@@ -163,7 +163,7 @@ impl Postgres {
                 UNIQUE (pipeline_id, team_id)
             );
             CREATE TABLE IF NOT EXISTS github_is_org (
-                pipeline_id INTEGER PUBLIC KEY,
+                pipeline_id INTEGER PRIMARY KEY,
                 is_org BOOLEAN
             )
         "###));
@@ -181,14 +181,14 @@ impl Postgres {
             .expect("Start pop-from-queue transaction");
         let sql = r###"
             DELETE FROM github_teams_with_write
-            WHERE pipeline_id = ?;
+            WHERE pipeline_id = ?
         "###;
         trans.execute(sql, &[
             &pipeline_id.0,
         ]).expect("to clear all teams");
         let sql = r###"
             REPLACE INTO github_teams_with_write (pipeline_id, team_id)
-            VALUES (?, ?);
+            VALUES (?, ?)
         "###;
         for team_id in team_ids {
             assert!(team_id.0 != 0);
@@ -206,7 +206,7 @@ impl Postgres {
         let sql = r###"
             SELECT team_id
             FROM github_teams_with_write
-            WHERE pipeline_id = ?;
+            WHERE pipeline_id = ?
         "###;
         let stmt = self.conn.prepare(&sql)
             .expect("Prepare peek-running query");
@@ -223,7 +223,7 @@ impl Postgres {
         let sql = r###"
             SELECT is_org
             FROM github_is_org
-            WHERE pipeline_id = ?;
+            WHERE pipeline_id = ?
         "###;
         let stmt = self.conn.prepare(&sql)
             .expect("Prepare peek-running query");
@@ -236,7 +236,7 @@ impl Postgres {
     fn set_is_org(&mut self, pipeline_id: PipelineId, is_org: bool) {
         let sql = r###"
             REPLACE INTO github_is_org (pipeline_id, is_org)
-            VALUES (?, ?);
+            VALUES (?, ?)
         "###;
         self.conn.execute(sql, &[
             &pipeline_id.0, &is_org

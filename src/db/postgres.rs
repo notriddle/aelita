@@ -66,7 +66,7 @@ impl<P> Db<P> for PostgresDb<P>
     ) {
         let sql = r###"
             INSERT INTO queue (pr, pipeline_id, pull_commit, message)
-            VALUES (?, ?, ?, ?);
+            VALUES (?, ?, ?, ?)
         "###;
         self.conn.execute(sql, &[
             &pr.into(),
@@ -86,7 +86,7 @@ impl<P> Db<P> for PostgresDb<P>
             SELECT id, pr, pull_commit, message
             FROM queue
             WHERE pipeline_id = ?
-            ORDER BY id ASC LIMIT 1;
+            ORDER BY id ASC LIMIT 1
         "###;
         let item = {
             let stmt = trans.prepare(sql).expect("Pop from queue");
@@ -104,7 +104,7 @@ impl<P> Db<P> for PostgresDb<P>
         };
         if let Some((id, _)) = item {
             let sql = r###"
-                DELETE FROM queue WHERE id = ?;
+                DELETE FROM queue WHERE id = ?
             "###;
             trans.execute(sql, &[&id]).expect("Delete pop-from-queue row");
         }
@@ -119,7 +119,7 @@ impl<P> Db<P> for PostgresDb<P>
             SELECT pr, pull_commit, message
             FROM queue
             WHERE pipeline_id = ?
-            ORDER BY id ASC;
+            ORDER BY id ASC
         "###;
         let stmt = self.conn.prepare(&sql)
             .expect("Prepare list-queue query");
@@ -158,7 +158,7 @@ impl<P> Db<P> for PostgresDb<P>
                     built
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?);
+                (?, ?, ?, ?, ?, ?, ?)
         "###;
         self.conn.execute(sql, &[
             &pipeline_id.0,
@@ -179,7 +179,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT pr, pull_commit, merge_commit, message, canceled, built
             FROM running
-            WHERE pipeline_id = ?;
+            WHERE pipeline_id = ?
         "###;
         let entry = {
             let stmt = trans.prepare(&sql)
@@ -201,7 +201,7 @@ impl<P> Db<P> for PostgresDb<P>
             rows.next()
         };
         let sql = r###"
-            DELETE FROM running WHERE pipeline_id = ?;
+            DELETE FROM running WHERE pipeline_id = ?
         "###;
         trans.execute(sql, &[&pipeline_id.0]).expect("Remove running entry");
         trans.commit().expect("Commit take-running transaction");
@@ -214,7 +214,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT pr, pull_commit, merge_commit, message, canceled, built
             FROM running
-            WHERE pipeline_id = ?;
+            WHERE pipeline_id = ?
         "###;
         let stmt = self.conn.prepare(&sql)
             .expect("Prepare peek-running query");
@@ -242,7 +242,7 @@ impl<P> Db<P> for PostgresDb<P>
         let trans = self.conn.transaction()
             .expect("Start add-pending transaction");
         let sql = r###"
-            DELETE FROM pending WHERE pipeline_id = ? AND pr = ?;
+            DELETE FROM pending WHERE pipeline_id = ? AND pr = ?
         "###;
         trans.execute(sql, &[
             &pipeline_id.0,
@@ -250,7 +250,7 @@ impl<P> Db<P> for PostgresDb<P>
         ]).expect("Remove pending entry");
         let sql = r###"
             INSERT INTO pending (pipeline_id, pr, pull_commit, title, url)
-            VALUES (?, ?, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?)
         "###;
         trans.execute(sql, &[
             &pipeline_id.0,
@@ -271,7 +271,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT id, pr, pull_commit, title, url
             FROM pending
-            WHERE pipeline_id = ? AND pr = ?;
+            WHERE pipeline_id = ? AND pr = ?
         "###;
         let entry = {
             let stmt = trans.prepare(&sql)
@@ -293,7 +293,7 @@ impl<P> Db<P> for PostgresDb<P>
         };
         if let Some(ref entry) = entry {
             let sql = r###"
-                DELETE FROM pending WHERE id = ?;
+                DELETE FROM pending WHERE id = ?
             "###;
             trans.execute(sql, &[&entry.0]).expect("Remove pending entry");
             trans.commit().expect("Commit take-pending transaction");
@@ -308,7 +308,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT pr, pull_commit, title, url
             FROM pending
-            WHERE pipeline_id = ? AND pr = ?;
+            WHERE pipeline_id = ? AND pr = ?
         "###;
         let stmt = self.conn.prepare(&sql)
             .expect("Prepare peek-pending query");
@@ -334,7 +334,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT pr, pull_commit, title, url
             FROM pending
-            WHERE pipeline_id = ?;
+            WHERE pipeline_id = ?
         "###;
         let stmt = self.conn.prepare(&sql)
             .expect("Prepare peek-pending query");
