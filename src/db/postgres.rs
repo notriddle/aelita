@@ -23,7 +23,7 @@ impl<P> PostgresDb<P>
         let conn = try!(Connection::connect(params, SslMode::None));
         try!(conn.batch_execute(r###"
             CREATE TABLE IF NOT EXISTS queue (
-                id INTEGER PRIMARY KEY,
+                id SERIAL PRIMARY KEY,
                 pipeline_id INTEGER,
                 pr TEXT,
                 message TEXT,
@@ -35,11 +35,11 @@ impl<P> PostgresDb<P>
                 message TEXT,
                 pull_commit TEXT,
                 merge_commit TEXT,
-                canceled INT,
-                built INT
+                canceled BOOLEAN,
+                built BOOLEAN
             );
             CREATE TABLE IF NOT EXISTS pending (
-                id INTEGER PRIMARY KEY,
+                id SERIAL PRIMARY KEY,
                 pipeline_id INTEGER,
                 pr TEXT,
                 pull_commit TEXT,
@@ -66,7 +66,7 @@ impl<P> Db<P> for PostgresDb<P>
     ) {
         let sql = r###"
             INSERT INTO queue (pr, pipeline_id, pull_commit, message)
-            VALUES (?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4)
         "###;
         self.conn.execute(sql, &[
             &pr.into(),
@@ -85,7 +85,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT id, pr, pull_commit, message
             FROM queue
-            WHERE pipeline_id = ?
+            WHERE pipeline_id = $1
             ORDER BY id ASC LIMIT 1
         "###;
         let item = {
@@ -104,7 +104,7 @@ impl<P> Db<P> for PostgresDb<P>
         };
         if let Some((id, _)) = item {
             let sql = r###"
-                DELETE FROM queue WHERE id = ?
+                DELETE FROM queue WHERE id = $1
             "###;
             trans.execute(sql, &[&id]).expect("Delete pop-from-queue row");
         }
@@ -118,7 +118,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT pr, pull_commit, message
             FROM queue
-            WHERE pipeline_id = ?
+            WHERE pipeline_id = $1
             ORDER BY id ASC
         "###;
         let stmt = self.conn.prepare(&sql)
@@ -147,7 +147,7 @@ impl<P> Db<P> for PostgresDb<P>
         }: RunningEntry<P>
     ) {
         let sql = r###"
-            REPLACE INTO running
+            INSERT INTO running
                 (
                     pipeline_id,
                     pr,
@@ -158,7 +158,14 @@ impl<P> Db<P> for PostgresDb<P>
                     built
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (pipeline_id) DO UPDATE SET
+                pr = $2,
+                pull_commit = $3,
+                merge_commit = $4,
+                message = $5,
+                canceled = $6,
+                built = $7
         "###;
         self.conn.execute(sql, &[
             &pipeline_id.0,
@@ -179,7 +186,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT pr, pull_commit, merge_commit, message, canceled, built
             FROM running
-            WHERE pipeline_id = ?
+            WHERE pipeline_id = $1
         "###;
         let entry = {
             let stmt = trans.prepare(&sql)
@@ -201,7 +208,7 @@ impl<P> Db<P> for PostgresDb<P>
             rows.next()
         };
         let sql = r###"
-            DELETE FROM running WHERE pipeline_id = ?
+            DELETE FROM running WHERE pipeline_id = $1
         "###;
         trans.execute(sql, &[&pipeline_id.0]).expect("Remove running entry");
         trans.commit().expect("Commit take-running transaction");
@@ -214,7 +221,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT pr, pull_commit, merge_commit, message, canceled, built
             FROM running
-            WHERE pipeline_id = ?
+            WHERE pipeline_id = $1
         "###;
         let stmt = self.conn.prepare(&sql)
             .expect("Prepare peek-running query");
@@ -242,7 +249,7 @@ impl<P> Db<P> for PostgresDb<P>
         let trans = self.conn.transaction()
             .expect("Start add-pending transaction");
         let sql = r###"
-            DELETE FROM pending WHERE pipeline_id = ? AND pr = ?
+            DELETE FROM pending WHERE pipeline_id = $1 AND pr = $2
         "###;
         trans.execute(sql, &[
             &pipeline_id.0,
@@ -250,7 +257,7 @@ impl<P> Db<P> for PostgresDb<P>
         ]).expect("Remove pending entry");
         let sql = r###"
             INSERT INTO pending (pipeline_id, pr, pull_commit, title, url)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5)
         "###;
         trans.execute(sql, &[
             &pipeline_id.0,
@@ -271,7 +278,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT id, pr, pull_commit, title, url
             FROM pending
-            WHERE pipeline_id = ? AND pr = ?
+            WHERE pipeline_id = $1 AND pr = $2
         "###;
         let entry = {
             let stmt = trans.prepare(&sql)
@@ -293,7 +300,7 @@ impl<P> Db<P> for PostgresDb<P>
         };
         if let Some(ref entry) = entry {
             let sql = r###"
-                DELETE FROM pending WHERE id = ?
+                DELETE FROM pending WHERE id = $1
             "###;
             trans.execute(sql, &[&entry.0]).expect("Remove pending entry");
             trans.commit().expect("Commit take-pending transaction");
@@ -308,7 +315,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT pr, pull_commit, title, url
             FROM pending
-            WHERE pipeline_id = ? AND pr = ?
+            WHERE pipeline_id = $1 AND pr = $2
         "###;
         let stmt = self.conn.prepare(&sql)
             .expect("Prepare peek-pending query");
@@ -334,7 +341,7 @@ impl<P> Db<P> for PostgresDb<P>
         let sql = r###"
             SELECT pr, pull_commit, title, url
             FROM pending
-            WHERE pipeline_id = ?
+            WHERE pipeline_id = $1
         "###;
         let stmt = self.conn.prepare(&sql)
             .expect("Prepare peek-pending query");
@@ -354,8 +361,8 @@ impl<P> Db<P> for PostgresDb<P>
     fn cancel_by_pr(&mut self, pipeline_id: PipelineId, pr: &P) {
         let sql = r###"
             UPDATE running
-            SET canceled = 1
-            WHERE pipeline_id = ? AND pr = ?
+            SET canceled = TRUE
+            WHERE pipeline_id = $1 AND pr = $2
         "###;
         self.conn.execute(sql, &[
             &pipeline_id.0,
@@ -363,7 +370,7 @@ impl<P> Db<P> for PostgresDb<P>
         ]).expect("Cancel running PR");
         let sql = r###"
             DELETE FROM queue
-            WHERE pipeline_id = ? AND pr = ?
+            WHERE pipeline_id = $1 AND pr = $2
         "###;
         self.conn.execute(sql, &[
             &pipeline_id.0,
@@ -378,8 +385,8 @@ impl<P> Db<P> for PostgresDb<P>
     ) -> bool {
         let sql = r###"
             UPDATE running
-            SET canceled = 1
-            WHERE pipeline_id = ? AND pr = ? AND pull_commit <> ?
+            SET canceled = TRUE
+            WHERE pipeline_id = $1 AND pr = $2 AND pull_commit <> $3
         "###;
         let affected_rows_running = self.conn.execute(sql, &[
             &pipeline_id.0,
@@ -388,7 +395,7 @@ impl<P> Db<P> for PostgresDb<P>
         ]).expect("Cancel running PR");
         let sql = r###"
             DELETE FROM queue
-            WHERE pipeline_id = ? AND pr = ? AND pull_commit <> ?
+            WHERE pipeline_id = $1 AND pr = $2 AND pull_commit <> $3
         "###;
         let affected_rows_queue = self.conn.execute(sql, &[
             &pipeline_id.0,
