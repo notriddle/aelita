@@ -1000,3 +1000,294 @@ fn one_item_github_round_trip_cloud() {
 
     aelita.kill().unwrap();
 }
+
+#[test]
+fn one_item_team_github_round_trip_with_postgres() {
+    let _lock = ONE_AT_A_TIME.lock();
+    START.call_once(|| env_logger::init().unwrap());
+
+    if !Path::new(EXECUTABLE).exists() {
+        panic!("Integration tests require the executable to be built.");
+    }
+
+    let mut github_server = HttpListener::new(&"localhost:9011").unwrap();
+    let mut jenkins_server = HttpListener::new(&"localhost:9012").unwrap();
+
+    Command::new("/bin/tar")
+        .current_dir("./tests/")
+        .arg("-xvf")
+        .arg("cache.tar.gz")
+        .output()
+        .unwrap();
+
+    Command::new("/bin/rm")
+        .current_dir("./tests/")
+        .arg("db.sqlite")
+        .output()
+        .unwrap();
+
+    Command::new("/usr/bin/docker")
+        .current_dir("./tests/")
+        .arg("rm")
+        .arg("-f")
+        .arg("aelita-test-github-round-trip-postgres")
+        .output()
+        .unwrap();
+    Command::new("/usr/bin/docker")
+        .current_dir("./tests/")
+        .arg("run")
+        .arg("--name")
+        .arg("aelita-test-github-round-trip-postgres")
+        .arg("-p")
+        .arg("5432:5432")
+        .arg("-e")
+        .arg("POSTGRES_USER=aelita")
+        .arg("-e")
+        .arg("POSTGRES_PASSWORD=aelita")
+        .arg("-d")
+        .arg("postgres")
+        .output()
+        .unwrap();
+
+    info!("Wait a sec for Postgres to start.");
+    thread::sleep(time::Duration::new(5, 0));
+
+    let executable = Path::new(EXECUTABLE).canonicalize().unwrap();
+    let mut aelita = Command::new(executable.clone())
+        .current_dir("./tests/")
+        .arg("test-github-round-trip-with-postgres.toml")
+        .spawn()
+        .unwrap();
+
+    info!("Wait a sec for it to finish writing.");
+    thread::sleep(time::Duration::new(2, 0));
+
+    info!("Make sure it didn't create a db.sqlite");
+    assert!(!Path::new("./tests/db.sqlite").exists());
+
+    info!("Restart Aelita, forcing it to use the persistent team cache.");
+    aelita.kill().unwrap();
+    thread::sleep(time::Duration::new(1, 0));
+    let mut aelita = Command::new(executable)
+        .current_dir("./tests/")
+        .arg("test-github-round-trip-with-postgres.toml")
+        .spawn()
+        .unwrap();
+
+    info!("Wait a sec for it to finish starting.");
+    thread::sleep(time::Duration::new(2, 0));
+
+    info!("Pull request comes into existance.");
+    let http_client = Client::new();
+    let mut http_headers = Headers::new();
+    http_headers.set_raw("X-Github-Event", vec![b"pull_request".to_vec()]);
+    let body = concat!(r#" { "#,
+        r#" "action":"opened", "#,
+        r#" "repository":{ "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{"login":"AelitaBot","type":"User"} "#,
+        r#" }, "#,
+        r#" "pull_request":{ "#,
+            r#" "title":"HA!", "#,
+            r#" "html_url":"http://github.com/testu/testp/pull_request/1", "#,
+            r#" "state":"opened", "#,
+            r#" "number":1, "#,
+            r#" "head":{ "#,
+                r#" "sha":"55016813274e906e4cbfed97be83e19e6cd93d91" "#,
+            r#" } "#,
+        r#" } "#,
+    r#" } "#);
+    http_headers.set_raw("X-Hub-Signature", vec![
+        format!("sha1={}", openssl::crypto::hmac::hmac(
+            openssl::crypto::hash::Type::SHA1,
+            "ME_SECRET_LOL".as_bytes(),
+            body.as_bytes(),
+        ).to_hex()).into_bytes()
+    ]);
+    http_client.post("http://localhost:9001")
+        .body(body.as_bytes())
+        .headers(http_headers)
+        .send()
+        .unwrap();
+
+    info!("User posts comment to mark pull request reviewed.");
+    let http_client = Client::new();
+    let mut http_headers = Headers::new();
+    http_headers.set_raw("X-Github-Event", vec![b"issue_comment".to_vec()]);
+    let body = concat!(r#" { "#,
+        r#" "issue":{ "#,
+            r#" "number":1, "#,
+            r#" "title":"My PR!", "#,
+            r#" "body":"Test", "#,
+            r#" "pull_request":{ "#,
+                r#" "html_url":"http://github.com/testu/testp/pull_request/1" "#,
+            r#" }, "#,
+            r#" "state":"opened", "#,
+            r#" "user":{ "#,
+                r#" "login":"testu", "#,
+                r#" "type":"User" "#,
+            r#" } "#,
+        r#" }, "#,
+        r#" "comment":{ "#,
+            r#" "user":{ "#,
+                r#" "login":"testu", "#,
+                r#" "type":"User" "#,
+            r#" }, "#,
+            r#" "body":"@AelitaBot r+" "#,
+        r#" }, "#,
+        r#" "repository":{ "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{ "#,
+                r#" "login":"AelitaBot", "#,
+                r#" "type":"User" "#,
+            r#" } "#,
+        r#" } "#,
+    r#" } "#);
+    http_headers.set_raw("X-Hub-Signature", vec![
+        format!("sha1={}", openssl::crypto::hmac::hmac(
+            openssl::crypto::hash::Type::SHA1,
+            "ME_SECRET_LOL".as_bytes(),
+            body.as_bytes(),
+        ).to_hex()).into_bytes()
+    ]);
+    http_client.post("http://localhost:9001")
+        .body(body)
+        .headers(http_headers)
+        .send()
+        .unwrap();
+
+    info!("Aelita asks if we're an organization. We are, for this test.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath("/repos/AelitaBot/testp".to_owned())
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(concat!(r#" { "#,
+            r#" "name":"testp", "#,
+            r#" "owner":{"login":"AelitaBot","type":"Organization"} "#,
+            r#" } "#).as_bytes()).unwrap();
+    });
+
+    info!("Aelita gets a list of teams.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath("/orgs/AelitaBot/teams".to_owned())
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(concat!(r#" [ "#,
+            r#" { "id":1, "slug":"Potato" } "#,
+            r#" ] "#).as_bytes()).unwrap();
+    });
+
+    info!("Aelita checks if Potato has write permission. It does.");
+    single_request(&mut github_server, |req, mut res| {
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath(
+                "/teams/1/repos/AelitaBot/testp".to_owned()
+            )
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(concat!(r#" { "#,
+            r#" "permissions": { "pull":true,"push":true,"admin":false } "#,
+            r#" } "#).as_bytes()).unwrap();
+    });
+
+    info!("Aelita checks if user is member of Potato.");
+    single_request(&mut github_server, |req, mut res| {
+        let path = "/teams/1/members/testu".to_owned();
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath(path)
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::NoContent;
+        res.send(&[]).unwrap();
+    });
+
+    info!("Aelita sends build trigger.");
+    single_request(&mut jenkins_server, |req, mut res| {
+        let path = "/job/testp/build?token=MY_BUILD_TOKEN".to_owned();
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath(path)
+        );
+        assert_eq!(
+            req.headers.get::<Authorization<Basic>>().unwrap().0,
+            Basic{
+                username: "AelitaBot".to_owned(),
+                password: Some("MY_JENKINS_API_TOKEN".to_owned()),
+            }
+        );
+        *res.status_mut() = StatusCode::NoContent;
+        res.send(&[]).unwrap();
+    });
+
+    info!("Aelita does the merge.");
+    let mut commit_string = String::new();
+    File::open(Path::new("tests/cache/origin/.git/refs/heads/staging"))
+        .unwrap()
+        .read_to_string(&mut commit_string)
+        .unwrap();
+    commit_string = commit_string.replace("\n", "").replace("\r", "");
+
+    info!("Jenkins sends start notification to Aelita.");
+    let mut tcp_client = TcpStream::connect("localhost:9002").unwrap();
+    tcp_client.write(
+        r#"{"name":"testp","build":{"phase":"STARTED","full_url":"http://jenkins.com/job/1/","scm":{"commit":"CMMT"}}}"#
+            .replace("CMMT", &commit_string)
+            .as_bytes()
+    ).unwrap();
+    drop(tcp_client);
+
+    info!("Jenkins sends finished notification to Aelita.");
+    let mut tcp_client = TcpStream::connect("localhost:9002").unwrap();
+    tcp_client.write(
+        r#"{"name":"testp","build":{"phase":"COMPLETED","status":"SUCCESS","full_url":"http://jenkins.com/job/1/","scm":{"commit":"CMMT"}}}"#
+            .replace("CMMT", &commit_string)
+            .as_bytes()
+    ).unwrap();
+    drop(tcp_client);
+
+    info!("Wait a sec for it to finish pushing.");
+    thread::sleep(time::Duration::new(2, 0));
+
+    info!("Aelita fast-forwards master.");
+    let mut master_string = String::new();
+    File::open(Path::new("tests/cache/origin/.git/refs/heads/master"))
+        .unwrap()
+        .read_to_string(&mut master_string)
+        .unwrap();
+    master_string = master_string.replace("\n", "").replace("\r", "");
+    assert!(master_string != "e16d1eca074ae29ac1812e14316e96f3117d0675");
+
+    aelita.kill().unwrap();
+
+    Command::new("/usr/bin/docker")
+        .current_dir("./tests/")
+        .arg("rm")
+        .arg("-f")
+        .arg("aelita-test-github-round-trip-postgres")
+        .output()
+        .unwrap();
+
+    info!("Make sure it didn't create a db.sqlite");
+    assert!(!Path::new("./tests/db.sqlite").exists());
+}
