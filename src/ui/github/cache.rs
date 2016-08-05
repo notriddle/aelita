@@ -2,7 +2,7 @@
 
 use db::Builder;
 use rusqlite::{self, Connection};
-use postgres::{ Connection as PgConnection, SslMode};
+use postgres::{Connection as PgConnection, SslMode};
 use postgres::IntoConnectParams;
 use std::convert::AsRef;
 use std::error::Error;

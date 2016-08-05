@@ -49,10 +49,18 @@ fn main() {
     let config_path = args.next()
         .map(Cow::Owned)
         .unwrap_or(Cow::Borrowed("config.toml"));
-    let worker_builder = config::toml::GithubBuilder::build_from_file(
-        &*config_path
-    ).unwrap();
-    run_workers(worker_builder)
+    let config_path = &*config_path;
+    if config_path == "-12" {
+        let worker_builder =
+            config::twelvef::GithubBuilder::build_from_os_env()
+            .unwrap();
+        run_workers(worker_builder)
+    } else {
+        let worker_builder = config::toml::GithubBuilder::build_from_file(
+            config_path
+        ).unwrap();
+        run_workers(worker_builder)
+    }
 }
 
 fn run_workers<B: WorkerBuilder>(builder: B) -> !

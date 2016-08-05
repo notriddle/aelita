@@ -1,6 +1,7 @@
 // This file is released under the same terms as Rust itself.
 
 pub mod toml;
+pub mod twelvef;
 
 use db::Db;
 use pipeline::{PipelineId, WorkerManager};

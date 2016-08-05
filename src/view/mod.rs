@@ -14,6 +14,7 @@ use hyper::uri::RequestUri;
 use pipeline::{self, PipelineId};
 use quickersort::sort_by;
 use spmc;
+use std::borrow::Cow;
 use std::convert::AsRef;
 use std::error::Error;
 use std::io::{BufWriter, Write};
@@ -25,7 +26,7 @@ use view::auth::AuthManager;
 
 pub trait PipelinesConfig: Send + Sync + 'static {
     fn pipeline_by_name(&self, &str) -> Option<PipelineId>;
-    fn all(&self) -> Vec<(&str, PipelineId)>;
+    fn all(&self) -> Vec<(Cow<str>, PipelineId)>;
 }
 
 pub use view::auth::{Auth, AuthRef};
@@ -261,7 +262,7 @@ impl<'a, P: Pr> Thread<'a, P> {
         mut res: Response<::hyper::net::Streaming>,
     ) -> Result<(), Box<Error>> {
         let mut pipelines = self.pipelines.all();
-        sort_by(&mut pipelines, &|a, b| a.0.cmp(b.0));
+        sort_by(&mut pipelines, &|a, b| a.0.cmp(&b.0));
         let html = html!{
             html {
                 head {
@@ -280,7 +281,8 @@ impl<'a, P: Pr> Thread<'a, P> {
                             th { : "Opened" }
                         }
                         tbody {
-                            @ for &(n, pid) in &pipelines { |t| {
+                            @ for &(ref n, pid) in &pipelines { |t| {
+                                let n = &**n;
                                 let opened = self.db.list_pending(pid).len();
                                 let queue = self.db.list_queue(pid).len();
                                 let running = self.db.peek_running(pid)

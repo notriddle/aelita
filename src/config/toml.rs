@@ -6,6 +6,7 @@ use db::{self, Db};
 use pipeline::{PipelineId, WorkerManager};
 use pipeline::WorkerThread;
 use std::any::Any;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{self, Debug, Display};
@@ -1068,8 +1069,8 @@ impl view::PipelinesConfig for StaticViewPipelinesConfig {
     fn pipeline_by_name(&self, name: &str) -> Option<PipelineId> {
         self.0.get(name).map(|x| *x)
     }
-    fn all(&self) -> Vec<(&str, PipelineId)> {
-        self.0.iter().map(|x| (&x.0[..], *x.1)).collect()
+    fn all(&self) -> Vec<(Cow<str>, PipelineId)> {
+        self.0.iter().map(|x| (Cow::Borrowed(&x.0[..]), *x.1)).collect()
     }
 }
 
