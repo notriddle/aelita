@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<title>Maintain a branch that always passes all the tests -- Aelita</title>
+<link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css>
+<style>
+    body {
+        max-width: 60em;
+        margin: 0 auto;
+        padding: 16px 20px;
+    }
+    a {
+        text-decoration: underline;
+    }
+    a:hover, a:active, a:focus {
+        text-decoration: none;
+    }
+    .table {
+        width: 100%;
+        border: solid 1px #CCC;
+        border-radius: 8px;
+        border-collapse: separate;
+        border-spacing: 0;
+        overflow: hidden;
+    }
+    .table tr {
+        transition-duration: 0.25s;
+        transition-timing-function: ease;
+        transition-property: background;
+    }
+    .table tbody > tr:hover {
+        background: #EEE;
+    }
+    .table tr td {
+        border-top :solid 1px #CCC;
+    }
+    .table tr:first-child td {
+        border-top:none;
+    }
+    .table th {
+        border-bottom: solid 2px #CCC;
+        color: #666;
+        font-weight: bold;
+        text-align: left;
+    }
+    .table th, .table td {
+        padding: 8px 10px;
+        border-left: solid 1px #CCC;
+    }
+    .table th:first-child, .table td:first-child {
+        border-left:none;
+    }
+    .fill-link {
+        overflow: hidden;
+    }
+    .fill-link > * {
+        display: block;
+        margin: -10em;
+        padding: 10em;
+    }
+    .tb {
+        color: #0C0;
+        text-decoration: none;
+        text-align: center;
+        border: none;
+        outline: none;
+        box-shadow: none;
+        font-family: inherit;
+        font-size: inherit;
+        cursor: pointer;
+        font-weight: bold;
+        background: none;
+    }
+    .tb:hover, .tb:active, .tb:focus {
+        background: #0C0;
+        color: #FFF;
+    }
+    th input, td input {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .tbb {
+        color: #C00;
+    }
+    .tbb:hover, .tbb:active, .tbb:focus {
+        background: #C00;
+    }
+    .f {
+       width: 20px;
+    }
+    .blank {
+        padding: 10px 0;
+        width: 100%;
+    }
+</style>
+<h1>{{ username }}</h1>
+<form action="" method="POST">
+<table class=blank>
+<td align=right><label for=context>Using</label>&nbsp;</td>
+<td width="100%"><input
+    type=text
+    name=context
+    id=context
+    value="continuous-integration/travis-ci/push"
+></td>
+</table>
+<table class=table>
+    <thead>
+        <tr><th></th><th>Repo</th></tr>
+    </thead>
+    <tbody>{% for repo in non_present %}
+        <tr>
+            <td class="fill-link f">
+                <button
+                    name="add"
+                    value="{{ repo.id }}"
+                    class=tb
+                >
+                    &check;
+                </button>
+            </td>
+            <td>{{ repo.name }}</td>
+        </tr>
+    {% endfor %}
+    {% for repo in present %}
+        <tr>
+            <td class="fill-link f">
+                <button
+                    name="remove"
+                    value="{{ repo.id }}"
+                    class="tb tbb"
+                >
+                    &times;
+                </button>
+            </td>
+            <td class=fill-link><a href="{{ base_url }}/{{ repo.name }}">
+                {{ repo.name }}
+            </a></td>
+        </tr>
+    {% endfor %}</tbody>
+</table>
+</form>

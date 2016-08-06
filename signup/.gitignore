@@ -1,0 +1,4 @@
+venv/
+config.sh
+*.pyc
+*.sqlite
