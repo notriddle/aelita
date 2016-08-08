@@ -12,9 +12,8 @@ use hyper::status::StatusCode;
 use pipeline::{self, PipelineId};
 use serde_json;
 use serde_json::from_reader as json_from_reader;
-use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::{BufWriter, Read};
+use std::io::BufWriter;
 use std::sync::mpsc::{Sender, Receiver};
 use url::form_urlencoded;
 use util::USER_AGENT;
@@ -32,10 +31,16 @@ pub struct Job {
     pub builders: Vec<String>,
 }
 
+pub trait PipelinesConfig: Send + Sync + 'static {
+    fn pipelines_by_builder(&self, &str) -> Vec<PipelineId>;
+    fn job_by_pipeline(&self, PipelineId) -> Option<Job>;
+    fn all(&self) -> Vec<(PipelineId, Job)>;
+}
+
 pub struct Worker {
     listen: String,
     host: String,
-    jobs: HashMap<PipelineId, Job>,
+    pipelines: Box<PipelinesConfig>,
     auth: Option<(String, String)>,
     client: Client,
     rate_limiter: RateLimiter,
@@ -46,18 +51,16 @@ impl Worker {
         listen: String,
         host: String,
         auth: Option<(String, String)>,
+        pipelines: Box<PipelinesConfig>,
     ) -> Self {
-        Worker {
+        Worker{
             listen: listen,
             host: host,
-            jobs: HashMap::new(),
+            pipelines: pipelines,
             auth: auth,
             client: Client::default(),
             rate_limiter: RateLimiter::new(),
         }
-    }
-    pub fn add_pipeline(&mut self, pipeline_id: PipelineId, job: Job) {
-        self.jobs.insert(pipeline_id, job);
     }
 }
 
@@ -129,18 +132,13 @@ impl Worker {
 
     fn handle_webhook<C: 'static + Commit + Sync>(
         &self,
-        mut req: Request,
+        mut _req: Request,
         mut res: Response,
         send_event: &Sender<ci::Event<C>>
     )
         where C::Err: Debug
     {
         info!("Got build status report");
-        let mut json_raw = vec![];
-        if let Err(e) = req.read_to_end(&mut json_raw) {
-            warn!("Failed to read webhook request: {:?}", e);
-            return;
-        }
         *res.status_mut() = StatusCode::Ok;
         res.headers_mut()
             .set_raw("Content-Type", vec![b"text/plain".to_vec()]);
@@ -148,7 +146,7 @@ impl Worker {
         if let Err(e) = result {
             warn!("Failed to send response: {:?}", e);
         }
-        for (pipeline_id, job) in &self.jobs {
+        for (pipeline_id, job) in self.pipelines.all() {
             // Check all builder for success.
             let mut is_success = true;
             let mut revision = None;
@@ -208,7 +206,7 @@ impl Worker {
             if is_success {
                 send_event.send(
                     ci::Event::BuildSucceeded(
-                        *pipeline_id,
+                        pipeline_id,
                         commit,
                         None,
                     )
@@ -216,7 +214,7 @@ impl Worker {
             } else {
                 send_event.send(
                     ci::Event::BuildFailed(
-                        *pipeline_id,
+                        pipeline_id,
                         commit,
                         None,
                     )
@@ -232,7 +230,7 @@ impl Worker {
     ) {
         match msg {
             ci::Message::StartBuild(pipeline_id, commit) => {
-                let job = match self.jobs.get(&pipeline_id) {
+                let job = match self.pipelines.job_by_pipeline(pipeline_id) {
                     Some(job) => job,
                     None => {
                         warn!(

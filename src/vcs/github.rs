@@ -12,7 +12,6 @@ use serde_json::{
     to_vec as json_to_vec
 };
 use std;
-use std::collections::HashMap;
 use std::convert::From;
 use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
@@ -20,6 +19,10 @@ use util::USER_AGENT;
 use util::rate_limited_client::RateLimiter;
 use vcs;
 use vcs::git::Commit;
+
+pub trait PipelinesConfig: Send + Sync + 'static {
+    fn repo_by_pipeline(&self, PipelineId) -> Option<Repo>;
+}
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Repo {
@@ -31,7 +34,7 @@ pub struct Repo {
 }
 
 pub struct Worker {
-    repos: HashMap<PipelineId, Repo>,
+    pipelines: Box<PipelinesConfig>,
     host: String,
     client: Client,
     authorization: Vec<u8>,
@@ -39,19 +42,20 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn new(host: String, token: String) -> Worker {
+    pub fn new(
+        host: String,
+        token: String,
+        pipelines: Box<PipelinesConfig>
+    ) -> Worker {
         let mut authorization: Vec<u8> = b"token ".to_vec();
         authorization.extend(token.bytes());
         Worker{
-            repos: HashMap::new(),
+            pipelines: pipelines,
             host: host,
             client: Client::default(),
             authorization: authorization,
             rate_limiter: RateLimiter::new(),
         }
-    }
-    pub fn add_pipeline(&mut self, pipeline_id: PipelineId, repo: Repo) {
-        self.repos.insert(pipeline_id, repo);
     }
 }
 
@@ -123,7 +127,7 @@ impl Worker {
         pipeline_id: PipelineId,
         merge_commit: Commit,
     ) -> Result<(), GithubRequestError> {
-        let repo = match self.repos.get(&pipeline_id) {
+        let repo = match self.pipelines.repo_by_pipeline(pipeline_id) {
             Some(repo) => repo,
             None => return Err(GithubRequestError::Pipeline(pipeline_id)),
         };
@@ -159,7 +163,7 @@ impl Worker {
         pull_commit: Commit,
         message: String,
     ) -> Result<Commit, GithubRequestError> {
-        let repo = match self.repos.get(&pipeline_id) {
+        let repo = match self.pipelines.repo_by_pipeline(pipeline_id) {
             Some(repo) => repo,
             None => return Err(GithubRequestError::Pipeline(pipeline_id)),
         };

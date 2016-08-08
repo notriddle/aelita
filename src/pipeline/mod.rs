@@ -1,12 +1,60 @@
 // This file is released under the same terms as Rust itself.
 
 use ci;
+use config::PipelineConfig;
 use db::{Db, PendingEntry, QueueEntry, RunningEntry};
 use std::marker::PhantomData;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use ui::{self, Pr};
 use vcs::{self, Commit};
+use view;
+
+pub struct WorkerManager<P: Pr + 'static> {
+    pub cis: Vec<WorkerThread<
+        ci::Event<<P as Pr>::C>,
+        ci::Message<<P as Pr>::C>,
+    >>,
+    pub uis: Vec<WorkerThread<
+        ui::Event<P>,
+        ui::Message<P>,
+    >>,
+    pub vcss: Vec<WorkerThread<
+        vcs::Event<<P as Pr>::C>,
+        vcs::Message<<P as Pr>::C>,
+    >>,
+    pub view: Option<WorkerThread<
+        view::Event,
+        view::Message,
+    >>,
+    pub pipelines: Box<PipelineConfig>,
+}
+
+impl<P: Pr + 'static> WorkerManager<P> {
+    pub fn pipeline_by_id<'a>(
+        &'a self,
+        pipeline_id: PipelineId,
+    ) -> Option<
+        Pipeline<
+            'a,
+            P,
+            WorkerThread<ci::Event<<P as Pr>::C>, ci::Message<<P as Pr>::C>>,
+            WorkerThread<ui::Event<P>, ui::Message<P>>,
+            WorkerThread<vcs::Event<<P as Pr>::C>, vcs::Message<<P as Pr>::C>>,
+        >
+    > {
+        let (ci, ui, vcs) = self.pipelines.workers_by_id(pipeline_id);
+        if let (Some(ci), Some(ui), Some(vcs)) = (
+            self.cis.get(ci),
+            self.uis.get(ui),
+            self.vcss.get(vcs)
+        ) {
+            Some(Pipeline::new(pipeline_id, ci, ui, vcs))
+        } else {
+            None
+        }
+    }
+}
 
 pub trait Worker<E: Send + Clone, M: Send + Clone> {
     fn run(&self, recv_msg: Receiver<M>, send_event: Sender<E>);
@@ -158,7 +206,7 @@ where P: Pr + 'static,
             vcs: vcs,
         }
     }
-    pub fn handle_event<D: Db<P>>(
+    pub fn handle_event<D: Db<P> + ?Sized>(
         &mut self,
         db: &mut D,
         event: Event<P>,

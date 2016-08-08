@@ -10,28 +10,27 @@ use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
 use pipeline::{self, PipelineId};
 use serde_json::{from_slice as json_from_slice};
-use std::collections::HashMap;
 use std::io::BufWriter;
 use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
 use util::github_headers;
 use vcs::git::Commit;
 
+pub trait PipelinesConfig: Send + Sync + 'static {
+    fn repo_by_pipeline(&self, PipelineId) -> Option<Repo>;
+    fn pipelines_by_repo(&self, &Repo) -> Vec<PipelineId>;
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Repo {
     pub owner: String,
     pub repo: String,
-}
-
-#[derive(Debug)]
-struct RepoConfig {
-    pipeline_id: PipelineId,
-    context: String,
+    pub context: String,
 }
 
 pub struct Worker {
     listen: String,
-    pipelines: HashMap<Repo, Vec<RepoConfig>>,
+    pipelines: Box<PipelinesConfig>,
     secret: String,
 }
 
@@ -39,28 +38,15 @@ impl Worker {
     pub fn new(
         listen: String,
         secret: String,
+        pipelines: Box<PipelinesConfig>,
     ) -> Worker {
         Worker {
             listen: listen,
-            pipelines: HashMap::new(),
+            pipelines: pipelines,
             secret: secret,
         }
-    }
-    pub fn add_pipeline(
-        &mut self,
-        pipeline_id: PipelineId,
-        repo: Repo,
-        context: String,
-    ) {
-        let repo_config = RepoConfig{
-            pipeline_id: pipeline_id,
-            context: context,
-        };
-        self.pipelines.entry(repo)
-            .or_insert(Vec::new())
-            .push(repo_config);
-    }
-}
+    }}
+
 
 // JSON API structs
 #[derive(Serialize, Deserialize)]
@@ -162,57 +148,56 @@ impl Worker {
                     let repo = Repo{
                         repo: desc.repository.name,
                         owner: desc.repository.owner.login,
+                        context: desc.context,
                     };
-                    if let Some(repo_configs) = self.pipelines.get(&repo) {
-                        for repo_config in repo_configs {
-                            let commit = match Commit::from_str(&desc.sha) {
-                                Ok(commit) => commit,
-                                Err(e) => {
-                                    warn!(
-                                        "Invalid commit {}: {:?}",
-                                        desc.sha,
-                                        e
-                                    );
-                                    return;
-                                }
-                            };
-                            if repo_config.context == desc.context {
-                                let event = match &desc.state[..] {
-                                    "pending" => ci::Event::BuildStarted(
-                                        repo_config.pipeline_id,
-                                        commit,
-                                        desc.target_url.as_ref().and_then(|u|
-                                            Url::parse(&u[..]).ok()
-                                        ),
-                                    ),
-                                    "failure" |
-                                    "error" => ci::Event::BuildFailed(
-                                        repo_config.pipeline_id,
-                                        commit,
-                                        desc.target_url.as_ref().and_then(|u|
-                                            Url::parse(&u[..]).ok()
-                                        ),
-                                    ),
-                                    "success" => ci::Event::BuildSucceeded(
-                                        repo_config.pipeline_id,
-                                        commit,
-                                        desc.target_url.as_ref().and_then(|u|
-                                            Url::parse(&u[..]).ok()
-                                        ),
-                                    ),
-                                    _ => {
-                                        warn!(
-                                            "Unknown status state: {}",
-                                            desc.state
-                                        );
-                                        return;
-                                    },
-                                };
-                                send_event.send(event).expect("pipeline");
-                            }
-                        }
-                    } else {
+                    let pipelines = self.pipelines.pipelines_by_repo(&repo);
+                    if pipelines.is_empty() {
                         warn!("Got status for unknown repo: {:?}", repo);
+                    }
+                    for pipeline_id in pipelines {
+                        let commit = match Commit::from_str(&desc.sha) {
+                            Ok(commit) => commit,
+                            Err(e) => {
+                                warn!(
+                                    "Invalid commit {}: {:?}",
+                                    desc.sha,
+                                    e
+                                );
+                                return;
+                            }
+                        };
+                        let event = match &desc.state[..] {
+                            "pending" => ci::Event::BuildStarted(
+                                pipeline_id,
+                                commit,
+                                desc.target_url.as_ref().and_then(|u|
+                                    Url::parse(&u[..]).ok()
+                                ),
+                            ),
+                            "failure" |
+                            "error" => ci::Event::BuildFailed(
+                                pipeline_id,
+                                commit,
+                                desc.target_url.as_ref().and_then(|u|
+                                    Url::parse(&u[..]).ok()
+                                ),
+                            ),
+                            "success" => ci::Event::BuildSucceeded(
+                                pipeline_id,
+                                commit,
+                                desc.target_url.as_ref().and_then(|u|
+                                    Url::parse(&u[..]).ok()
+                                ),
+                            ),
+                            _ => {
+                                warn!(
+                                    "Unknown status state: {}",
+                                    desc.state
+                                );
+                                return;
+                            },
+                        };
+                        send_event.send(event).expect("pipeline");
                     }
                 } else {
                     warn!("Got invalid status");

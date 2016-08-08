@@ -1,0 +1,18 @@
+tls info@aelitabot.xyz
+
+aelita-mergebot.xyz {
+    proxy /github-notice http://aelita:6000
+    proxy /github-status http://aelita:5000
+    redir / https://aelitabot.xyz/ 301
+    proxy / http://aelita:8000/
+}
+
+aelitabot.xyz {
+    proxy / http://signup/
+    gzip
+}
+
+www.aelitabot.xyz, www.aelita-mergebot.xyz {
+    redir https://aelitabot.xyz/{uri} 301
+}
+

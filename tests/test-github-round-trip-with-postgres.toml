@@ -1,0 +1,25 @@
+# This file is released under the same terms as Rust itself
+
+[config]
+git = {}
+db = "postgresql://postgres@localhost/postgres"
+
+[config.github]
+listen = "localhost:9001"
+host = "http://localhost:9011"
+user = "AelitaBot"
+owner = "AelitaBot"
+token = "MY_PERSONAL_ACCESS_TOKEN"
+secret = "ME_SECRET_LOL"
+
+[config.jenkins]
+listen = "localhost:9002"
+host = "http://localhost:9012"
+user = "AelitaBot"
+token = "MY_JENKINS_API_TOKEN"
+
+[projects.testp]
+github = {}
+git = { origin = "../origin/" }
+jenkins = { token = "MY_BUILD_TOKEN" }
+

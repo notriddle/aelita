@@ -2,13 +2,12 @@
 
 use pipeline::{self, PipelineId};
 use std;
-use std::collections::HashMap;
 use std::convert::{From, Into};
 use std::fmt::{self, Debug, Display, Formatter};
 use std::fs::File;
 use std::io::Read;
 use std::num::ParseIntError;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
@@ -16,9 +15,13 @@ use util::crypto::SHA1_LEN;
 use vcs;
 use void::Void;
 
+pub trait PipelinesConfig: Send + Sync + 'static {
+    fn repo_by_pipeline(&self, PipelineId) -> Option<Repo>;
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Repo {
-    pub path: PathBuf,
+    pub path: String,
     pub origin: String,
     pub master_branch: String,
     pub staging_branch: String,
@@ -26,7 +29,7 @@ pub struct Repo {
 }
 
 pub struct Worker {
-    repos: HashMap<PipelineId, Repo>,
+    pipelines: Box<PipelinesConfig>,
     executable: String,
     name: String,
     email: String,
@@ -37,16 +40,14 @@ impl Worker {
         executable: String,
         name: String,
         email: String,
+        pipelines: Box<PipelinesConfig>,
     ) -> Worker {
         Worker{
-            repos: HashMap::new(),
             executable: executable,
             name: name,
             email: email,
+            pipelines: pipelines,
         }
-    }
-    pub fn add_pipeline(&mut self, pipeline_id: PipelineId, repo: Repo) {
-        self.repos.insert(pipeline_id, repo);
     }
 }
 
@@ -91,7 +92,7 @@ impl Worker {
             vcs::Message::MergeToStaging(
                 pipeline_id, pull_commit, message, remote
             ) => {
-                let repo = match self.repos.get(&pipeline_id) {
+                let repo = match self.pipelines.repo_by_pipeline(pipeline_id) {
                     Some(repo) => repo,
                     None => {
                         warn!("Got wrong pipeline ID {:?}", pipeline_id);
@@ -100,7 +101,7 @@ impl Worker {
                 };
                 info!("Merging {} ...", pull_commit);
                 match self.merge_to_staging(
-                    repo, pull_commit, &message, &remote.0
+                    &repo, pull_commit, &message, &remote.0
                 ) {
                     Err(e) => {
                         warn!(
@@ -124,7 +125,7 @@ impl Worker {
                 }
             }
             vcs::Message::MoveStagingToMaster(pipeline_id, merge_commit) => {
-                let repo = match self.repos.get(&pipeline_id) {
+                let repo = match self.pipelines.repo_by_pipeline(pipeline_id) {
                     Some(repo) => repo,
                     None => {
                         warn!("Got wrong pipeline ID {:?}", pipeline_id);
@@ -132,7 +133,7 @@ impl Worker {
                     }
                 };
                 info!("Moving {} ...", merge_commit);
-                match self.move_staging_to_master(repo, merge_commit) {
+                match self.move_staging_to_master(&repo, merge_commit) {
                     Err(e) => {
                         warn!(
                             "Failed to move {} to master: {:?}",
@@ -227,7 +228,7 @@ impl Worker {
         Ok(())
     }
     fn setup_dir(&self, repo: &Repo) -> Result<(), GitError> {
-        if !repo.path.exists() {
+        if !Path::new(&repo.path).exists() {
             try_cmd!(Command::new(&self.executable), cmd,
             cmd.arg("init")
                 .arg(&repo.path));

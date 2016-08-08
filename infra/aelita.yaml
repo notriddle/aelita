@@ -1,9 +1,48 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: aelita
+  name: caddy
 spec:
   type: LoadBalancer
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: 443
+      protocol: TCP
+  selector:
+    app: caddy
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: caddy
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: caddy
+    spec:
+      containers:
+        - name: caddy
+          image: gcr.io/aelita-1374/caddy:INSERT_CURRENT_VERION_HERE
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: aelita
+spec:
   ports:
     - name: github-notice
       port: 6000
@@ -14,26 +53,11 @@ spec:
       targetPort: 5000
       protocol: TCP
     - name: queue-view
-      port: 80
+      port: 8000
       targetPort: 8000
       protocol: TCP
   selector:
     app: aelita
-
----
-
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: aelita-pv-claim
-  labels:
-    app: aelita
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
 
 ---
 
@@ -42,7 +66,7 @@ kind: Deployment
 metadata:
   name: aelita
 spec:
-  replicas: 3
+  replicas: 2
   template:
     metadata:
       labels:
@@ -55,17 +79,265 @@ spec:
             - containerPort: 5000
             - containerPort: 6000
             - containerPort: 8000
+          env:
+            - name: AELITA_UI_TYPE
+              value: github
+            - name: AELITA_PIPELINE_DB
+              value: postgresql://postgres:INSERT_POSTGRES_PIPELINES_PASSWORD_HERE
+            - name: AELITA_PROJECT_DB
+              value: postgresql://postgres:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE
+            - name: AELITA_UI_GITHUB_DB
+              value: postgresql://postgres:INSERT_POSTGRES_CACHES_PASSWORD_HERE
+            - name: AELITA_UI_GITHUB_LISTEN
+              value: 0.0.0.0:6000
+            - name: AELITA_UI_GITHUB_HOST
+              value: https://api.github.com
+            - name: AELITA_UI_GITHUB_USER
+              value: aelita-mergebot
+            - name: AELITA_UI_GITHUB_TOKEN
+              value: INSERT_GITHUB_PERSONAL_ACCESS_TOKEN_HERE
+            - name: AELITA_UI_GITHUB_SECRET
+              value: INSERT_GITHUB_WEBHOOK_SECRET_HERE
+            - name: AELITA_CI_TYPE
+              value: github_status
+            - name: AELITA_CI_GITHUB_LISTEN
+              value: 0.0.0.0:5000
+            - name: AELITA_CI_GITHUB_SECRET
+              value: INSERT_GITHUB_STATUS_WEBHOOK_SECRET_HERE
+            - name: AELITA_VCS_TYPE
+              value: github
+            - name: AELITA_VCS_GITHUB_HOST
+              value: https://api.github.com
+            - name: AELITA_VCS_GITHUB_TOKEN
+              value: INSERT_GITHUB_PERSONAL_ACCESS_TOKEN_HERE
+            - name: AELITA_VIEW_LISTEN
+              value: 0.0.0.0:8000
+            - name: AELITA_VIEW_SECRET
+              value: INSERT_VIEW_SECRET_HERE
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: signup
+spec:
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: signup
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: signup
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: signup
+    spec:
+      containers:
+        - name: signup
+          image: gcr.io/aelita-1374/signup:INSERT_CURRENT_VERION_HERE
+          ports:
+            - containerPort: 8000
+          env:
+            - name: AELITA_GITHUB_CLIENT_ID
+              value: INSERT_GITHUB_CLIENT_ID_HERE
+            - name: AELITA_GITHUB_CLIENT_SECRET
+              value: INSERT_GITHUB_CLIENT_SECRET_HERE
+            - name: AELITA_BOT_USERNAME
+              value: aelita-mergebot
+            - name: AELITA_BOT_BASEURL
+              value: https://aelita-mergebot.xyz/
+            - name: AELITA_BOT_DBURI
+              value: postgresql://postgres:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE
+            - name: AELITA_BOT_ACCESS_TOKEN
+              value: INSERT_GITHUB_PERSONAL_ACCESS_TOKEN_HERE
+            - name: AELITA_VIEW_SECRET
+              value: INSERT_VIEW_SECRET_HERE
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aelita-claim-pipelines
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aelita-claim-caches
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aelita-claim-configs
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-pipelines
+spec:
+  ports:
+    - name: postgres-pipelines
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: postgres
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: postgres-pipelines
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: postgres-pipelines
+    spec:
+      containers:
+        - name: postgres-pipelines
+          image: postgres-pipelines
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              value: INSERT_POSTGRES_PIPELINES_PASSWORD_HERE
+            - name: 
+              value: /var/lib/postgresql/data/pgdata
           volumeMounts:
-            - mountPath: /data
-              name: aelita-data
-        #- name: aelita-sh
-          #image: busybox
-          #command: [ "sleep", "1000000000000" ]
-          #volumeMounts:
-            #- mountPath: /data
-              #name: aelita-data
+            - mountPath: /var/lib/postgresql/data/pgdata
+              name: aelita-pipelines
       volumes:
-        - name: aelita-data
+        - name: aelita-pipelines
           persistentVolumeClaim:
-            claimName: aelita-pv-claim
+            claimName: aelita-claim-pipelines
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-caches
+spec:
+  ports:
+    - name: postgres-caches
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: postgres
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: postgres-caches
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: postgres-caches
+    spec:
+      containers:
+        - name: postgres-caches
+          image: postgres-caches
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              value: INSERT_POSTGRES_CACHES_PASSWORD_HERE
+            - name: 
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data/pgdata
+              name: aelita-caches
+      volumes:
+        - name: aelita-caches
+          persistentVolumeClaim:
+            claimName: aelita-claim-caches
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-configs
+spec:
+  ports:
+    - name: postgres-configs
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: postgres
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: postgres-configs
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: postgres-configs
+    spec:
+      containers:
+        - name: postgres-configs
+          image: postgres-configs
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              value: INSERT_POSTGRES_CONFIGS_PASSWORD_HERE
+            - name: 
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data/pgdata
+              name: aelita-configs
+      volumes:
+        - name: aelita-configs
+          persistentVolumeClaim:
+            claimName: aelita-claim-configs
 
