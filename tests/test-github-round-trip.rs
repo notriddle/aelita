@@ -1011,6 +1011,11 @@ fn one_item_team_github_round_trip_with_postgres() {
         panic!("Integration tests require the executable to be built.");
     }
 
+    if !Path::new("/usr/bin/docker").exists() {
+        warn!("Test skipped because no docker.");
+        return;
+    }
+
     let mut github_server = HttpListener::new(&"localhost:9011").unwrap();
     let mut jenkins_server = HttpListener::new(&"localhost:9012").unwrap();
 
@@ -1300,6 +1305,11 @@ fn one_item_github_round_trip_cloud_with_postgres_12f() {
 
     if !Path::new(EXECUTABLE).exists() {
         panic!("Integration tests require the executable to be built.");
+    }
+
+    if !Path::new("/usr/bin/docker").exists() {
+        warn!("Test skipped because no docker.");
+        return;
     }
 
     Command::new("/bin/rm")
