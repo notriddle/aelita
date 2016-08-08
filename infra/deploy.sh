@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -ex
 
 PROJECT_NAME=aelita-1374
@@ -15,7 +15,7 @@ cd ../infra/caddy/
 docker build -t=gcr.io/$PROJECT_NAME/caddy:$CURRENT_VERSION .
 
 # Install gcloud
-cd ../infra/
+cd ../
 wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-117.0.0-linux-x86_64.tar.gz
 tar -xvf google-cloud-sdk-*
 export PATH="`pwd`/google-cloud-sdk/bin/:$PATH"
@@ -36,6 +36,8 @@ gcloud --quiet container clusters get-credentials $CLUSTER_NAME
 
 # Push to gcr.io
 gcloud docker push gcr.io/$PROJECT_NAME/aelita:$CURRENT_VERSION
+gcloud docker push gcr.io/$PROJECT_NAME/signup:$CURRENT_VERSION
+gcloud docker push gcr.io/$PROJECT_NAME/caddy:$CURRENT_VERSION
 
 # Upgrade the pod
 # PASSWORD envs were added by running:
@@ -59,7 +61,7 @@ for i in POSTGRES_PIPELINES_PASSWORD POSTGRES_CACHES_PASSWORD \
          GITHUB_WEBHOOK_SECRET GITHUB_STATUS_WEHOOK_SECRET \
          GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET \
          VIEW_SECRET CURRENT_VERSION; do
-    sed -i s:INSERT_${i}_HERE:${${i}}:g aelita.yaml
+    sed -i s:INSERT_${i}_HERE:${!i}:g aelita.yaml
 done
 kubectl apply -f aelita.yaml
 

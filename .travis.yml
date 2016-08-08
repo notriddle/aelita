@@ -28,5 +28,5 @@ matrix:
         - sudo service postgresql stop || true
       script: 
         - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then sh infra/build_static.sh; fi
-        - if [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "master" ]; then sh infra/deploy.sh; fi
+        - if [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "master" ]; then bash infra/deploy.sh; fi
 

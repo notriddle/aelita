@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
         - name: caddy
-          image: gcr.io/aelita-1374/caddy:INSERT_CURRENT_VERION_HERE
+          image: gcr.io/aelita-1374/caddy:INSERT_CURRENT_VERSION_HERE
           ports:
             - containerPort: 80
             - containerPort: 443
@@ -74,7 +74,7 @@ spec:
     spec:
       containers:
         - name: aelita
-          image: gcr.io/aelita-1374/aelita:INSERT_CURRENT_VERION_HERE
+          image: gcr.io/aelita-1374/aelita:INSERT_CURRENT_VERSION_HERE
           ports:
             - containerPort: 5000
             - containerPort: 6000
@@ -83,11 +83,11 @@ spec:
             - name: AELITA_UI_TYPE
               value: github
             - name: AELITA_PIPELINE_DB
-              value: postgresql://postgres:INSERT_POSTGRES_PIPELINES_PASSWORD_HERE
+              value: postgresql://postgres:INSERT_POSTGRES_PIPELINES_PASSWORD_HERE@postgres-pipelines
             - name: AELITA_PROJECT_DB
-              value: postgresql://postgres:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE
+              value: postgresql://postgres:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE@postgres-configs
             - name: AELITA_UI_GITHUB_DB
-              value: postgresql://postgres:INSERT_POSTGRES_CACHES_PASSWORD_HERE
+              value: postgresql://postgres:INSERT_POSTGRES_CACHES_PASSWORD_HERE@postgres-caches
             - name: AELITA_UI_GITHUB_LISTEN
               value: 0.0.0.0:6000
             - name: AELITA_UI_GITHUB_HOST
@@ -145,7 +145,7 @@ spec:
     spec:
       containers:
         - name: signup
-          image: gcr.io/aelita-1374/signup:INSERT_CURRENT_VERION_HERE
+          image: gcr.io/aelita-1374/signup:INSERT_CURRENT_VERSION_HERE
           ports:
             - containerPort: 8000
           env:
@@ -158,7 +158,7 @@ spec:
             - name: AELITA_BOT_BASEURL
               value: https://aelita-mergebot.xyz/
             - name: AELITA_BOT_DBURI
-              value: postgresql://postgres:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE
+              value: postgresql://postgres:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE@postgres-configs
             - name: AELITA_BOT_ACCESS_TOKEN
               value: INSERT_GITHUB_PERSONAL_ACCESS_TOKEN_HERE
             - name: AELITA_VIEW_SECRET
@@ -239,7 +239,7 @@ spec:
           env:
             - name: POSTGRES_PASSWORD
               value: INSERT_POSTGRES_PIPELINES_PASSWORD_HERE
-            - name: 
+            - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - mountPath: /var/lib/postgresql/data/pgdata
@@ -285,7 +285,7 @@ spec:
           env:
             - name: POSTGRES_PASSWORD
               value: INSERT_POSTGRES_CACHES_PASSWORD_HERE
-            - name: 
+            - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - mountPath: /var/lib/postgresql/data/pgdata
@@ -331,7 +331,7 @@ spec:
           env:
             - name: POSTGRES_PASSWORD
               value: INSERT_POSTGRES_CONFIGS_PASSWORD_HERE
-            - name: 
+            - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - mountPath: /var/lib/postgresql/data/pgdata
