@@ -195,7 +195,12 @@ def manage():
             non_present.push(repo_def)
         else:
             present.push(repo_def)
-    return render_template('manage.html', non_present=None, present=None, base_url=app.config['BOT_BASEURL'])
+    return render_template(
+        'manage.html',
+        non_present=None,
+        present=None,
+        base_url=app.config['BOT_BASEURL']
+    )
 
 def add_repo(repo, context):
     user = get_user()

@@ -385,13 +385,14 @@ impl Worker {
                         owner: desc.repository.owner.login,
                         repo: desc.repository.name,
                     };
-                    let repo_pipelines = match self.projects.pipelines_by_repo(&repo) {
-                        Some(repo_pipelines) => repo_pipelines,
-                        None => {
-                            warn!("Got team add event for nonexistant repo");
-                            return;
-                        }
-                    };
+                    let repo_pipelines =
+                        match self.projects.pipelines_by_repo(&repo) {
+                            Some(repo_pipelines) => repo_pipelines,
+                            None => {
+                                warn!("team add event for nonexistant repo");
+                                return;
+                            }
+                        };
                     let mut cache = self.cache.lock().unwrap();
                     let teams = match self.get_all_teams_with_write(&repo) {
                         Ok(t) => t,

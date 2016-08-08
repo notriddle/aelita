@@ -4,15 +4,15 @@ set -ex
 PROJECT_NAME=aelita-1374
 CLUSTER_NAME=aelita-cluster
 COMPUTE_ZONE=us-central1-f
-VERSION=v$TRAVIS_BUILD_NUMBER
+CURRENT_VERSION=v$TRAVIS_BUILD_NUMBER
 
 # Build Docker containers
 cd static-binary
-docker build -t=gcr.io/$PROJECT_NAME/aelita:$VERSION .
+docker build -t=gcr.io/$PROJECT_NAME/aelita:$CURRENT_VERSION .
 cd ../signup/
-docker build -t=gcr.io/$PROJECT_NAME/signup:$VERSION .
+docker build -t=gcr.io/$PROJECT_NAME/signup:$CURRENT_VERSION .
 cd ../infra/caddy/
-docker build -t=gcr.io/$PROJECT_NAME/caddy:$VERSION .
+docker build -t=gcr.io/$PROJECT_NAME/caddy:$CURRENT_VERSION .
 
 # Install gcloud
 cd ../infra/
@@ -35,7 +35,7 @@ gcloud config set container/cluster $CLUSTER_NAME
 gcloud --quiet container clusters get-credentials $CLUSTER_NAME
 
 # Push to gcr.io
-gcloud docker push gcr.io/$PROJECT_NAME/aelita:$VERSION
+gcloud docker push gcr.io/$PROJECT_NAME/aelita:$CURRENT_VERSION
 
 # Upgrade the pod
 # PASSWORD envs were added by running:
@@ -45,22 +45,21 @@ gcloud docker push gcr.io/$PROJECT_NAME/aelita:$VERSION
 #     travis env --repo AelitaBot/aelita set POSTGRES_CACHES_PASSWORD $RAND
 #     RAND=`dd if=/dev/urandom of=/dev/stdout count=4096 | sha256sum -`
 #     travis env --repo AelitaBot/aelita set POSTGRES_CONFIGS_PASSWORD $RAND
-#     travis env --repo AelitaBot/aelita set GITHUB_PERSONAL_ACCESS_TOKEN yourmom
-#     travis env --repo AelitaBot/aelita set GITHUB_WEHOOK_SECRET yourdad
-#     travis env --repo AelitaBot/aelita set GITHUB_STATUS_WEHOOK_SECRET yoursis
+#     travis env --repo AelitaBot/aelita set GITHUB_PERSONAL_ACCESS_TOKEN \
+#                                            yourmom
+#     travis env --repo AelitaBot/aelita set GITHUB_WEBHOOK_SECRET yourdad
+#     travis env --repo AelitaBot/aelita set GITHUB_STATUS_WEBHOOK_SECRET \
+#                                            yoursis
 #     travis env --repo AelitaBot/aelita set GITHUB_CLIENT_ID yourbro
 #     travis env --repo AelitaBot/aelita set GITHUB_CLIENT_SECRET yourson
 #     RAND=`dd if=/dev/urandom of=/dev/stdout count=4096 | sha256sum -`
 #     travis env --repo AelitaBot/aelita set VIEW_SECRET $RAND
-sed -i s:INSERT_CURRENT_VERION_HERE:${VERSION}:g aelita.yaml
-sed -i s:INSERT_POSTGRES_PIPELINES_PASSWORD_HERE:${POSTGRES_PIPELINES_PASSWORD}:g aelita.yaml
-sed -i s:INSERT_POSTGRES_CACHES_PASSWORD_HERE:${POSTGRES_CACHES_PASSWORD}:g aelita.yaml
-sed -i s:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE:${POSTGRES_CONFIGS_PASSWORD}:g aelita.yaml
-sed -i s:INSERT_GITHUB_PERSONAL_ACCESS_TOKEN_HERE:${GITHUB_PERSONAL_ACCESS_TOKEN}:g aelita.yaml
-sed -i s:INSERT_GITHUB_WEBHOOK_SECRET_HERE:${GITHUB_WEBHOOK_SECRET}:g aelita.yaml
-sed -i s:INSERT_GITHUB_STATUS_WEBHOOK_SECRET_HERE:${GITHUB_STATUS_WEBHOOK_SECRET}:g aelita.yaml
-sed -i s:INSERT_GITHUB_CLIENT_ID_HERE:${GITHUB_CLIENT_ID}:g aelita.yaml
-sed -i s:INSERT_GITHUB_CLIENT_SECRET_HERE:${GITHUB_CLIENT_SECRET}:g aelita.yaml
-sed -i s:INSERT_VIEW_SECRET_HERE:${VIEW_SECRET}:g aelita.yaml
+for i in POSTGRES_PIPELINES_PASSWORD POSTGRES_CACHES_PASSWORD \
+         POSTGRES_CONFIGS_PASSWORD GITHUB_PERSONAL_ACCESS_TOKEN \
+         GITHUB_WEBHOOK_SECRET GITHUB_STATUS_WEHOOK_SECRET \
+         GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET \
+         VIEW_SECRET CURRENT_VERSION; do
+    sed -i s:INSERT_${i}_HERE:${${i}}:g aelita.yaml
+done
 kubectl apply -f aelita.yaml
 

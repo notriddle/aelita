@@ -99,7 +99,7 @@ impl<P: Pr + 'static> pipeline::Worker<Event, Message> for Worker<P>
                 });
                 threads.push(send);
             }
-            let mut listener = HttpListener::new(listen).expect("a TCP socket");
+            let mut listener = HttpListener::new(listen).expect("TCP socket");
             let mut i = 0;
             while let Ok(stream) = listener.accept() {
                 threads[i].send(stream).unwrap();

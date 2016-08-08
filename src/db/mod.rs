@@ -6,13 +6,15 @@
 pub mod sqlite;
 pub mod postgres;
 
+use db::postgres::PostgresDb;
+use db::sqlite::SqliteDb;
 use hyper::Url;
 use ui::Pr;
 use pipeline::PipelineId;
+use postgres::{ConnectParams, IntoConnectParams};
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use postgres::{ConnectParams, IntoConnectParams};
 
 pub enum Builder {
     Sqlite(PathBuf),
@@ -34,8 +36,10 @@ impl Builder {
               <P as FromStr>::Err: Error
     {
         Ok(match *self {
-            Builder::Sqlite(ref p) => Box::new(try!(sqlite::SqliteDb::open(p))),
-            Builder::Postgres(ref c) => Box::new(try!(postgres::PostgresDb::open(c.clone()))),
+            Builder::Sqlite(ref p) =>
+                Box::new(try!(SqliteDb::open(p))),
+            Builder::Postgres(ref c) =>
+                Box::new(try!(PostgresDb::open(c.clone()))),
         })
     }
 }

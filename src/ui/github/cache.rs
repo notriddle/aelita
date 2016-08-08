@@ -13,8 +13,10 @@ use pipeline::PipelineId;
 pub fn from_builder(builder: &Builder)
         -> Result<Cache, Box<Error + Send + Sync>> {
     Ok(match *builder {
-        Builder::Sqlite(ref c) => Cache::Sqlite(try!(Sqlite::open(c))),
-        Builder::Postgres(ref c) => Cache::Postgres(try!(Postgres::open(c.clone()))),
+        Builder::Sqlite(ref c) =>
+            Cache::Sqlite(try!(Sqlite::open(c))),
+        Builder::Postgres(ref c) =>
+            Cache::Postgres(try!(Postgres::open(c.clone()))),
     })
 }
 
@@ -30,11 +32,16 @@ impl Cache {
         teams: T,
     ) {
         match *self {
-            Cache::Sqlite(ref mut c) => c.set_teams_with_write(pipeline_id, teams),
-            Cache::Postgres(ref mut c) => c.set_teams_with_write(pipeline_id, teams),
+            Cache::Sqlite(ref mut c) =>
+                c.set_teams_with_write(pipeline_id, teams),
+            Cache::Postgres(ref mut c) =>
+                c.set_teams_with_write(pipeline_id, teams),
         }
     }
-    pub fn teams_with_write(&mut self, pipeline_id: PipelineId) -> Vec<TeamId> {
+    pub fn teams_with_write(
+        &mut self,
+        pipeline_id: PipelineId
+    ) -> Vec<TeamId> {
         match *self {
             Cache::Sqlite(ref mut c) => c.teams_with_write(pipeline_id),
             Cache::Postgres(ref mut c) => c.teams_with_write(pipeline_id),
@@ -154,7 +161,9 @@ pub struct Postgres {
 }
 
 impl Postgres {
-    fn open<Q: IntoConnectParams>(params: Q) -> Result<Self, Box<Error + Send + Sync>> {
+    fn open<Q: IntoConnectParams>(
+        params: Q
+    ) -> Result<Self, Box<Error + Send + Sync>> {
         let conn = try!(PgConnection::connect(params, SslMode::None));
         try!(conn.batch_execute(r###"
             CREATE TABLE IF NOT EXISTS github_teams_with_write (

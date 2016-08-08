@@ -19,7 +19,9 @@ pub struct PostgresDb<P>
 impl<P> PostgresDb<P>
     where P: Pr + Into<String> + FromStr
 {
-    pub fn open<Q: IntoConnectParams>(params: Q) -> Result<Self, Box<Error + Send + Sync>> {
+    pub fn open<Q: IntoConnectParams>(
+        params: Q
+    ) -> Result<Self, Box<Error + Send + Sync>> {
         let conn = try!(Connection::connect(params, SslMode::None));
         try!(conn.batch_execute(r###"
             CREATE TABLE IF NOT EXISTS queue (
@@ -90,7 +92,7 @@ impl<P> Db<P> for PostgresDb<P>
         "###;
         let item = {
             let stmt = trans.prepare(sql).expect("Pop from queue");
-            let rows = stmt.query(&[&pipeline_id.0]).expect("Map pop from queue");
+            let rows = stmt.query(&[&pipeline_id.0]).expect("pop from queue");
             let rows = rows.iter();
             let mut rows = rows.map(|row| (
                 row.get::<_, i32>(0),

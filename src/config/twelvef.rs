@@ -79,8 +79,10 @@ impl GithubBuilder {
             Err(e) => return Err(GithubBuilderError::PjConnect(e)),
         };
         let pipelines: Box<PipelineConfig> = match pj_builder {
-            db::Builder::Sqlite(d) => Box::new(try!(sqlite::PipelineConfig::new(d))),
-            db::Builder::Postgres(d) => Box::new(try!(postgres::PipelineConfig::new(d))),
+            db::Builder::Sqlite(d) =>
+                Box::new(try!(sqlite::PipelineConfig::new(d))),
+            db::Builder::Postgres(d) =>
+                Box::new(try!(postgres::PipelineConfig::new(d))),
         };
         Ok(GithubBuilder{
             ci: try!(setup_ci(&env)),
@@ -119,8 +121,10 @@ fn setup_github<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
         Err(e) => return Err(GithubBuilderError::PjConnect(e)),
     };
     let projects: Box<github::ProjectsConfig> = match pj_builder {
-        db::Builder::Sqlite(d) => Box::new(try!(sqlite::GithubProjectsConfig::new(d))),
-        db::Builder::Postgres(d) => Box::new(try!(postgres::GithubProjectsConfig::new(d))),
+        db::Builder::Sqlite(d) =>
+            Box::new(try!(sqlite::GithubProjectsConfig::new(d))),
+        db::Builder::Postgres(d) =>
+            Box::new(try!(postgres::GithubProjectsConfig::new(d))),
     };
     let gh_key = try_env!(env, "UI_GITHUB_DB", UiGithubDb);
     let gh_builder = match db::Builder::from_str(&gh_key[..]) {
@@ -159,8 +163,10 @@ fn setup_jenkins<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
         Err(e) => return Err(GithubBuilderError::PjConnect(e)),
     };
     let pipelines: Box<jenkins::PipelinesConfig> = match pj_builder {
-        db::Builder::Sqlite(d) => Box::new(try!(sqlite::JenkinsPipelinesConfig::new(d))),
-        db::Builder::Postgres(d) => Box::new(try!(postgres::JenkinsPipelinesConfig::new(d))),
+        db::Builder::Sqlite(d) =>
+            Box::new(try!(sqlite::JenkinsPipelinesConfig::new(d))),
+        db::Builder::Postgres(d) =>
+            Box::new(try!(postgres::JenkinsPipelinesConfig::new(d))),
     };
     Ok(WorkerThread::start(jenkins::Worker::new(
         try_env!(env, "CI_JENKINS_LISTEN", CiJenkinsListen),
@@ -183,8 +189,10 @@ fn setup_github_status<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
         Err(e) => return Err(GithubBuilderError::PjConnect(e)),
     };
     let pipelines: Box<github_status::PipelinesConfig> = match pj_builder {
-        db::Builder::Sqlite(d) => Box::new(try!(sqlite::GithubStatusPipelinesConfig::new(d))),
-        db::Builder::Postgres(d) => Box::new(try!(postgres::GithubStatusPipelinesConfig::new(d))),
+        db::Builder::Sqlite(d) =>
+            Box::new(try!(sqlite::GithubStatusPipelinesConfig::new(d))),
+        db::Builder::Postgres(d) =>
+            Box::new(try!(postgres::GithubStatusPipelinesConfig::new(d))),
     };
     Ok(WorkerThread::start(github_status::Worker::new(
         try_env!(env, "CI_GITHUB_LISTEN", CiGithubListen),
@@ -214,8 +222,10 @@ fn setup_github_git<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
         Err(e) => return Err(GithubBuilderError::PjConnect(e)),
     };
     let pipelines: Box<github_git::PipelinesConfig> = match pj_builder {
-        db::Builder::Sqlite(d) => Box::new(try!(sqlite::GithubGitPipelinesConfig::new(d))),
-        db::Builder::Postgres(d) => Box::new(try!(postgres::GithubGitPipelinesConfig::new(d))),
+        db::Builder::Sqlite(d) =>
+            Box::new(try!(sqlite::GithubGitPipelinesConfig::new(d))),
+        db::Builder::Postgres(d) =>
+            Box::new(try!(postgres::GithubGitPipelinesConfig::new(d))),
     };
     Ok(WorkerThread::start(github_git::Worker::new(
         try_env!(env, "VCS_GITHUB_HOST", VcsGithubHost),
@@ -234,8 +244,10 @@ fn setup_git<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
         Err(e) => return Err(GithubBuilderError::PjConnect(e)),
     };
     let pipelines: Box<git::PipelinesConfig> = match pj_builder {
-        db::Builder::Sqlite(d) => Box::new(try!(sqlite::GitPipelinesConfig::new(d))),
-        db::Builder::Postgres(d) => Box::new(try!(postgres::GitPipelinesConfig::new(d))),
+        db::Builder::Sqlite(d) =>
+            Box::new(try!(sqlite::GitPipelinesConfig::new(d))),
+        db::Builder::Postgres(d) =>
+            Box::new(try!(postgres::GitPipelinesConfig::new(d))),
     };
     Ok(WorkerThread::start(git::Worker::new(
         try_env!(env, "VCS_GIT_EXECUTABLE", VcsGitExecutable),
@@ -260,8 +272,10 @@ fn setup_view<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
         Err(e) => return Err(GithubBuilderError::PjConnect(e)),
     };
     let pipelines: Box<view::PipelinesConfig> = match pj_builder {
-        db::Builder::Sqlite(d) => Box::new(try!(sqlite::ViewPipelinesConfig::new(d))),
-        db::Builder::Postgres(d) => Box::new(try!(postgres::ViewPipelinesConfig::new(d))),
+        db::Builder::Sqlite(d) =>
+            Box::new(try!(sqlite::ViewPipelinesConfig::new(d))),
+        db::Builder::Postgres(d) =>
+            Box::new(try!(postgres::ViewPipelinesConfig::new(d))),
     };
     Ok(WorkerThread::start(view::Worker::<github::Pr>::new(
         try_env!(env, "VIEW_LISTEN", ViewListen),

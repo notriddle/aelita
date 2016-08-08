@@ -74,13 +74,20 @@ impl GithubBuilder {
         if config.lookup("github").is_none() {
             return Err(GithubBuilderError::NoConfigGithub);
         }
-        let mut github_projects = StaticGithubProjectsConfig::new();
-        let mut buildbot_pipelines = StaticBuildbotPipelinesConfig::new();
-        let mut github_status_pipelines = StaticGithubStatusPipelinesConfig::new();
-        let mut jenkins_pipelines = StaticJenkinsPipelinesConfig::new();
-        let mut git_pipelines = StaticGitPipelinesConfig::new();
-        let mut github_git_pipelines = StaticGithubGitPipelinesConfig::new();
-        let mut view_pipelines = StaticViewPipelinesConfig::new();
+        let mut github_projects =
+            StaticGithubProjectsConfig::new();
+        let mut buildbot_pipelines =
+            StaticBuildbotPipelinesConfig::new();
+        let mut github_status_pipelines =
+            StaticGithubStatusPipelinesConfig::new();
+        let mut jenkins_pipelines =
+            StaticJenkinsPipelinesConfig::new();
+        let mut git_pipelines =
+            StaticGitPipelinesConfig::new();
+        let mut github_git_pipelines =
+            StaticGithubGitPipelinesConfig::new();
+        let mut view_pipelines =
+            StaticViewPipelinesConfig::new();
         let mut pipeline_id = PipelineId(0);
         for (name, def) in config_projects.iter() {
             if def.as_table().is_none() {
@@ -113,7 +120,8 @@ impl GithubBuilder {
                 pipeline_id,
             ) {
                 Ok(()) | Err(SetupError::NotFoundConfig) => {},
-                Err(e) => return Err(GithubBuilderError::GithubStatusProject(e)),
+                Err(e) =>
+                    return Err(GithubBuilderError::GithubStatusProject(e)),
             }
             match jenkins_pipelines.add_pipeline(
                 name,
@@ -162,7 +170,8 @@ impl GithubBuilder {
                     pipeline_id,
                 ) {
                     Ok(()) | Err(SetupError::NotFoundConfig) => {},
-                    Err(e) => return Err(GithubBuilderError::BuildbotProject(e)),
+                    Err(e) =>
+                        return Err(GithubBuilderError::BuildbotProject(e)),
                 }
                 match github_status_pipelines.add_pipeline(
                     name,
@@ -171,7 +180,8 @@ impl GithubBuilder {
                     pipeline_id,
                 ) {
                     Ok(()) | Err(SetupError::NotFoundConfig) => {},
-                    Err(e) => return Err(GithubBuilderError::GithubStatusProject(e)),
+                    Err(e) =>
+                        return Err(GithubBuilderError::GithubStatusProject(e)),
                 }
                 match jenkins_pipelines.add_pipeline(
                     name,
@@ -180,7 +190,8 @@ impl GithubBuilder {
                     pipeline_id,
                 ) {
                     Ok(()) | Err(SetupError::NotFoundConfig) => {},
-                    Err(e) => return Err(GithubBuilderError::JenkinsProject(e)),
+                    Err(e) =>
+                        return Err(GithubBuilderError::JenkinsProject(e)),
                 }
                 match git_pipelines.add_pipeline(
                     name,
@@ -190,7 +201,8 @@ impl GithubBuilder {
                     true
                 ) {
                     Ok(()) | Err(SetupError::NotFoundConfig) => {},
-                    Err(e) => return Err(GithubBuilderError::GitProject(e)),
+                    Err(e) =>
+                        return Err(GithubBuilderError::GitProject(e)),
                 }
                 match github_git_pipelines.add_pipeline(
                     name,
@@ -200,7 +212,8 @@ impl GithubBuilder {
                     true
                 ) {
                     Ok(()) | Err(SetupError::NotFoundConfig) => {},
-                    Err(e) => return Err(GithubBuilderError::GithubGitProject(e)),
+                    Err(e) =>
+                        return Err(GithubBuilderError::GithubGitProject(e)),
                 }
                 match view_pipelines.add_pipeline(
                     name,
@@ -209,7 +222,8 @@ impl GithubBuilder {
                     pipeline_id,
                 ) {
                     Ok(()) | Err(SetupError::NotFoundConfig) => {},
-                    Err(e) => return Err(GithubBuilderError::ViewProject(e)),
+                    Err(e) =>
+                        return Err(GithubBuilderError::ViewProject(e)),
                 }
                 pipeline_id.0 += 1;
             }
@@ -224,11 +238,12 @@ impl GithubBuilder {
             Err(SetupError::NotFoundConfig) => None,
             Err(e) => return Err(GithubBuilderError::Buildbot(e)),
         };
-        let github_status = match setup_github_status(config, github_status_pipelines) {
-            Ok(github_status) => Some(WorkerThread::start(github_status)),
-            Err(SetupError::NotFoundConfig) => None,
-            Err(e) => return Err(GithubBuilderError::GithubStatus(e)),
-        };
+        let github_status =
+            match setup_github_status(config, github_status_pipelines) {
+                Ok(github_status) => Some(WorkerThread::start(github_status)),
+                Err(SetupError::NotFoundConfig) => None,
+                Err(e) => return Err(GithubBuilderError::GithubStatus(e)),
+            };
         let jenkins = match setup_jenkins(config, jenkins_pipelines) {
             Ok(jenkins) => Some(WorkerThread::start(jenkins)),
             Err(SetupError::NotFoundConfig) => None,
@@ -468,8 +483,10 @@ fn setup_github(config: &toml::Value, projects: StaticGithubProjectsConfig)
     ))
 }
 
-fn setup_buildbot(config: &toml::Value, pipelines: StaticBuildbotPipelinesConfig)
-        -> Result<buildbot::Worker, SetupError<BuildbotArg>> {
+fn setup_buildbot(
+    config: &toml::Value,
+    pipelines: StaticBuildbotPipelinesConfig
+) -> Result<buildbot::Worker, SetupError<BuildbotArg>> {
     let user = if let Some(user) = config.lookup("buildbot.user") {
         if let Some(user) = user.as_str() {
             Some(user.to_owned())
@@ -501,19 +518,40 @@ fn setup_buildbot(config: &toml::Value, pipelines: StaticBuildbotPipelinesConfig
     ))
 }
 
-fn setup_github_status(config: &toml::Value, pipelines: StaticGithubStatusPipelinesConfig)
-        -> Result<github_status::Worker, SetupError<GithubStatusArg>> {
+fn setup_github_status(
+    config: &toml::Value,
+    pipelines: StaticGithubStatusPipelinesConfig
+) -> Result<github_status::Worker, SetupError<GithubStatusArg>> {
     Ok(github_status::Worker::new(
-        toml_arg!(config, "github.status", "listen", String, GithubStatusArg::Listen),
-        toml_arg_default!(config, "github.status", "secret", String, GithubStatusArg::Secret,
-            toml_arg!(config, "github", "secret", String, GithubStatusArg::Secret)
+        toml_arg!(
+            config,
+            "github.status",
+            "listen",
+            String,
+            GithubStatusArg::Listen
+        ),
+        toml_arg_default!(
+            config,
+            "github.status",
+            "secret",
+            String,
+            GithubStatusArg::Secret,
+            toml_arg!(
+                config,
+                "github",
+                "secret",
+                String,
+                GithubStatusArg::Secret
+            )
         ),
         Box::new(pipelines),
     ))
 }
 
-fn setup_jenkins(config: &toml::Value, pipelines: StaticJenkinsPipelinesConfig)
-        -> Result<jenkins::Worker, SetupError<JenkinsArg>> {
+fn setup_jenkins(
+    config: &toml::Value,
+    pipelines: StaticJenkinsPipelinesConfig
+) -> Result<jenkins::Worker, SetupError<JenkinsArg>> {
     let user = if let Some(user) = config.lookup("jenkins.user") {
         if let Some(user) = user.as_str() {
             Some(user.to_owned())
@@ -545,8 +583,10 @@ fn setup_jenkins(config: &toml::Value, pipelines: StaticJenkinsPipelinesConfig)
     ))
 }
 
-fn setup_git(config: &toml::Value, pipelines: StaticGitPipelinesConfig)
-        -> Result<git::Worker, SetupError<GitArg>> {
+fn setup_git(
+    config: &toml::Value,
+    pipelines: StaticGitPipelinesConfig
+) -> Result<git::Worker, SetupError<GitArg>> {
     Ok(git::Worker::new(
         toml_arg_default!(config, "git", "executable",
             String, GitArg::Executable,
@@ -565,23 +605,42 @@ fn setup_git(config: &toml::Value, pipelines: StaticGitPipelinesConfig)
     ))
 }
 
-fn setup_github_git(config: &toml::Value, pipelines: StaticGithubGitPipelinesConfig)
-        -> Result<github_git::Worker, SetupError<GithubGitArg>> {
+fn setup_github_git(
+    config: &toml::Value,
+    pipelines: StaticGithubGitPipelinesConfig
+) -> Result<github_git::Worker, SetupError<GithubGitArg>> {
     Ok(github_git::Worker::new(
-        toml_arg_default!(config, "github.git", "host", String, GithubGitArg::Host,
-            toml_arg_default!(config, "github", "host", String, GithubGitArg::Host,
+        toml_arg_default!(
+            config,
+            "github.git",
+            "host",
+            String,
+            GithubGitArg::Host,
+            toml_arg_default!(
+                config,
+                "github",
+                "host",
+                String,
+                GithubGitArg::Host,
                 "https://api.github.com"
             )
         ),
-        toml_arg_default!(config, "github.git", "token", String, GithubGitArg::Token,
+        toml_arg_default!(
+            config,
+            "github.git",
+            "token",
+            String,
+            GithubGitArg::Token,
             toml_arg!(config, "github", "token", String, GithubGitArg::Token)
         ),
         Box::new(pipelines),
     ))
 }
 
-fn setup_view(config: &toml::Value, pipelines: StaticViewPipelinesConfig)
-        -> Result<view::Worker<github::Pr>, SetupError<ViewArg>> {
+fn setup_view(
+    config: &toml::Value,
+    pipelines: StaticViewPipelinesConfig
+) -> Result<view::Worker<github::Pr>, SetupError<ViewArg>> {
     let auth = if let Some(auth) = config.lookup("view.auth") {
         if auth.as_table().is_none() {
             return Err(SetupError::InvalidArg(ViewArg::Auth, Ty::Table));
@@ -638,7 +697,9 @@ impl PipelineConfig for StaticPipelineConfig {
     }
 }
 
-struct StaticGithubProjectsConfig(HashMap<github::Repo, github::RepoPipelines>);
+struct StaticGithubProjectsConfig(
+    HashMap<github::Repo, github::RepoPipelines>
+);
 
 impl StaticGithubProjectsConfig {
     fn new() -> Self {
@@ -690,8 +751,10 @@ impl StaticGithubProjectsConfig {
 }
 
 impl github::ProjectsConfig for StaticGithubProjectsConfig {
-    fn pipelines_by_repo(&self, repo: &github::Repo)
-            -> Option<github::RepoPipelines> {
+    fn pipelines_by_repo(
+        &self,
+        repo: &github::Repo
+    ) -> Option<github::RepoPipelines> {
         self.0.get(repo).map(Clone::clone)
     }
     fn repo_by_pipeline(&self, pipeline_id: PipelineId)
@@ -842,7 +905,10 @@ impl github_status::PipelinesConfig for StaticGithubStatusPipelinesConfig {
             -> Option<github_status::Repo> {
         return self.0.get(&pipeline_id).map(Clone::clone)
     }
-    fn pipelines_by_repo(&self, repo: &github_status::Repo) -> Vec<PipelineId> {
+    fn pipelines_by_repo(
+        &self,
+        repo: &github_status::Repo
+    ) -> Vec<PipelineId> {
         let mut ret_val = vec![];
         for (pipeline_id, i_repo) in self.0.iter() {
             if repo == i_repo {

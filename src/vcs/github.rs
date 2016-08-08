@@ -42,7 +42,11 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn new(host: String, token: String, pipelines: Box<PipelinesConfig>) -> Worker {
+    pub fn new(
+        host: String,
+        token: String,
+        pipelines: Box<PipelinesConfig>
+    ) -> Worker {
         let mut authorization: Vec<u8> = b"token ".to_vec();
         authorization.extend(token.bytes());
         Worker{
