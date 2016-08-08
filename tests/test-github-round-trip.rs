@@ -1047,9 +1047,9 @@ fn one_item_team_github_round_trip_with_postgres() {
         .arg("-p")
         .arg("5432:5432")
         .arg("-e")
-        .arg("POSTGRES_USER=aelita")
+        .arg("POSTGRES_USER=postgres")
         .arg("-e")
-        .arg("POSTGRES_PASSWORD=aelita")
+        .arg("POSTGRES_PASSWORD=")
         .arg("-d")
         .arg("postgres")
         .output()
@@ -1333,9 +1333,9 @@ fn one_item_github_round_trip_cloud_with_postgres_12f() {
         .arg("-p")
         .arg("5432:5432")
         .arg("-e")
-        .arg("POSTGRES_USER=aelita")
+        .arg("POSTGRES_USER=postgres")
         .arg("-e")
-        .arg("POSTGRES_PASSWORD=aelita")
+        .arg("POSTGRES_PASSWORD=")
         .arg("-d")
         .arg("postgres")
         .output()
@@ -1354,11 +1354,11 @@ fn one_item_github_round_trip_cloud_with_postgres_12f() {
         .env("AELITA_UI_TYPE",
              "github")
         .env("AELITA_PIPELINE_DB",
-             "postgresql://aelita:aelita@localhost/aelita")
+             "postgresql://postgres@localhost/postgres")
         .env("AELITA_PROJECT_DB",
-             "postgresql://aelita:aelita@localhost/aelita")
+             "postgresql://postgres@localhost/postgres")
         .env("AELITA_UI_GITHUB_DB",
-             "postgresql://aelita:aelita@localhost/aelita")
+             "postgresql://postgres@localhost/postgres")
         .env("AELITA_UI_GITHUB_LISTEN",
              "localhost:9001")
         .env("AELITA_UI_GITHUB_HOST",
@@ -1396,7 +1396,7 @@ fn one_item_github_round_trip_cloud_with_postgres_12f() {
     info!("Add the pipeline to the database.");
     {
         let conn = postgres::Connection::connect(
-            "postgresql://aelita:aelita@localhost/aelita",
+            "postgresql://postgres@localhost/postgres",
             postgres::SslMode::None,
         ).unwrap();
         conn.batch_execute(r###"

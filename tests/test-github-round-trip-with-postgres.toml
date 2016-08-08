@@ -2,7 +2,7 @@
 
 [config]
 git = {}
-db = "postgresql://aelita:aelita@localhost/aelita"
+db = "postgresql://postgres@localhost/postgres"
 
 [config.github]
 listen = "localhost:9001"
