@@ -143,7 +143,7 @@ def login():
     return github.authorize(scope="user,repo")
 
 
-@app.route('/logout')
+@app.route('/logout', methods=['POST')
 def logout():
     session['user_id'] = None
     return redirect(url_for('index'))
@@ -166,7 +166,7 @@ def authorized(oauth_token):
     return redirect(url_for('manage'))
 
 
-@app.route('/manage')
+@app.route('/manage', methods=['GET', 'POST')
 def manage():
     user = get_user()
     if user is None:
