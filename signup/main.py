@@ -15,6 +15,8 @@ app.config['BOT_USERNAME'] = os.environ['AELITA_BOT_USERNAME']
 app.config['BOT_BASEURL'] = os.environ['AELITA_BOT_BASEURL']
 app.config['BOT_DBURI'] = os.environ['AELITA_BOT_DBURI']
 app.config['BOT_ACCESS_TOKEN'] = os.environ['AELITA_BOT_ACCESS_TOKEN']
+app.config['BOT_NOTICE_SECRET'] = os.environ['AELITA_BOT_NOTICE_SECRET']
+app.config['BOT_STATUS_SECRET'] = os.environ['AELITA_BOT_STATUS_SECRET']
 app.secret_key = os.environ['AELITA_VIEW_SECRET']
 github = GitHub(app)
 engine = create_engine(app.config['BOT_DBURI'])
@@ -143,7 +145,7 @@ def login():
     return github.authorize(scope="user,repo")
 
 
-@app.route('/logout')
+@app.route('/logout', methods=['POST'])
 def logout():
     session['user_id'] = None
     return redirect(url_for('index'))
@@ -166,7 +168,7 @@ def authorized(oauth_token):
     return redirect(url_for('manage'))
 
 
-@app.route('/manage')
+@app.route('/manage', methods=['GET', 'POST'])
 def manage():
     user = get_user()
     if user is None:
@@ -182,13 +184,15 @@ def manage():
             "owner": repo['owner']['login'],
             "repo": repo['name'],
             "name": repo['full_name'],
+            "id": repo['id'],
         }
         if request.method == 'POST':
-            if 'add' in request.form and request.form['add'] == repo['id'] and \
+            if 'add' in request.form and \
+                    int(request.form['add']) == repo['id'] and \
                     on_repo is None:
                 return add_repo(repo, request.form['context'])
             elif 'remove' in request.form and \
-                    request.form['remove'] == repo.id and \
+                    int(request.form['remove']) == repo['id'] and \
                     on_repo is not None:
                 return remove_repo(repo, on_repo)
         if on_repo is None:
@@ -197,6 +201,7 @@ def manage():
             present.append(repo_def)
     return render_template(
         'manage.html',
+        username=user.username,
         non_present=non_present,
         present=present,
         base_url=app.config['BOT_BASEURL']
@@ -204,9 +209,12 @@ def manage():
 
 def add_repo(repo, context):
     user = get_user()
+    # Add repository to our database
+    on_repo = GithubProjects(None, None, repo['owner']['login'], repo['name'])
+    on_repo = db_session.merge(on_repo)
     pipeline_id = on_repo.pipeline_id
-    on_repo = GithubProjects(pipeline_id, None, repo['owner']['login'], repo['name'])
-    db_session.add(on_repo)
+    pipeline = Pipeline(pipeline_id, repo['full_name'])
+    db_session.add(pipeline)
     status = GithubStatusPipelines(
         pipeline_id,
         repo['owner']['login'],
@@ -221,12 +229,13 @@ def add_repo(repo, context):
     )
     db_session.add(git)
     db_session.commit()
+    # Add our account as a collaborator on Github
     headers = {
         "Content-Type": "application/vnd.github.swamp-thing-preview+json",
     }
     invite=github.request(
         'PUT',
-        '/repos/' + repo['full_name'] + '/collaborators/' + \
+        'repos/' + repo['full_name'] + '/collaborators/' + \
             app.config['BOT_USERNAME'],
         headers=headers,
     )
@@ -239,24 +248,69 @@ def add_repo(repo, context):
         invite.url,
         headers=headers,
     )
+    # Add our webhooks
+    github.post(
+        'repos/' + repo['full_name'] + '/hooks',
+        {
+            "name": "web",
+            "active": True,
+            "config": {
+                "url": app.config['BOT_BASEURL'] + '/github-notice',
+                "content_type": "json",
+                "secret": app.config['BOT_NOTICE_SECRET']
+            },
+            "events": [ "issue_comment", "pull_request", "team_add" ]
+        }
+    )
+    github.post(
+        'repos/' + repo['full_name'] + '/hooks',
+        {
+            "name": "web",
+            "active": True,
+            "config": {
+                "url": app.config['BOT_BASEURL'] + '/github-status',
+                "content_type": "json",
+                "secret": app.config['BOT_STATUS_SECRET']
+            },
+            "events": [ "status" ]
+        }
+    )
     return redirect(url_for('manage'))
 
 def remove_repo(repo, on_repo):
     user = get_user()
+    # Remove from our database
     pipeline_id = on_repo.pipeline_id
     db_session.delete(on_repo)
+    pipeline = Pipeline.query.filter_by(pipeline_id=pipeline_id).first()
+    if not pipeline is None: db_session.delete(pipeline)
     status = GithubStatusPipelines.query \
             .filter_by(pipeline_id=pipeline_id) \
             .first();
-    db_session.delete(status)
+    if not status is None: db_session.delete(status)
     git = GithubGitPipelines.query \
             .filter_by(pipeline_id=pipeline_id) \
             .first();
-    db_session.delete(git)
+    if not git is None: db_session.delete(git)
     db_session.commit()
+    # Remove our collaboratorship
     github.raw_request(
         'DELETE',
-        '/repos/' + repo['full_name'] + '/collaborators/' + \
+        'repos/' + repo['full_name'] + '/collaborators/' + \
             app.config['BOT_USERNAME']
     )
+    # Remove our webhooks
+    hooks = github.get(
+        'repos/' + repo['full_name'] + '/hooks'
+    )
+    my_urls = {
+        app.config['BOT_BASEURL'] + '/github-notice',
+        app.config['BOT_BASEURL'] + '/github-status',
+    }
+    for webhook in hooks:
+        if webhook['name'] == 'web' and webhook['config']['url'] in my_urls:
+            github.request(
+                'DELETE',
+                'repos/' + repo['full_name'] + '/hooks/' + webhook['id']
+            )
     return redirect(url_for('manage'))
