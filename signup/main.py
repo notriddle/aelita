@@ -197,6 +197,7 @@ def manage():
             present.append(repo_def)
     return render_template(
         'manage.html',
+        username=user.username,
         non_present=non_present,
         present=present,
         base_url=app.config['BOT_BASEURL']

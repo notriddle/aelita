@@ -83,6 +83,18 @@
     .tbb:hover, .tbb:active, .tbb:focus {
         background: #C00;
     }
+    .tbg {
+        border: solid 1px #CCC;
+        border-bottom: solid 2px #999;
+        float: right;
+        padding: 6px 8px;
+        font-size: 0.75em;
+        border-radius: 8px;
+        color: #000;
+    }
+    .tbg:hover, .tbg:active, .tbg:focus {
+        background: #666;
+    }
     .f {
        width: 20px;
     }
@@ -91,6 +103,7 @@
         width: 100%;
     }
 </style>
+<button formaction="/logout" formmethod="POST" class="tb tbg">Log out</button>
 <h1>{{ username }}</h1>
 <form action="" method="POST">
 <table class=blank>
