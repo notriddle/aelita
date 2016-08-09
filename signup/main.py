@@ -143,7 +143,7 @@ def login():
     return github.authorize(scope="user,repo")
 
 
-@app.route('/logout', methods=['POST')
+@app.route('/logout', methods=['POST'])
 def logout():
     session['user_id'] = None
     return redirect(url_for('index'))
@@ -166,7 +166,7 @@ def authorized(oauth_token):
     return redirect(url_for('manage'))
 
 
-@app.route('/manage', methods=['GET', 'POST')
+@app.route('/manage', methods=['GET', 'POST'])
 def manage():
     user = get_user()
     if user is None:
@@ -182,6 +182,7 @@ def manage():
             "owner": repo['owner']['login'],
             "repo": repo['name'],
             "name": repo['full_name'],
+            "id": repo['id'],
         }
         if request.method == 'POST':
             if 'add' in request.form and request.form['add'] == repo['id'] and \
