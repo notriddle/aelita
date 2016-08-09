@@ -114,10 +114,6 @@ spec:
               value: 0.0.0.0:8000
             - name: AELITA_VIEW_SECRET
               value: INSERT_VIEW_SECRET_HERE
-            - name: AELITA_BOT_NOTICE_SECRET
-              value: INSERT_GITHUB_WEBHOOK_SECRET_HERE
-            - name: AELITA_BOT_STATUS_SECRET
-              value: INSERT_GITHUB_STATUS_WEBHOOK_SECRET_HERE
 
 ---
 
@@ -167,6 +163,10 @@ spec:
               value: INSERT_GITHUB_PERSONAL_ACCESS_TOKEN_HERE
             - name: AELITA_VIEW_SECRET
               value: INSERT_VIEW_SECRET_HERE
+            - name: AELITA_BOT_NOTICE_SECRET
+              value: INSERT_GITHUB_WEBHOOK_SECRET_HERE
+            - name: AELITA_BOT_STATUS_SECRET
+              value: INSERT_GITHUB_STATUS_WEBHOOK_SECRET_HERE
 
 ---
 
