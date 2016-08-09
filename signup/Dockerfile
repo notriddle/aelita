@@ -1,8 +1,8 @@
-FROM python:3.4-alpine
+FROM alpine:edge
+RUN apk add --no-cache postgresql-libs python2 py-pip py-psycopg2 && \
+    pip install flask GitHub-Flask Flask-SQLAlchemy
 COPY . /app
 WORKDIR /app
-RUN pip install -r requirements.txt
-RUN pip install gunicorn
 CMD [ "/usr/local/bin/gunicorn", "-w", "2", "-b", ":8000", "main:app" ]
 EXPOSE 8000
 
