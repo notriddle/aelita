@@ -212,6 +212,7 @@ def add_repo(repo, context):
     # Add repository to our database
     on_repo = GithubProjects(None, None, repo['owner']['login'], repo['name'])
     on_repo = db_session.merge(on_repo)
+    db_session.add(on_repo)
     pipeline_id = on_repo.pipeline_id
     pipeline = Pipeline(pipeline_id, repo['full_name'])
     db_session.add(pipeline)
