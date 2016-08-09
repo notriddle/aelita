@@ -114,6 +114,10 @@ spec:
               value: 0.0.0.0:8000
             - name: AELITA_VIEW_SECRET
               value: INSERT_VIEW_SECRET_HERE
+            - name: AELITA_BOT_NOTICE_SECRET
+              value: INSERT_GITHUB_WEBHOOK_SECRET_HERE
+            - name: AELITA_BOT_STATUS_SECRET
+              value: INSERT_GITHUB_STATUS_WEBHOOK_SECRET_HERE
 
 ---
 
@@ -156,7 +160,7 @@ spec:
             - name: AELITA_BOT_USERNAME
               value: aelita-mergebot
             - name: AELITA_BOT_BASEURL
-              value: https://aelita-mergebot.xyz/
+              value: http://aelita-mergebot.xyz
             - name: AELITA_BOT_DBURI
               value: postgresql://postgres:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE@postgres-configs
             - name: AELITA_BOT_ACCESS_TOKEN
