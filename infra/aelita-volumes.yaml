@@ -2,9 +2,11 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: aelita-pv-pipelines
+  labels:
+    type: aelita-pv-pipelines
 spec:
   capacity:
-    storage: 5Gi
+    storage: 50Gi
   accessModes:
     - ReadWriteOnce
   gcePersistentDisk:
@@ -17,9 +19,11 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: aelita-pv-caches
+  labels:
+    type: aelita-pv-caches
 spec:
   capacity:
-    storage: 5Gi
+    storage: 50Gi
   accessModes:
     - ReadWriteOnce
   gcePersistentDisk:
@@ -32,9 +36,11 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: aelita-pv-configs
+  labels:
+    type: aelita-pv-configs
 spec:
   capacity:
-    storage: 5Gi
+    storage: 50Gi
   accessModes:
     - ReadWriteOnce
   gcePersistentDisk:
