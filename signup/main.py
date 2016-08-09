@@ -174,8 +174,9 @@ def manage():
     if user is None:
         return redirect(url_for('logout'))
     all_repos = github.get('user/repos')
-    present=[]
-    non_present=[]
+    present = []
+    non_present = []
+    edit = None
     for repo in all_repos:
         on_repo = GithubProjects.query \
             .filter_by(owner=repo['owner']['login'],repo=repo['name']) \
@@ -195,16 +196,33 @@ def manage():
                     int(request.form['remove']) == repo['id'] and \
                     on_repo is not None:
                 return remove_repo(repo, on_repo)
+            elif 'edit' in request.form and \
+                    int(request.form['edit']) == repo['id'] and \
+                    on_repo is not None:
+                return edit_repo(on_repo)
         if on_repo is None:
             non_present.append(repo_def)
         else:
             present.append(repo_def)
+            if request.args.get('edit') and \
+                    request.args.get('edit') == repo['id']:
+                edit = repo_def
+                on_status = GithubStatusPipelines.query \
+                    .filter_by(pipeline_id=on_repo.pipeline_id) \
+                    .first()
+                on_git = GithubGitPipelines.query \
+                    .filter_by(pipeline_id=on_repo.pipeline_id) \
+                    .first()
+                edit['context'] = on_status.context
+                edit['master_branch'] = on_status.master_branch
+                edit['staging_branch'] = on_status.staging_branch
     return render_template(
         'manage.html',
         username=user.username,
         non_present=non_present,
         present=present,
-        base_url=app.config['BOT_BASEURL']
+        edit=edit,
+        base_url=app.config['BOT_BASEURL'],
     )
 
 def add_repo(repo, context):
@@ -276,6 +294,7 @@ def add_repo(repo, context):
             "events": [ "status" ]
         }
     )
+    flash("Deleted successfully")
     return redirect(url_for('manage'))
 
 def remove_repo(repo, on_repo):
@@ -314,4 +333,22 @@ def remove_repo(repo, on_repo):
                 'DELETE',
                 'repos/' + repo['full_name'] + '/hooks/' + webhook['id']
             )
+    flash("Deleted successfully")
+    return redirect(url_for('manage'))
+
+def edit_repo(project):
+    user = get_user()
+    # Remove from our database
+    pipeline_id = on_repo.pipeline_id
+    status = GithubStatusPipelines.query \
+            .filter_by(pipeline_id=pipeline_id) \
+            .first();
+    status.context = request.form['context']
+    git = GithubGitPipelines.query \
+            .filter_by(pipeline_id=pipeline_id) \
+            .first();
+    git.master_branch = request.form['master_branch']
+    git.staging_branch = request.form['staging_branch']
+    db_session.commit()
+    flash("Saved successfully")
     return redirect(url_for('manage'))

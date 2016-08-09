@@ -99,22 +99,85 @@
        width: 20px;
     }
     .blank {
-        padding: 10px 0;
         width: 100%;
     }
+    .blank td {
+        padding: 10px 0 10px 8px;
+        white-space: nowrap;
+    }
+    .blank td:first-child {
+        text-align: right;
+        padding-right: 0;
+    }
+.flashes {
+  background: #FFD;
+  border: solid 1px #AA0;
+  margin: 8px 0;
+  padding: 0;
+  border-radius: 8px;
+}
+.flashes li {
+  list-style: none;
+  padding: 8px 10px;
+  margin: 0;
+}
+.flashes li + li {
+  border-top: solid 1px #AA0;
+}
 </style>
 <form action="/logout" method="POST"><button class="tb tbg">Log out</button></form>
 <h1>{{ username }}</h1>
+{% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <ul class=flashes>
+    {% for message in messages %}
+      <li>{{ message }}</li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+{% if edit %}
 <form action="" method="POST">
+<h2>{{ edit.name }}</h2>
 <table class=blank>
-<td align=right><label for=context>Using</label>&nbsp;</td>
+<tr>
+<td>&rarr;</td>
+<td><a href="{{ base_url }}/{{ edit.name }}">Show queue</a></td>
+</tr>
+<tr>
+<td align=right><label for=context>Required context</label></td>
 <td width="100%"><input
     type=text
     name=context
     id=context
-    value="continuous-integration/travis-ci/push"
+    value="{{ edit.context }}"
 ></td>
+</tr>
+<tr>
+<td align=right><label for=master>Master branch</label></td>
+<td width="100%"><input
+    type=text
+    name=master_branch
+    id=master_branch
+    value="{{ edit.master_branch }}"
+></td>
+</tr>
+<tr>
+<td align=right><label for=staging>Staging branch</label></td>
+<td width="100%"><input
+    type=text
+    name=staging_branch
+    id=staging_branch
+    value="{{ edit.staging_branch }}"
+></td>
+</tr>
+<tr>
+<td></td>
+<td><button name="edit" value="{{ edit.id }}">Save</button></td>
 </table>
+</form>
+{% else %}
+<form action="" method="POST">
 <table class=table>
     <thead>
         <tr><th></th><th>Repo</th></tr>
@@ -144,10 +207,11 @@
                     &times;
                 </button>
             </td>
-            <td class=fill-link><a href="{{ base_url }}/{{ repo.name }}">
+            <td class=fill-link><a href="?edit={{ repo.id }}">
                 {{ repo.name }}
             </a></td>
         </tr>
     {% endfor %}</tbody>
 </table>
 </form>
+{% endif %}
