@@ -1,19 +1,24 @@
-aelita-mergebot.xyz {
-    tls info@aelitabot.xyz
+aelita-mergebot.xyz:80 {
+    #tls info@aelitabot.xyz
+    tls off
     proxy /github-notice http://aelita:6000
     proxy /github-status http://aelita:5000
     redir / https://aelitabot.xyz/ 301
     proxy / http://aelita:8000/
 }
 
-aelitabot.xyz {
-    tls info@aelitabot.xyz
-    proxy / http://signup/
+aelitabot.xyz:80 {
+    #tls info@aelitabot.xyz
+    tls off
+    proxy / http://signup:8000 {
+        proxy_header Host {host}
+    }
     gzip
 }
 
-www.aelitabot.xyz, www.aelita-mergebot.xyz {
-    tls info@aelitabot.xyz
+www.aelitabot.xyz:80, www.aelita-mergebot.xyz:80 {
+    #tls info@aelitabot.xyz
+    tls off
     redir https://aelitabot.xyz/{uri} 301
 }
 

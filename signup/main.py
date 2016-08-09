@@ -1,5 +1,5 @@
 from flask import Flask, g, redirect, render_template, request, session
-from flask import url_for
+from flask import flash, url_for
 from flask_github import GitHub
 import os
 import requests
@@ -132,7 +132,7 @@ def token_getter():
 
 @app.route('/')
 def index():
-    if 'user_id' in session:
+    if 'user_id' not in session:
         return render_template('index.html')
     else:
         return redirect(url_for('manage'))
@@ -159,7 +159,7 @@ def authorized(oauth_token):
     if user is None:
         user = User(oauth_token)
         g.user = user
-        user.username = github.get('user').login
+        user.username = github.get('user')['login']
         db_session.add(user)
         db_session.commit()
     session['user_id'] = user.user_id
@@ -171,20 +171,20 @@ def manage():
     user = get_user()
     if user is None:
         return redirect(url_for('logout'))
-    all_repos = github.get(user.username + '/repos')
+    all_repos = github.get('user/repos')
     present=[]
     non_present=[]
     for repo in all_repos:
         on_repo = GithubProjects.query \
-            .filter_by(owner=repo.owner.login,repo=repo.name) \
+            .filter_by(owner=repo['owner']['login'],repo=repo['name']) \
             .first()
         repo_def = {
-            "owner": repo.owner.login,
-            "repo": repo.name,
-            "name": repo.full_name,
+            "owner": repo['owner']['login'],
+            "repo": repo['name'],
+            "name": repo['full_name'],
         }
         if request.method == 'POST':
-            if 'add' in request.form and request.form['add'] == repo.id and \
+            if 'add' in request.form and request.form['add'] == repo['id'] and \
                     on_repo is None:
                 return add_repo(repo, request.form['context'])
             elif 'remove' in request.form and \
@@ -192,32 +192,32 @@ def manage():
                     on_repo is not None:
                 return remove_repo(repo, on_repo)
         if on_repo is None:
-            non_present.push(repo_def)
+            non_present.append(repo_def)
         else:
-            present.push(repo_def)
+            present.append(repo_def)
     return render_template(
         'manage.html',
-        non_present=None,
-        present=None,
+        non_present=non_present,
+        present=present,
         base_url=app.config['BOT_BASEURL']
     )
 
 def add_repo(repo, context):
     user = get_user()
     pipeline_id = on_repo.pipeline_id
-    on_repo = GithubProjects(pipeline_id, None, repo.owner.login, repo.name)
+    on_repo = GithubProjects(pipeline_id, None, repo['owner']['login'], repo['name'])
     db_session.add(on_repo)
     status = GithubStatusPipelines(
         pipeline_id,
-        repo.owner.login,
-        repo.name,
+        repo['owner']['login'],
+        repo['name'],
         context
     )
     db_session.add(status)
     git = GithubGitPipelines(
         pipeline_id,
-        repo.owner.login,
-        repo.name
+        repo['owner']['login'],
+        repo['name']
     )
     db_session.add(git)
     db_session.commit()
@@ -226,7 +226,7 @@ def add_repo(repo, context):
     }
     invite=github.request(
         'PUT',
-        '/repos/' + repo.full_name + '/collaborators/' + \
+        '/repos/' + repo['full_name'] + '/collaborators/' + \
             app.config['BOT_USERNAME'],
         headers=headers,
     )
@@ -256,7 +256,7 @@ def remove_repo(repo, on_repo):
     db_session.commit()
     github.raw_request(
         'DELETE',
-        '/repos/' + repo.full_name + '/collaborators/' + \
+        '/repos/' + repo['full_name'] + '/collaborators/' + \
             app.config['BOT_USERNAME']
     )
     return redirect(url_for('manage'))

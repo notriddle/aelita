@@ -9,10 +9,10 @@ spec:
       port: 80
       targetPort: 80
       protocol: TCP
-    - name: https
-      port: 443
-      targetPort: 443
-      protocol: TCP
+    #- name: https
+      #port: 443
+      #targetPort: 443
+      #protocol: TCP
   selector:
     app: caddy
 
@@ -216,7 +216,7 @@ spec:
       targetPort: 5432
       protocol: TCP
   selector:
-    app: postgres
+    app: postgres-pipelines
 
 ---
 
@@ -262,7 +262,7 @@ spec:
       targetPort: 5432
       protocol: TCP
   selector:
-    app: postgres
+    app: postgres-caches
 
 ---
 
@@ -308,7 +308,7 @@ spec:
       targetPort: 5432
       protocol: TCP
   selector:
-    app: postgres
+    app: postgres-configs
 
 ---
 
