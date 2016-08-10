@@ -304,3 +304,14 @@ dialog::backdrop {
 </table>
 </form>
 {% endif %}
+<h2>Usage</h2>
+<p>Once <code>@aelita-mergebot</code> is enabled on a repo,
+instead of merging pull requests, say a command to it in a comment.</p>
+<dl>
+<dt><code>@aelita-mergebot r+</code></dt>
+<dd>Add the pull request to the merge queue.</dd>
+<dt><code>@aelita-mergebot r=@username</code></dt>
+<dd>Add the pull request as "username."</dd>
+<dt><code>@aelita-mergebot r-</code></dt>
+<dd>Cancel the pull request.</dd>
+</dl>
