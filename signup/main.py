@@ -247,12 +247,12 @@ def manage():
 def add_repo(repo, context):
     user = get_user()
     # Add repository to our database
-    on_repo = GithubProjects(None, None, repo['owner']['login'], repo['name'])
-    on_repo = db_session.merge(on_repo)
-    db_session.add(on_repo)
-    pipeline_id = on_repo.pipeline_id
-    pipeline = Pipeline(pipeline_id, repo['full_name'])
+    pipeline = Pipeline(None, repo['full_name'])
     db_session.add(pipeline)
+    db_session.flush()
+    pipeline_id = pipeline.pipeline_id
+    on_repo = GithubProjects(pipeline_id, None, repo['owner']['login'], repo['name'])
+    db_session.add(on_repo)
     status = GithubStatusPipelines(
         pipeline_id,
         repo['owner']['login'],
