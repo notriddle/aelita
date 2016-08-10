@@ -167,15 +167,17 @@ def authorized(oauth_token):
     if oauth_token is None:
         flash("Authorization failed.")
         return redirect(url_for('index'))
-    user = User.query.filter_by(github_access_token=oauth_token).first()
+    g.user = User(oauth_token)
+    username = github.get('user')['login']
+    g.user.username = username
+    user = User.query.filter_by(username=username).first()
     if user is None:
-        user = User(oauth_token)
-        g.user = user
-        user.username = github.get('user')['login']
-        invite = Invited.query.filter_by(username=user.username).first()
+        invite = Invited.query.filter_by(username=username).first()
         if invite is None:
             flash("This service is invite-only")
             return redirect(url_for('manage'))
+        user = db_session.merge(g.user)
+        g.user = user
         db_session.add(user)
         db_session.commit()
     session['user_id'] = user.user_id
