@@ -46,7 +46,7 @@ class User(Base):
 
 
 class Invited(Base):
-    __tablename__ = 'signup_users'
+    __tablename__ = 'signup_invited'
 
     username = Column(String(200), primary_key=True)
 
@@ -375,7 +375,7 @@ def edit_repo(project):
 
 
 @app.route('/invite', methods=['POST'])
-def invite(project):
+def invite():
     user = get_user()
     if user is None:
         flash("Please log in")
