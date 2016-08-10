@@ -39,9 +39,19 @@ class User(Base):
     user_id = Column(Integer, primary_key=True)
     username = Column(String(200))
     github_access_token = Column(String(200))
+    invite_count = Column(Integer, default=3)
 
     def __init__(self, github_access_token):
         self.github_access_token = github_access_token
+
+
+class Invited(Base):
+    __tablename__ = 'signup_users'
+
+    username = Column(String(200), primary_key=True)
+
+    def __init__(self, username):
+        self.username = username
 
 
 class Pipeline(Base):
@@ -162,6 +172,10 @@ def authorized(oauth_token):
         user = User(oauth_token)
         g.user = user
         user.username = github.get('user')['login']
+        invite = Invited.query.filter_by(username=user.username).first()
+        if invite is None:
+            flash("This service is invite-only")
+            return redirect(url_for('manage'))
         db_session.add(user)
         db_session.commit()
     session['user_id'] = user.user_id
@@ -172,11 +186,13 @@ def authorized(oauth_token):
 def manage():
     user = get_user()
     if user is None:
+        flash("Please log in")
         return redirect(url_for('logout'))
     all_repos = github.get('user/repos')
     present = []
     non_present = []
     edit = None
+    default_context = 'continuous-integration/travis-ci/push'
     for repo in all_repos:
         on_repo = GithubProjects.query \
             .filter_by(owner=repo['owner']['login'],repo=repo['name']) \
@@ -191,7 +207,7 @@ def manage():
             if 'add' in request.form and \
                     int(request.form['add']) == repo['id'] and \
                     on_repo is None:
-                return add_repo(repo, request.form['context'])
+                return add_repo(repo, default_context)
             elif 'remove' in request.form and \
                     int(request.form['remove']) == repo['id'] and \
                     on_repo is not None:
@@ -222,6 +238,7 @@ def manage():
         non_present=non_present,
         present=present,
         edit=edit,
+        invite_count=user.invite_count,
         base_url=app.config['BOT_BASEURL'],
     )
 
@@ -294,7 +311,7 @@ def add_repo(repo, context):
             "events": [ "status" ]
         }
     )
-    flash("Deleted successfully")
+    flash("Added successfully")
     return redirect(url_for('manage'))
 
 def remove_repo(repo, on_repo):
@@ -331,10 +348,11 @@ def remove_repo(repo, on_repo):
         if webhook['name'] == 'web' and webhook['config']['url'] in my_urls:
             github.request(
                 'DELETE',
-                'repos/' + repo['full_name'] + '/hooks/' + webhook['id']
+                'repos/' + repo['full_name'] + '/hooks/' + str(webhook['id'])
             )
     flash("Deleted successfully")
     return redirect(url_for('manage'))
+
 
 def edit_repo(project):
     user = get_user()
@@ -351,4 +369,25 @@ def edit_repo(project):
     git.staging_branch = request.form['staging_branch']
     db_session.commit()
     flash("Saved successfully")
+    return redirect(url_for('manage'))
+
+
+@app.route('/invite', methods=['POST'])
+def invite(project):
+    user = get_user()
+    if user is None:
+        flash("Please log in")
+        return redirect(url_for('index'))
+    if user.invite_count <= 0:
+        flash("You're out of invites")
+        return redirect(url_for('manage'))
+    invite = Invited.query.filter_by(username=request.form['username'])
+    if invite.first() is not None:
+        flash("This person is already invited")
+        return redirect(url_for('manage'))
+    invite = Invited(request.form['username'])
+    db_session.add(invite)
+    user.invite_count = user.invite_count - 1
+    db_session.commit()
+    flash("Invitation recorded; now let them know!")
     return redirect(url_for('manage'))

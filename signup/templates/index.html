@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<title>Maintain a branch that always passes all the tests -- Aelita</title>
+<title>No more broken master &mdash; Aelita</title>
 <link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css>
 <style>
 body {
@@ -27,6 +27,7 @@ body {
 }
 .superbuttonwrap {
   text-align: center;
+  margin: 8px 0;
 }
 .flashes {
   background: #FFD;
@@ -54,5 +55,13 @@ body {
   {% endif %}
 {% endwith %}
 <div class=superbuttonwrap>
-<a class=superbutton href="/login">Get Started</a>
+<img
+  src="/static/no-more-broken-master.min.svg"
+  alt="No more broken master!"
+  width="450"
+  height="450">
 </div>
+<div class=superbuttonwrap>
+<a class=superbutton href="/login">Log in with Github</a>
+</div>
+<p>This service is currently in invite-only beta.</p>
