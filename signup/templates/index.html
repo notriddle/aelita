@@ -48,7 +48,7 @@ body {
 </style>
 {% with messages = get_flashed_messages() %}
   {% if messages %}
-    <ul class=flashes>
+    <ul class=flashes aria-role="alert">
     {% for message in messages %}
       <li>{{ message }}</li>
     {% endfor %}

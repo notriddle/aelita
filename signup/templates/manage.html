@@ -1,6 +1,29 @@
 <!DOCTYPE html>
 <title>No more broken master &mdash; Aelita</title>
 <link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css>
+<script>
+if (!document.createElement('dialog').showModal) {
+  var link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'static/dialog-polyfill.css';
+  var script = document.createElement('script');
+  script.src = 'static/dialog-polyfill.js';
+  var head = document.getElementsByTagName('head')[0];
+  head.appendChild(link);
+  head.appendChild(script);
+}
+function showInviteDialog() {
+  var dialog = document.getElementById('invite_dialog');
+  if (dialogPolyfill) {
+    dialogPolyfill.registerDialog(dialog);
+  }
+  dialog.showModal();
+}
+function closeInviteDialog() {
+  var dialog = document.getElementById('invite_dialog');
+  dialog.close();
+}
+</script>
 <style>
     body {
         max-width: 60em;
@@ -56,7 +79,7 @@
         margin: -10em;
         padding: 10em;
     }
-    .tb {
+    .tb, .tk {
         color: #0C0;
         text-decoration: none;
         text-align: center;
@@ -96,6 +119,13 @@
     .tbg:hover, .tbg:active, .tbg:focus {
         background: #666;
     }
+    .tk {
+        color: #666;
+        font-size: 0.75em;
+        position: absolute;
+        top: 0; right: 0;
+        padding: 4px;
+    }
     .f {
        width: 20px;
     }
@@ -124,12 +154,62 @@
 .flashes li + li {
   border-top: solid 1px #AA0;
 }
+dialog {
+  border: 1px solid #AAA;
+  padding: 8px 10px;
+  border-bottom: 2px solid #666;
+  border-radius: 8px;
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.3);
+  display: none;
+  overflow: hidden;
+}
+dialog h3:first-child {
+  margin: -10px -10px 8px -10px;
+  padding: 10px 20px 8px 10px;
+  background: #EEE;
+}
+dialog[open] {
+  display: block;
+}
+dialog + .backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+}
+dialog::backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+}
 </style>
 <form action="/logout" method="POST"><button class="tb tbg">Log out</button></form>
+{% if invite_count > 0 %}
+<button class="tb tbg" onclick="showInviteDialog()">Invite</button>
+<dialog id="invite_dialog" aria-role="dialog">
+<h3>{{invite_count}} remaining invites</h3>
+<form action="/invite" method="POST">
+<table class=blank>
+<tr>
+<td width="100%"><input placeholder="Github username" name="username"></td>
+<td><button>Invite</button></td>
+</tr>
+</table>
+</form>
+<button class="tk" aria-label="Close" onclick="closeInviteDialog()">
+    &times;
+</button>
+</dialog>
+{% endif %}
 <h1>{{ username }}</h1>
 {% with messages = get_flashed_messages() %}
   {% if messages %}
-    <ul class=flashes>
+    <ul class=flashes aria-role="alert">
     {% for message in messages %}
       <li>{{ message }}</li>
     {% endfor %}
@@ -139,9 +219,9 @@
 {% if edit %}
 <form action="" method="POST">
 <h2>{{ edit.name }}</h2>
-<table class=blank>
+<table class=blank aria-role="main">
 <tr>
-<td align=right>&rarr;</td>
+<td align=right aria-role="presentation">&rarr;</td>
 <td><a href="{{ base_url }}/{{ edit.name }}">Show queue</a></td>
 </tr>
 <tr>
@@ -172,13 +252,13 @@
 ></td>
 </tr>
 <tr>
-<td></td>
+<td aria-role="presentation"></td>
 <td><button name="edit" value="{{ edit.id }}">Save</button></td>
 </table>
 </form>
 {% else %}
 <form action="" method="POST">
-<table class=table>
+<table class=table aria-role="main">
     <thead>
         <tr><th></th><th>Repo</th></tr>
     </thead>
@@ -189,6 +269,8 @@
                     name="add"
                     value="{{ repo.id }}"
                     class=tb
+                    aria-label="Add"
+                    title="Add"
                 >
                     &check;
                 </button>
@@ -203,26 +285,22 @@
                     name="remove"
                     value="{{ repo.id }}"
                     class="tb tbb"
+                    aria-label="Remove"
+                    title="Remove"
                 >
                     &times;
                 </button>
             </td>
-            <td class=fill-link><a href="?edit={{ repo.id }}">
-                {{ repo.name }}
-            </a></td>
+            <td class=fill-link>
+                <a
+                    aria-label="Edit {{ repo.name }}"
+                    href="?edit={{ repo.id }}"
+                >
+                    {{ repo.name }}
+                </a>
+            </td>
         </tr>
     {% endfor %}</tbody>
-</table>
-</form>
-{% endif %}
-{% if invite_count > 0 %}
-<h3>{{invite_count}} remaining invites</h3>
-<form action="/invite" method="POST">
-<table class=blank>
-<tr>
-<td width="100%"><input placeholder="Github username" name="username"></td>
-<td><button>Invite</button></td>
-</tr>
 </table>
 </form>
 {% endif %}
