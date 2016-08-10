@@ -36,5 +36,5 @@ conditions.
 [@TravisCI]: https://travis-ci.org/AelitaBot/aelita.svg?branch=master
 [Build Status]: https://travis-ci.org/AelitaBot/aelita
 [@AelitaBot]: https://img.shields.io/badge/passing-automatically-FF69b4.svg
-[Build Queue]: https://aelita-mergebot.xyz/aelita
+[Build Queue]: http://aelita-mergebot.xyz/AelitaBot/aelita
 
