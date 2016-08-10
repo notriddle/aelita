@@ -190,7 +190,7 @@ def manage():
     if user is None:
         flash("Please log in")
         return logout()
-    all_repos = github.get('user/repos')
+    all_repos = github.get('user/repos', all_pages=True)
     present = []
     non_present = []
     edit = None

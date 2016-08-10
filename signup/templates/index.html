@@ -19,11 +19,12 @@ body {
   padding: 10px;
   margin: 0;
   text-decoration: none;
+  display: inline-block;
 }
 .superbutton:hover, .superbutton:active, .superbutton:focus {
   background: #1bbe7b;
   box-shadow: 0 0px 1px #999;
-  border: none;
+  border: solid 1px transparent;
 }
 .superbuttonwrap {
   text-align: center;
@@ -47,7 +48,7 @@ body {
 </style>
 {% with messages = get_flashed_messages() %}
   {% if messages %}
-    <ul class=flashes>
+    <ul class=flashes aria-role="alert">
     {% for message in messages %}
       <li>{{ message }}</li>
     {% endfor %}
@@ -63,5 +64,5 @@ body {
 </div>
 <div class=superbuttonwrap>
 <a class=superbutton href="/login">Log in with Github</a>
-</div>
 <p>This service is currently in invite-only beta.</p>
+</div>
