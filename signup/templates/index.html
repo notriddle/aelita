@@ -28,8 +28,31 @@ body {
 .superbuttonwrap {
   text-align: center;
 }
+.flashes {
+  background: #FFD;
+  border: solid 1px #AA0;
+  margin: 8px 0;
+  padding: 0;
+  border-radius: 8px;
+}
+.flashes li {
+  list-style: none;
+  padding: 8px 10px;
+  margin: 0;
+}
+.flashes li + li {
+  border-top: solid 1px #AA0;
+}
 </style>
+{% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <ul class=flashes>
+    {% for message in messages %}
+      <li>{{ message }}</li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
 <div class=superbuttonwrap>
 <a class=superbutton href="/login">Get Started</a>
 </div>
-
