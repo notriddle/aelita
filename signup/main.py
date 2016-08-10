@@ -223,7 +223,7 @@ def manage():
         else:
             present.append(repo_def)
             if request.args.get('edit') and \
-                    request.args.get('edit') == repo['id']:
+                    request.args.get('edit') == str(repo['id']):
                 edit = repo_def
                 on_status = GithubStatusPipelines.query \
                     .filter_by(pipeline_id=on_repo.pipeline_id) \
@@ -232,8 +232,8 @@ def manage():
                     .filter_by(pipeline_id=on_repo.pipeline_id) \
                     .first()
                 edit['context'] = on_status.context
-                edit['master_branch'] = on_status.master_branch
-                edit['staging_branch'] = on_status.staging_branch
+                edit['master_branch'] = on_git.master_branch
+                edit['staging_branch'] = on_git.staging_branch
     return render_template(
         'manage.html',
         username=user.username,
@@ -359,7 +359,7 @@ def remove_repo(repo, on_repo):
 def edit_repo(project):
     user = get_user()
     # Remove from our database
-    pipeline_id = on_repo.pipeline_id
+    pipeline_id = project.pipeline_id
     status = GithubStatusPipelines.query \
             .filter_by(pipeline_id=pipeline_id) \
             .first();
