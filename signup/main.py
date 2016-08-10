@@ -189,7 +189,7 @@ def manage():
     user = get_user()
     if user is None:
         flash("Please log in")
-        return redirect(url_for('logout'))
+        return logout()
     all_repos = github.get('user/repos')
     present = []
     non_present = []
