@@ -331,7 +331,7 @@ def remove_repo(repo, on_repo):
         if webhook['name'] == 'web' and webhook['config']['url'] in my_urls:
             github.request(
                 'DELETE',
-                'repos/' + repo['full_name'] + '/hooks/' + webhook['id']
+                'repos/' + repo['full_name'] + '/hooks/' + str(webhook['id'])
             )
     flash("Deleted successfully")
     return redirect(url_for('manage'))
