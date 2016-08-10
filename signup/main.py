@@ -46,7 +46,7 @@ class User(Base):
 
 
 class Invited(Base):
-    __tablename__ = 'signup_users'
+    __tablename__ = 'signup_invited'
 
     username = Column(String(200), primary_key=True)
 
@@ -167,15 +167,17 @@ def authorized(oauth_token):
     if oauth_token is None:
         flash("Authorization failed.")
         return redirect(url_for('index'))
-    user = User.query.filter_by(github_access_token=oauth_token).first()
+    g.user = User(oauth_token)
+    username = github.get('user')['login']
+    g.user.username = username
+    user = User.query.filter_by(username=username).first()
     if user is None:
-        user = User(oauth_token)
-        g.user = user
-        user.username = github.get('user')['login']
-        invite = Invited.query.filter_by(username=user.username).first()
+        invite = Invited.query.filter_by(username=username).first()
         if invite is None:
             flash("This service is invite-only")
             return redirect(url_for('manage'))
+        user = db_session.merge(g.user)
+        g.user = user
         db_session.add(user)
         db_session.commit()
     session['user_id'] = user.user_id
@@ -187,7 +189,7 @@ def manage():
     user = get_user()
     if user is None:
         flash("Please log in")
-        return redirect(url_for('logout'))
+        return logout()
     all_repos = github.get('user/repos')
     present = []
     non_present = []
@@ -221,7 +223,7 @@ def manage():
         else:
             present.append(repo_def)
             if request.args.get('edit') and \
-                    request.args.get('edit') == repo['id']:
+                    request.args.get('edit') == str(repo['id']):
                 edit = repo_def
                 on_status = GithubStatusPipelines.query \
                     .filter_by(pipeline_id=on_repo.pipeline_id) \
@@ -230,8 +232,8 @@ def manage():
                     .filter_by(pipeline_id=on_repo.pipeline_id) \
                     .first()
                 edit['context'] = on_status.context
-                edit['master_branch'] = on_status.master_branch
-                edit['staging_branch'] = on_status.staging_branch
+                edit['master_branch'] = on_git.master_branch
+                edit['staging_branch'] = on_git.staging_branch
     return render_template(
         'manage.html',
         username=user.username,
@@ -245,12 +247,17 @@ def manage():
 def add_repo(repo, context):
     user = get_user()
     # Add repository to our database
-    on_repo = GithubProjects(None, None, repo['owner']['login'], repo['name'])
-    on_repo = db_session.merge(on_repo)
-    db_session.add(on_repo)
-    pipeline_id = on_repo.pipeline_id
-    pipeline = Pipeline(pipeline_id, repo['full_name'])
+    pipeline = Pipeline(None, repo['full_name'])
     db_session.add(pipeline)
+    db_session.flush()
+    pipeline_id = pipeline.pipeline_id
+    on_repo = GithubProjects(
+        pipeline_id,
+        None,
+        repo['owner']['login'],
+        repo['name']
+    )
+    db_session.add(on_repo)
     status = GithubStatusPipelines(
         pipeline_id,
         repo['owner']['login'],
@@ -357,7 +364,7 @@ def remove_repo(repo, on_repo):
 def edit_repo(project):
     user = get_user()
     # Remove from our database
-    pipeline_id = on_repo.pipeline_id
+    pipeline_id = project.pipeline_id
     status = GithubStatusPipelines.query \
             .filter_by(pipeline_id=pipeline_id) \
             .first();
@@ -373,7 +380,7 @@ def edit_repo(project):
 
 
 @app.route('/invite', methods=['POST'])
-def invite(project):
+def invite():
     user = get_user()
     if user is None:
         flash("Please log in")
