@@ -175,7 +175,7 @@ def authorized(oauth_token):
         invite = Invited.query.filter_by(username=username).first()
         if invite is None:
             flash("This service is invite-only")
-            return redirect(url_for('manage'))
+            return redirect(url_for('index'))
         user = db_session.merge(g.user)
         g.user = user
         db_session.add(user)
