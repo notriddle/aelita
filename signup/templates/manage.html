@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<title>Maintain a branch that always passes all the tests -- Aelita</title>
+<title>No more broken master &mdash; Aelita</title>
 <link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css>
 <style>
     body {
@@ -87,6 +87,7 @@
         border: solid 1px #CCC;
         border-bottom: solid 2px #999;
         float: right;
+        margin-left: 8px;
         padding: 6px 8px;
         font-size: 0.75em;
         border-radius: 8px;
@@ -106,7 +107,6 @@
         white-space: nowrap;
     }
     .blank td:first-child {
-        text-align: right;
         padding-right: 0;
     }
 .flashes {
@@ -212,6 +212,17 @@
             </a></td>
         </tr>
     {% endfor %}</tbody>
+</table>
+</form>
+{% endif %}
+{% if invite_count > 0 %}
+<h3>{{invite_count}} remaining invites</h3>
+<form action="/invite" method="POST">
+<table class=blank>
+<tr>
+<td width="100%"><input placeholder="Github username" name="username"></td>
+<td><button>Invite</button></td>
+</tr>
 </table>
 </form>
 {% endif %}
