@@ -291,7 +291,7 @@ impl<P> Db<P> for PostgresDb<P>
             ]);
             let rows = rows.expect("Get pending entry");
             let rows = rows.iter();
-            let mut rows = rows.map(|row| (row.get::<_, i64>(0), PendingEntry {
+            let mut rows = rows.map(|row| (row.get::<_, i32>(0), PendingEntry {
                 pr: P::from_str(&row.get::<_, String>(1)[..]).unwrap(),
                 commit: P::C::from_str(&row.get::<_, String>(2)[..])
                     .unwrap(),
