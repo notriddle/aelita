@@ -192,6 +192,7 @@ def manage():
     present = []
     non_present = []
     edit = None
+    default_context = 'continuous-integration/travis-ci/push'
     for repo in all_repos:
         on_repo = GithubProjects.query \
             .filter_by(owner=repo['owner']['login'],repo=repo['name']) \
@@ -206,7 +207,7 @@ def manage():
             if 'add' in request.form and \
                     int(request.form['add']) == repo['id'] and \
                     on_repo is None:
-                return add_repo(repo, request.form['context'])
+                return add_repo(repo, default_context)
             elif 'remove' in request.form and \
                     int(request.form['remove']) == repo['id'] and \
                     on_repo is not None:
@@ -310,7 +311,7 @@ def add_repo(repo, context):
             "events": [ "status" ]
         }
     )
-    flash("Deleted successfully")
+    flash("Added successfully")
     return redirect(url_for('manage'))
 
 def remove_repo(repo, on_repo):
