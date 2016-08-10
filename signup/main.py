@@ -251,7 +251,12 @@ def add_repo(repo, context):
     db_session.add(pipeline)
     db_session.flush()
     pipeline_id = pipeline.pipeline_id
-    on_repo = GithubProjects(pipeline_id, None, repo['owner']['login'], repo['name'])
+    on_repo = GithubProjects(
+        pipeline_id,
+        None,
+        repo['owner']['login'],
+        repo['name']
+    )
     db_session.add(on_repo)
     status = GithubStatusPipelines(
         pipeline_id,
