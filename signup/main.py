@@ -180,6 +180,10 @@ def authorized(oauth_token):
         g.user = user
         db_session.add(user)
         db_session.commit()
+    elif user.github_access_token != oauth_token:
+        user.github_access_token = oauth_token
+        user = db_session.merge(user)
+        db_session.commit()
     session['user_id'] = user.user_id
     return redirect(url_for('manage'))
 
