@@ -171,45 +171,6 @@ spec:
 ---
 
 apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: aelita-claim-pipelines
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
-
----
-
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: aelita-claim-caches
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
-
----
-
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: aelita-claim-configs
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
-
----
-
-apiVersion: v1
 kind: Service
 metadata:
   name: postgres-pipelines
@@ -251,7 +212,7 @@ spec:
       volumes:
         - name: aelita-pipelines
           persistentVolumeClaim:
-            claimName: aelita-claim-pipelines
+            claimName: postgres-pipelines
 
 ---
 
@@ -297,7 +258,7 @@ spec:
       volumes:
         - name: aelita-caches
           persistentVolumeClaim:
-            claimName: aelita-claim-caches
+            claimName: postgres-caches
 
 ---
 
@@ -343,5 +304,5 @@ spec:
       volumes:
         - name: aelita-configs
           persistentVolumeClaim:
-            claimName: aelita-claim-configs
+            claimName: postgres-configs
 

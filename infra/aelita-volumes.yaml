@@ -1,49 +1,88 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: aelita-pv-pipelines
+  name: postgres-caches
   labels:
-    type: aelita-pv-pipelines
+    type: postgres-caches
 spec:
   capacity:
     storage: 50Gi
   accessModes:
     - ReadWriteOnce
   gcePersistentDisk:
-    pdName: aelita-pipelines
+    pdName: postgres-caches
     fsType: ext4
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-caches
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
 
 ---
 
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: aelita-pv-caches
+  name: postgres-configs
   labels:
-    type: aelita-pv-caches
+    type: postgres-configs
 spec:
   capacity:
     storage: 50Gi
   accessModes:
     - ReadWriteOnce
   gcePersistentDisk:
-    pdName: aelita-caches
+    pdName: postgres-configs
     fsType: ext4
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-configs
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
 
 ---
 
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: aelita-pv-configs
+  name: postgres-pipelines
   labels:
-    type: aelita-pv-configs
+    type: postgres-pipelines
 spec:
   capacity:
     storage: 50Gi
   accessModes:
     - ReadWriteOnce
   gcePersistentDisk:
-    pdName: aelita-configs
+    pdName: postgres-pipelines
     fsType: ext4
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pipelines
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
 
