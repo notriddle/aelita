@@ -909,7 +909,7 @@ fn one_item_github_round_trip_cloud() {
         ).as_bytes()).unwrap();
     });
 
-    info!("Aelita fast-forwards staging to master.");
+    info!("Aelita checks for the current contents of staging. It matches.");
     single_request(&mut github_git_server, |req, mut res| {
         let path = "/repos/AelitaBot/testp/git/refs/heads/staging".to_owned();
         assert_eq!(
@@ -921,7 +921,11 @@ fn one_item_github_round_trip_cloud() {
             b"token MY_PERSONAL_ACCESS_TOKEN"
         );
         *res.status_mut() = StatusCode::Ok;
-        res.send(br#""#).unwrap();
+        res.send(concat!(
+            r#"{"object":"#,
+                r#"{"sha":"aa218f56b14c9653891f9e74264a383fa43fefbd"}"#,
+            r#"}"#
+        ).as_bytes()).unwrap();
     });
 
     info!("Aelita merges staging to master.");
@@ -994,7 +998,7 @@ fn one_item_github_round_trip_cloud() {
         let desc: FFDesc = serde_json::from_reader(req).expect("valid JSON");
         *res.status_mut() = StatusCode::Ok;
         res.send(&[]).unwrap();
-        assert!(desc.force);
+        assert!(!desc.force);
         desc.sha
     });
     assert_eq!("ba218f56b14c9653891f9e74264a383fa43fefbd", master_string);
@@ -1556,6 +1560,25 @@ fn one_item_github_round_trip_cloud_with_postgres_12f() {
         ).as_bytes()).unwrap();
     });
 
+    info!("Aelita checks for the current contents of staging. Don't match.");
+    single_request(&mut github_git_server, |req, mut res| {
+        let path = "/repos/AelitaBot/testp/git/refs/heads/staging".to_owned();
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath(path)
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        *res.status_mut() = StatusCode::Ok;
+        res.send(concat!(
+            r#"{"object":"#,
+                r#"{"sha":"aa218f56b14c9653891f9e74264a383fa43fefbe"}"#,
+            r#"}"#
+        ).as_bytes()).unwrap();
+    });
+
     info!("Aelita fast-forwards staging to master.");
     single_request(&mut github_git_server, |req, mut res| {
         let path = "/repos/AelitaBot/testp/git/refs/heads/staging".to_owned();
@@ -1665,7 +1688,7 @@ fn one_item_github_round_trip_cloud_with_postgres_12f() {
         let desc: FFDesc = serde_json::from_reader(req).expect("valid JSON");
         *res.status_mut() = StatusCode::Ok;
         res.send(&[]).unwrap();
-        assert!(desc.force);
+        assert!(!desc.force);
         desc.sha
     });
     assert_eq!("ba218f56b14c9653891f9e74264a383fa43fefbd", master_string);
@@ -1905,7 +1928,7 @@ fn one_item_github_round_trip_cloud_with_sqlite_12f() {
         ).as_bytes()).unwrap();
     });
 
-    info!("Aelita fast-forwards staging to master.");
+    info!("Aelita checks for the current contents of staging. They match.");
     single_request(&mut github_git_server, |req, mut res| {
         let path = "/repos/AelitaBot/testp/git/refs/heads/staging".to_owned();
         assert_eq!(
@@ -1917,7 +1940,11 @@ fn one_item_github_round_trip_cloud_with_sqlite_12f() {
             b"token MY_PERSONAL_ACCESS_TOKEN"
         );
         *res.status_mut() = StatusCode::Ok;
-        res.send(br#""#).unwrap();
+        res.send(concat!(
+            r#"{"object":"#,
+                r#"{"sha":"aa218f56b14c9653891f9e74264a383fa43fefbd"}"#,
+            r#"}"#
+        ).as_bytes()).unwrap();
     });
 
     info!("Aelita merges staging to master.");
@@ -2014,7 +2041,7 @@ fn one_item_github_round_trip_cloud_with_sqlite_12f() {
         let desc: FFDesc = serde_json::from_reader(req).expect("valid JSON");
         *res.status_mut() = StatusCode::Ok;
         res.send(&[]).unwrap();
-        assert!(desc.force);
+        assert!(!desc.force);
         desc.sha
     });
     assert_eq!("ba218f56b14c9653891f9e74264a383fa43fefbd", master_string);

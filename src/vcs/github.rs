@@ -145,7 +145,7 @@ impl Worker {
             sha: String,
         }
         let update_desc = try!(json_to_vec(&RefUpdateDesc {
-            force: true,
+            force: false,
             sha: merge_commit.to_string(),
         }));
         let resp = try!(self.rate_limiter.retry_send(|| {
@@ -193,6 +193,8 @@ impl Worker {
         let resp_desc: RefDesc = try!(json_from_reader(resp));
         let master_sha = resp_desc.object.sha;
         // Step 2: reset staging to the contents of master.
+        // Do it in a single step if no rewinding is needed, but we may
+        // need to rewind.
         let url = format!(
             "{}/repos/{}/{}/git/refs/heads/{}",
             self.host,
@@ -200,22 +202,33 @@ impl Worker {
             repo.repo,
             repo.staging_branch
         );
-        debug!("Set staging SHA: {}", url);
-        #[derive(Serialize)]
-        struct RefUpdateDesc {
-            force: bool,
-            sha: String,
-        }
-        let update_desc = try!(json_to_vec(&RefUpdateDesc {
-            force: true,
-            sha: master_sha,
-        }));
         let resp = try!(self.rate_limiter.retry_send(|| {
-            self.authed_request(Method::Patch, &url)
-                .body(&*update_desc)
+            self.authed_request(Method::Get, &url)
         }));
         if !resp.status.is_success() {
             return Err(GithubRequestError::HttpStatus(resp.status));
+        }
+        let resp_desc: RefDesc = try!(json_from_reader(resp));
+        let init_staging_sha = resp_desc.object.sha;
+        debug!("Staging sha is: {}", init_staging_sha);
+        if init_staging_sha != master_sha {
+            debug!("Set staging SHA: {}", url);
+            #[derive(Serialize)]
+            struct RefUpdateDesc {
+                force: bool,
+                sha: String,
+            }
+            let update_desc = try!(json_to_vec(&RefUpdateDesc {
+                force: true,
+                sha: master_sha,
+            }));
+            let resp = try!(self.rate_limiter.retry_send(|| {
+                self.authed_request(Method::Patch, &url)
+                    .body(&*update_desc)
+            }));
+            if !resp.status.is_success() {
+                return Err(GithubRequestError::HttpStatus(resp.status));
+            }
         }
         // Step 3: merge the pull request into master.
         let url = format!(
