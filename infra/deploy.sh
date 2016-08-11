@@ -32,6 +32,7 @@ gcloud --quiet auth activate-service-account \
 gcloud config set project $PROJECT_NAME
 gcloud config set compute/zone $COMPUTE_ZONE
 gcloud config set container/cluster $CLUSTER_NAME
+gcloud config set container/use_client_certificate true
 gcloud --quiet container clusters get-credentials $CLUSTER_NAME
 
 # Push to gcr.io
