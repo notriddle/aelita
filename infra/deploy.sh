@@ -1,5 +1,5 @@
 #!/bin/bash
-set -ex
+set -e
 
 PROJECT_NAME=aelita-1374
 CLUSTER_NAME=aelita-cluster
