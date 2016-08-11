@@ -7,6 +7,9 @@
 #![plugin(serde_macros)]
 #![recursion_limit = "5000"]
 
+#![feature(alloc_system)]
+extern crate alloc_system;
+
 extern crate crossbeam;
 extern crate env_logger;
 extern crate hex;

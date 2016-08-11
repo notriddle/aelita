@@ -1,19 +1,11 @@
 // This file is released under the same terms as Rust itself.
 
-use ci::{self, buildbot, github_status, jenkins};
+use ci::{self, github_status, jenkins};
 use config::{PipelineConfig, WorkerBuilder};
 use db::{self, Db};
-use pipeline::{PipelineId, WorkerManager};
+use pipeline::WorkerManager;
 use pipeline::WorkerThread;
-use std::any::Any;
-use std::borrow::Cow;
-use std::collections::HashMap;
 use std::error::Error;
-use std::fmt::{self, Debug, Display};
-use std::fs::File;
-use std::io::Read;
-use std::path::PathBuf;
-use toml;
 use ui::{self, github};
 use vcs::{self, git};
 use vcs::github as github_git;
@@ -289,7 +281,7 @@ fn setup_view<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
 mod sqlite {
     use config::PipelineConfig as TPipelineConfig;
     use pipeline::PipelineId;
-    use rusqlite::{self, Connection};
+    use rusqlite::Connection;
     use std::borrow::Cow;
     use std::error::Error;
     use std::path::PathBuf;
@@ -302,7 +294,7 @@ mod sqlite {
     use vcs::git::PipelinesConfig as TGitPipelinesConfig;
     use vcs::github as github_git;
     use vcs::github::PipelinesConfig as TGithubGitPipelinesConfig;
-    use view::{self, PipelinesConfig as TViewPipelinesConfig};
+    use view::{PipelinesConfig as TViewPipelinesConfig};
     pub struct PipelineConfig {
         conn: Mutex<Connection>,
     }
@@ -475,7 +467,7 @@ mod sqlite {
             "###;
             let mut stmt = conn.prepare(&sql)
                 .expect("prepare pipelines query");
-            let mut rows = stmt
+            let rows = stmt
                 .query_map(&[&job], |row| PipelineId(row.get::<_, i32>(0)))
                 .expect("get pipelines");
             let rows = rows.map(|row| row.expect("sqlite to work")).collect();
@@ -540,7 +532,7 @@ mod sqlite {
             "###;
             let mut stmt = conn.prepare(&sql)
                 .expect("prepare pipelines query");
-            let mut rows = stmt
+            let rows = stmt
                 .query_map(&[&repo.owner, &repo.repo, &repo.context], |row| {
                     PipelineId(row.get::<_, i32>(0))
                 })
@@ -707,7 +699,7 @@ mod sqlite {
             "###;
             let mut stmt = conn.prepare(&sql)
                 .expect("prepare repos query");
-            let mut rows = stmt
+            let rows = stmt
                 .query_map(&[], |row| (
                     Cow::Owned(row.get::<_, String>(0)),
                     PipelineId(row.get::<_, i32>(1)),
@@ -722,7 +714,7 @@ mod sqlite {
 mod postgres {
     use config::PipelineConfig as TPipelineConfig;
     use pipeline::PipelineId;
-    use postgres::{self, Connection, IntoConnectParams, SslMode};
+    use postgres::{Connection, IntoConnectParams, SslMode};
     use std::borrow::Cow;
     use std::error::Error;
     use std::sync::Mutex;
@@ -734,7 +726,7 @@ mod postgres {
     use vcs::git::PipelinesConfig as TGitPipelinesConfig;
     use vcs::github as github_git;
     use vcs::github::PipelinesConfig as TGithubGitPipelinesConfig;
-    use view::{self, PipelinesConfig as TViewPipelinesConfig};
+    use view::{PipelinesConfig as TViewPipelinesConfig};
     pub struct PipelineConfig {
         conn: Mutex<Connection>,
     }
