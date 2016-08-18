@@ -206,7 +206,7 @@ where P: Pr + 'static,
             vcs: vcs,
         }
     }
-    pub fn handle_event<D: Db<P> + ?Sized>(
+    pub fn handle_event<D: Db<P>>(
         &mut self,
         db: &mut D,
         event: Event<P>,

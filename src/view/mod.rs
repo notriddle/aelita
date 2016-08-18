@@ -3,7 +3,7 @@
 mod auth;
 
 use crossbeam;
-use db::{self, Db, PendingEntry};
+use db::{self, Db, DbBox, PendingEntry};
 use horrorshow::prelude::*;
 use hyper::buffer::BufReader;
 use hyper::header::{ContentType, Headers};
@@ -113,13 +113,16 @@ impl<P: Pr + 'static> pipeline::Worker<Event, Message> for Worker<P>
 struct Thread<'a, P>
     where P: Pr
 {
-    db: Box<Db<P> + Send>,
+    db: DbBox<P>,
     pipelines: &'a PipelinesConfig,
     auth_manager: AuthManager<'a>,
     _pr: PhantomData<P>,
 }
 
-impl<'a, P: Pr> Thread<'a, P> {
+impl<'a, P: Pr> Thread<'a, P>
+    where <P::C as FromStr>::Err: Error,
+          <P as FromStr>::Err: Error,
+{
     fn run(&mut self, recv: spmc::Receiver<HttpStream>) {
         while let Ok(mut stream) = recv.recv() {
             let addr = stream.peer_addr()

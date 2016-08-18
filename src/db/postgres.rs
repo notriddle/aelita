@@ -1,8 +1,8 @@
 // This file is released under the same terms as Rust itself.
 
-use db::{Db, PendingEntry, QueueEntry, RunningEntry};
+use db::{self, Db, PendingEntry, QueueEntry, RunningEntry};
 use hyper::Url;
-use postgres::{Connection, IntoConnectParams, SslMode};
+use postgres::{self, Connection, IntoConnectParams, SslMode};
 use std::error::Error;
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -57,6 +57,141 @@ impl<P> PostgresDb<P>
 }
 
 impl<P> Db<P> for PostgresDb<P>
+    where P: Pr + Into<String> + FromStr,
+          <P::C as FromStr>::Err: ::std::error::Error,
+          <P as FromStr>::Err: ::std::error::Error,
+{
+    fn transaction<T: db::Transaction<P>>(&mut self, t: T) {
+        let mut transaction = PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        );
+        let result = t.run(&mut transaction);
+        if result {
+            transaction.conn.commit().expect("to commit successfully");
+        }
+    }
+    fn push_queue(
+        &mut self,
+        pipeline_id: PipelineId,
+        queue_entry: QueueEntry<P>
+    ) {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).push_queue(pipeline_id, queue_entry)
+    }
+    fn pop_queue(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Option<QueueEntry<P>> {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).pop_queue(pipeline_id)
+    }
+    fn list_queue(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Vec<QueueEntry<P>> {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).list_queue(pipeline_id)
+    }
+    fn put_running(
+        &mut self,
+        pipeline_id: PipelineId,
+        running_entry: RunningEntry<P>
+    ) {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).put_running(pipeline_id, running_entry)
+    }
+    fn take_running(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Option<RunningEntry<P>> {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).take_running(pipeline_id)
+    }
+    fn peek_running(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Option<RunningEntry<P>> {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).peek_running(pipeline_id)
+    }
+    fn add_pending(
+        &mut self,
+        pipeline_id: PipelineId,
+        entry: PendingEntry<P>,
+    ) {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).add_pending(pipeline_id, entry)
+    }
+    fn take_pending_by_pr(
+        &mut self,
+        pipeline_id: PipelineId,
+        pr: &P,
+    ) -> Option<PendingEntry<P>> {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).take_pending_by_pr(pipeline_id, pr)
+    }
+    fn peek_pending_by_pr(
+        &mut self,
+        pipeline_id: PipelineId,
+        pr: &P,
+    ) -> Option<PendingEntry<P>> {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).peek_pending_by_pr(pipeline_id, pr)
+    }
+    fn list_pending(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Vec<PendingEntry<P>> {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).list_pending(pipeline_id)
+    }
+    fn cancel_by_pr(&mut self, pipeline_id: PipelineId, pr: &P) {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).cancel_by_pr(pipeline_id, pr)
+    }
+    fn cancel_by_pr_different_commit(
+        &mut self,
+        pipeline_id: PipelineId,
+        pr: &P,
+        commit: &P::C,
+    ) -> bool {
+        PostgresTransaction::new(
+            self.conn.transaction().expect("to open transaction")
+        ).cancel_by_pr_different_commit(pipeline_id, pr, commit)
+    }
+}
+
+
+pub struct PostgresTransaction<'a, P>
+    where P: Pr + Into<String> + FromStr
+{
+    _pr: PhantomData<P>,
+    conn: postgres::Transaction<'a>,
+}
+
+impl<'a, P> PostgresTransaction<'a, P>
+    where P: Pr + Into<String> + FromStr
+{
+    pub fn new(conn: postgres::Transaction<'a>) -> Self {
+        PostgresTransaction {
+            _pr: PhantomData,
+            conn: conn,
+        }
+    }
+}
+
+impl<'a, P> Db<P> for PostgresTransaction<'a, P>
     where P: Pr + Into<String> + FromStr,
           <P::C as FromStr>::Err: ::std::error::Error,
           <P as FromStr>::Err: ::std::error::Error,

@@ -2,7 +2,7 @@
 
 use ci::{self, buildbot, github_status, jenkins};
 use config::{PipelineConfig, WorkerBuilder};
-use db::{self, Db};
+use db::{self, DbBox};
 use pipeline::{PipelineId, WorkerManager};
 use pipeline::WorkerThread;
 use std::any::Any;
@@ -36,7 +36,7 @@ pub struct GithubBuilder {
         view::Event,
         view::Message,
     >>,
-    db: Box<Db<github::Pr>>,
+    db: DbBox<github::Pr>,
     pipelines: StaticPipelineConfig,
 }
 
@@ -376,7 +376,7 @@ impl GithubBuilder {
 
 impl WorkerBuilder for GithubBuilder {
     type Pr = github::Pr;
-    fn start(self) -> (WorkerManager<Self::Pr>, Box<Db<Self::Pr>>) {
+    fn start(self) -> (WorkerManager<Self::Pr>, DbBox<Self::Pr>) {
         (
             WorkerManager {
                 cis: self.cis,
