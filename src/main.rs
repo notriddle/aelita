@@ -40,9 +40,12 @@ mod view;
 mod vcs;
 
 use config::WorkerBuilder;
-use pipeline::{Event, GetPipelineId};
+use db::Db;
+use pipeline::{Ci, Event, GetPipelineId, Pipeline, Ui, Vcs};
 use std::borrow::Cow;
 use std::env::args;
+use std::error::Error;
+use std::str::FromStr;
 use ui::Pr;
 
 fn main() {
@@ -67,7 +70,9 @@ fn main() {
 }
 
 fn run_workers<B: WorkerBuilder>(builder: B) -> !
-    where B::Pr: Pr + 'static
+    where B::Pr: Pr + 'static,
+          <<B::Pr as Pr>::C as FromStr>::Err: Error,
+          <B::Pr as FromStr>::Err: Error,
 {
     use std::sync::mpsc::{Select, Handle};
     let (workers, mut db) = builder.start();
@@ -107,8 +112,9 @@ fn run_workers<B: WorkerBuilder>(builder: B) -> !
             if let Some(event) = pending.take() {
                 let pipeline_id = event.pipeline_id();
                 let pipeline = workers.pipeline_by_id(pipeline_id);
-                if let Some(mut pipeline) = pipeline {
-                    pipeline.handle_event(&mut *db, event);
+                if let Some(pipeline) = pipeline {
+                    let t = PipelineTransaction{ pipeline: pipeline, event: event };
+                    db.transaction(t);
                 }
             }
             let id = select.wait();
@@ -131,5 +137,26 @@ fn run_workers<B: WorkerBuilder>(builder: B) -> !
                 }
             }
         }
+    }
+}
+
+struct PipelineTransaction<'cntx, P, B, U, V>
+    where P: Pr + 'static,
+          B: Ci<P::C> + 'cntx,
+          U: Ui<P> + 'cntx,
+          V: Vcs<P::C> + 'cntx {
+    pipeline: Pipeline<'cntx, P, B, U, V>,
+    event: Event<P>,
+}
+
+impl<'cntx, P, B, U, V> db::Transaction<P>
+        for PipelineTransaction<'cntx, P, B, U, V>
+    where P: Pr + 'static,
+          B: Ci<P::C> + 'cntx,
+          U: Ui<P> + 'cntx,
+          V: Vcs<P::C> + 'cntx {
+    fn run<D: Db<P>>(mut self, db: &mut D) -> bool {
+        self.pipeline.handle_event(db, self.event);
+        true
     }
 }

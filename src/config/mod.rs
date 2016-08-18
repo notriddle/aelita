@@ -3,7 +3,7 @@
 pub mod toml;
 pub mod twelvef;
 
-use db::Db;
+use db::DbBox;
 use pipeline::{PipelineId, WorkerManager};
 use ui::Pr;
 
@@ -11,7 +11,7 @@ pub trait WorkerBuilder {
     type Pr: Pr + 'static;
     fn start(
         self
-    ) -> (WorkerManager<Self::Pr>, Box<Db<Self::Pr>>);
+    ) -> (WorkerManager<Self::Pr>, DbBox<Self::Pr>);
 }
 
 pub trait PipelineConfig {
