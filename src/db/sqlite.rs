@@ -331,7 +331,8 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
         let sql = r###"
             DELETE FROM running WHERE pipeline_id = ?
         "###;
-        self.conn.execute(sql, &[&pipeline_id.0]).expect("Remove running entry");
+        self.conn.execute(sql, &[&pipeline_id.0])
+            .expect("Remove running entry");
         entry
     }
     fn peek_running(

@@ -113,8 +113,10 @@ fn run_workers<B: WorkerBuilder>(builder: B) -> !
                 let pipeline_id = event.pipeline_id();
                 let pipeline = workers.pipeline_by_id(pipeline_id);
                 if let Some(pipeline) = pipeline {
-                    let t = PipelineTransaction{ pipeline: pipeline, event: event };
-                    db.transaction(t);
+                    db.transaction(PipelineTransaction{
+                        pipeline: pipeline,
+                        event: event,
+                    });
                 }
             }
             let id = select.wait();

@@ -59,10 +59,16 @@ impl<P: Pr> Db<P> for DbBox<P>
             DbBox::Postgres(ref mut d) => d.transaction(t),
         }
     }
-    fn push_queue(&mut self, pipeline_id: PipelineId, queue_entry: QueueEntry<P>) {
+    fn push_queue(
+        &mut self,
+        pipeline_id: PipelineId,
+        queue_entry: QueueEntry<P>,
+    ) {
         match *self {
-            DbBox::Sqlite(ref mut d) => d.push_queue(pipeline_id, queue_entry),
-            DbBox::Postgres(ref mut d) => d.push_queue(pipeline_id, queue_entry),
+            DbBox::Sqlite(ref mut d) =>
+                d.push_queue(pipeline_id, queue_entry),
+            DbBox::Postgres(ref mut d) =>
+                d.push_queue(pipeline_id, queue_entry),
         }
     }
     fn pop_queue(&mut self, pipeline_id: PipelineId) -> Option<QueueEntry<P>> {
@@ -77,45 +83,76 @@ impl<P: Pr> Db<P> for DbBox<P>
             DbBox::Postgres(ref mut d) => d.list_queue(pipeline_id),
         }
     }
-    fn put_running(&mut self, pipeline_id: PipelineId, running_entry: RunningEntry<P>) {
+    fn put_running(
+        &mut self,
+        pipeline_id: PipelineId,
+        running_entry: RunningEntry<P>
+    ) {
         match *self {
-            DbBox::Sqlite(ref mut d) => d.put_running(pipeline_id, running_entry),
-            DbBox::Postgres(ref mut d) => d.put_running(pipeline_id, running_entry),
+            DbBox::Sqlite(ref mut d) =>
+                d.put_running(pipeline_id, running_entry),
+            DbBox::Postgres(ref mut d) =>
+                d.put_running(pipeline_id, running_entry),
         }
     }
-    fn take_running(&mut self, pipeline_id: PipelineId) -> Option<RunningEntry<P>> {
+    fn take_running(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Option<RunningEntry<P>> {
         match *self {
             DbBox::Sqlite(ref mut d) => d.take_running(pipeline_id),
             DbBox::Postgres(ref mut d) => d.take_running(pipeline_id),
         }
     }
-    fn peek_running(&mut self, pipeline_id: PipelineId) -> Option<RunningEntry<P>> {
+    fn peek_running(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Option<RunningEntry<P>> {
         match *self {
             DbBox::Sqlite(ref mut d) => d.peek_running(pipeline_id),
             DbBox::Postgres(ref mut d) => d.peek_running(pipeline_id),
         }
     }
-    fn add_pending(&mut self, pipeline_id: PipelineId, pending_entry: PendingEntry<P>) {
+    fn add_pending(
+        &mut self,
+        pipeline_id: PipelineId,
+        pending_entry: PendingEntry<P>,
+    ) {
         match *self {
-            DbBox::Sqlite(ref mut d) => d.add_pending(pipeline_id, pending_entry),
-            DbBox::Postgres(ref mut d) => d.add_pending(pipeline_id, pending_entry),
+            DbBox::Sqlite(ref mut d) =>
+                d.add_pending(pipeline_id, pending_entry),
+            DbBox::Postgres(ref mut d) =>
+                d.add_pending(pipeline_id, pending_entry),
         }
     }
-    fn peek_pending_by_pr(&mut self, pipeline_id: PipelineId, pr: &P)
-        -> Option<PendingEntry<P>> {
+    fn peek_pending_by_pr(
+        &mut self,
+        pipeline_id: PipelineId,
+        pr: &P,
+    ) -> Option<PendingEntry<P>> {
         match *self {
-            DbBox::Sqlite(ref mut d) => d.peek_pending_by_pr(pipeline_id, pr),
-            DbBox::Postgres(ref mut d) => d.peek_pending_by_pr(pipeline_id, pr),
+            DbBox::Sqlite(ref mut d) =>
+                d.peek_pending_by_pr(pipeline_id, pr),
+            DbBox::Postgres(ref mut d) =>
+                d.peek_pending_by_pr(pipeline_id, pr),
         }
     }
-    fn take_pending_by_pr(&mut self, pipeline_id: PipelineId, pr: &P)
-        -> Option<PendingEntry<P>> {
+    fn take_pending_by_pr(
+        &mut self,
+        pipeline_id: PipelineId,
+        pr: &P,
+    ) -> Option<PendingEntry<P>> {
         match *self {
-            DbBox::Sqlite(ref mut d) => d.take_pending_by_pr(pipeline_id, pr),
-            DbBox::Postgres(ref mut d) => d.take_pending_by_pr(pipeline_id, pr),
+            DbBox::Sqlite(ref mut d) =>
+                d.take_pending_by_pr(pipeline_id, pr),
+            DbBox::Postgres(ref mut d) =>
+                d.take_pending_by_pr(pipeline_id, pr),
         }
     }
-    fn list_pending(&mut self, pipeline_id: PipelineId) -> Vec<PendingEntry<P>> {
+    fn list_pending(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Vec<PendingEntry<P>> {
         match *self {
             DbBox::Sqlite(ref mut d) => d.list_pending(pipeline_id),
             DbBox::Postgres(ref mut d) => d.list_pending(pipeline_id),
@@ -127,10 +164,17 @@ impl<P: Pr> Db<P> for DbBox<P>
             DbBox::Postgres(ref mut d) => d.cancel_by_pr(pipeline_id, pr),
         }
     }
-    fn cancel_by_pr_different_commit(&mut self, pipeline_id: PipelineId, pr: &P, commit: &P::C) -> bool {
+    fn cancel_by_pr_different_commit(
+        &mut self,
+        pipeline_id: PipelineId,
+        pr: &P,
+        commit: &P::C,
+    ) -> bool {
         match *self {
-            DbBox::Sqlite(ref mut d) => d.cancel_by_pr_different_commit(pipeline_id, pr, commit),
-            DbBox::Postgres(ref mut d) => d.cancel_by_pr_different_commit(pipeline_id, pr, commit),
+            DbBox::Sqlite(ref mut d) =>
+                d.cancel_by_pr_different_commit(pipeline_id, pr, commit),
+            DbBox::Postgres(ref mut d) =>
+                d.cancel_by_pr_different_commit(pipeline_id, pr, commit),
         }
     }
 }
