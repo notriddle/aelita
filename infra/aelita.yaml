@@ -43,6 +43,7 @@ kind: Service
 metadata:
   name: aelita
 spec:
+  type: NodePort
   ports:
     - name: github-notice
       port: 6000
@@ -122,6 +123,7 @@ kind: Service
 metadata:
   name: signup
 spec:
+  type: NodePort
   ports:
     - name: http
       port: 8000
