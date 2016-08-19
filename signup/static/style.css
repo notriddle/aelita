@@ -1,0 +1,211 @@
+/* This file is released under the same terms as Rust itself. */
+
+body {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 16px 20px;
+}
+a {
+    text-decoration: underline;
+}
+a:hover, a:active, a:focus {
+    text-decoration: none;
+}
+.table, .section {
+    width: 100%;
+    border: solid 1px #CCC;
+    border-radius: 8px;
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+}
+.section {
+    padding: 8px 10px;
+    margin: 8px auto;
+}
+.row {
+    display: flex;
+    flex-wrap: wrap;
+}
+.media {
+    margin: 10px;
+    text-align: center;
+}
+.media-content {
+    text-align: left;
+    border-top: solid 2px #CCC;
+    padding-top: 10px;
+    margin: 0;
+}
+.table tr {
+    transition-duration: 0.25s;
+    transition-timing-function: ease;
+    transition-property: background;
+}
+.table tbody > tr:hover {
+    background: #EEE;
+}
+.table tr td {
+    border-top: solid 1px #CCC;
+}
+.table tr:first-child td {
+    border-top: none;
+}
+.table th {
+    border-bottom: solid 2px #CCC;
+    color: #666;
+    font-weight: bold;
+    text-align: left;
+}
+.table th, .table td {
+    padding: 8px 10px;
+    border-left: solid 1px #CCC;
+}
+.table th:first-child, .table td:first-child {
+    border-left:none;
+}
+.fill-link {
+    overflow: hidden;
+}
+.fill-link > * {
+    display: block;
+    margin: -10em;
+    padding: 10em;
+}
+.tb, .tk {
+    color: #0C0;
+    text-decoration: none;
+    text-align: center;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+    font-weight: bold;
+    background: none;
+}
+.tb:hover, .tb:active, .tb:focus {
+    background: #0C0;
+    color: #FFF;
+}
+th input, td input {
+    width: 100%;
+    box-sizing: border-box;
+}
+.tbb {
+    color: #C00;
+}
+.tbb:hover, .tbb:active, .tbb:focus {
+    background: #C00;
+}
+.tbg {
+    border: solid 1px #CCC;
+    border-bottom: solid 2px #999;
+    float: right;
+    margin-left: 8px;
+    padding: 6px 8px;
+    font-size: 0.75em;
+    border-radius: 8px;
+    color: #000;
+}
+.tbg:hover, .tbg:active, .tbg:focus {
+    background: #666;
+}
+.clearfix:after {
+    content: ". . . . . . . . . . . .";
+    display: block;
+    width: 0; height: 0; font-size: 0;
+    clear: both;
+}
+.tk {
+    color: #666;
+    font-size: 0.75em;
+    position: absolute;
+    top: 0; right: 0;
+    padding: 4px;
+}
+.f {
+   width: 20px;
+}
+.blank {
+    width: 100%;
+}
+.blank td {
+    padding: 10px 0 10px 8px;
+    white-space: nowrap;
+}
+.blank td:first-child {
+    padding-right: 0;
+}
+.flashes {
+    background: #FFD;
+    border: solid 1px #AA0;
+    margin: 8px 0;
+    padding: 0;
+    border-radius: 8px;
+}
+.flashes li {
+    list-style: none;
+    padding: 8px 10px;
+    margin: 0;
+}
+.flashes li + li {
+    border-top: solid 1px #AA0;
+}
+dialog {
+    border: 1px solid #AAA;
+    padding: 8px 10px;
+    border-bottom: 2px solid #666;
+    border-radius: 8px;
+    box-shadow: 0 3px 7px rgba(0, 0, 0, 0.3);
+    display: none;
+    overflow: hidden;
+}
+dialog h3:first-child {
+    margin: -10px -10px 8px -10px;
+    padding: 10px 20px 8px 10px;
+    background: #EEE;
+}
+dialog[open] {
+    display: block;
+}
+dialog + .backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.8);
+}
+dialog::backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.8);
+}
+.superbutton {
+    box-shadow: 0 1px 2px #999;
+    background: #0acf6a;
+    background: linear-gradient(0deg, #129960, #0bef6a);
+    border-top: solid 1px #1eff8d;
+    border-bottom: solid 1px #085724;
+    border-radius: 10px;
+    font-size: 40px;
+    color: #FFF;
+    padding: 10px;
+    margin: 0;
+    text-decoration: none;
+    display: inline-block;
+}
+.superbutton:hover, .superbutton:active, .superbutton:focus {
+    background: #0acf6a;
+    box-shadow: 0 0px 1px #999;
+    border: solid 1px transparent;
+}
+.superbuttonwrap {
+    text-align: center;
+    margin: 32px 0;
+}

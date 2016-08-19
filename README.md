@@ -1,5 +1,6 @@
 [![@TravisCI]][Build Status]
 [![@AelitaBot]][Build Queue]
+[![@Gitter]][Chat on Gitter]
 
 > ### The Not Rocket Science Rule Of Software Engineering
 >
@@ -37,4 +38,5 @@ conditions.
 [Build Status]: https://travis-ci.org/AelitaBot/aelita
 [@AelitaBot]: https://img.shields.io/badge/passing-automatically-FF69b4.svg
 [Build Queue]: http://aelita-mergebot.xyz/AelitaBot/aelita
-
+[@Gitter]: https://img.shields.io/gitter/room/aelitabot/aelitabot.svg?maxAge=2592000
+[Chat on Gitter]: https://gitter.im/aelitabot/Lobby
