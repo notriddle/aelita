@@ -1,51 +1,7 @@
 <!DOCTYPE html>
 <title>No more broken master &mdash; Aelita</title>
 <link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css>
-<style>
-body {
-  max-width: 60em;
-  margin: 0 auto;
-  padding: 16px 20px;
-}
-.superbutton {
-  box-shadow: 0 1px 2px #999;
-  background: #1bbe7b;
-  background: linear-gradient(0deg, #128860, #1cde7c);
-  border-top: solid 1px #1eff8d;
-  border-bottom: solid 1px #084624;
-  border-radius: 10px;
-  font-size: 40px;
-  color: #FFF;
-  padding: 10px;
-  margin: 0;
-  text-decoration: none;
-  display: inline-block;
-}
-.superbutton:hover, .superbutton:active, .superbutton:focus {
-  background: #1bbe7b;
-  box-shadow: 0 0px 1px #999;
-  border: solid 1px transparent;
-}
-.superbuttonwrap {
-  text-align: center;
-  margin: 8px 0;
-}
-.flashes {
-  background: #FFD;
-  border: solid 1px #AA0;
-  margin: 8px 0;
-  padding: 0;
-  border-radius: 8px;
-}
-.flashes li {
-  list-style: none;
-  padding: 8px 10px;
-  margin: 0;
-}
-.flashes li + li {
-  border-top: solid 1px #AA0;
-}
-</style>
+<link rel=stylesheet href=/static/style.css>
 {% with messages = get_flashed_messages() %}
   {% if messages %}
     <ul class=flashes aria-role="alert">
@@ -55,14 +11,49 @@ body {
     </ul>
   {% endif %}
 {% endwith %}
+<form action="/login" class="clearfix" method="POST"><button class="tb tbg">Log in</button></form>
 <div class=superbuttonwrap>
 <img
   src="/static/no-more-broken-master.min.svg"
-  alt="No more broken master!"
-  width="450"
-  height="450">
+  alt="No more broken master"
+  width="225"
+  height="225">
+</div>
+<h1>Automatically maintain a master branch that always passes all the tests</h1>
+<div class="row">
+<section class="section media" style="width:200px">
+<img
+  src="/static/github-step-1.min.svg"
+  width="200"
+  height="200"
+  alt="">
+<p class="media-content">Contributors open pull requests like normal.</p>
+</section>
+<section class="section media" style="width:200px">
+<img
+  src="/static/github-step-2.min.svg"
+  width="200"
+  height="200"
+  alt="">
+<p class="media-content">Reviewers approve them.</p>
+</section>
+<section class="section media" style="width:200px">
+<img
+  src="/static/github-step-3.min.svg"
+  width="200"
+  height="200"
+  alt="">
+<p class="media-content">Aelita runs the tests on Travis CI.</p>
+</section>
+<section class="section media" style="width:200px">
+<img
+  src="/static/github-step-4.min.svg"
+  width="200"
+  height="200"
+  alt="">
+<p class="media-content">It merges it or links to the errors.</p>
+</section>
 </div>
 <div class=superbuttonwrap>
-<a class=superbutton href="/login">Log in with Github</a>
-<p>This service is currently in invite-only beta.</p>
+<a class=superbutton href="https://gitter.im/aelitabot/invite-requests">Join the alpha!</a>
 </div>

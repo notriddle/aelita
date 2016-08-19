@@ -1,3 +1,5 @@
+# This file is released under the same terms as Rust iself.
+
 from flask import Flask, g, redirect, render_template, request, session
 from flask import flash, url_for
 from flask_github import GitHub

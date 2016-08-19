@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg id="svg2" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 450" version="1.1" xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<metadata id="metadata34">
+<rdf:RDF>
+<cc:Work rdf:about="">
+<dc:format>image/svg+xml</dc:format>
+<dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+<dc:title/>
+</cc:Work>
+</rdf:RDF>
+</metadata>
+<defs id="defs32">
+<clipPath id="e" clipPathUnits="userSpaceOnUse">
+<rect id="rect4450" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" ry="11.47" height="196.52" width="306.52" stroke="#c8c8c8" y="111.28" x="90.473" stroke-width="3.4848px" fill="none"/>
+</clipPath>
+<clipPath id="d" clipPathUnits="userSpaceOnUse">
+<rect id="rect4450-9" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" ry="11.47" height="196.52" width="306.52" stroke="#c8c8c8" y="111.28" x="90.473" stroke-width="3.4848px" fill="none"/>
+</clipPath>
+<clipPath id="c" clipPathUnits="userSpaceOnUse">
+<rect id="rect4450-9-5" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" ry="11.47" height="196.52" width="306.52" stroke="#c8c8c8" y="111.28" x="90.473" stroke-width="3.4848px" fill="none"/>
+</clipPath>
+<clipPath id="b" clipPathUnits="userSpaceOnUse">
+<rect id="rect4611" height="40.515" stroke="#c8c8c8" stroke-width="3.4848px" fill="#f0f0f0" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" transform="matrix(1 0 0 .66997 15.341 218.81)" width="306.52" clip-path="url(#c)" y="111.28" x="90.473"/>
+</clipPath>
+</defs>
+<mask id="a">
+<rect id="rect10" rx="3" height="20" width="80" y="0" x="0" fill="#fff"/>
+</mask>
+<g>
+<rect id="rect3393" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" ry="10" height="34.865" width="69.73" y="69.274" x="25.103" fill="#00c800"/>
+<g font-family="sans-serif">
+<text id="text3357" style="word-spacing:0px;letter-spacing:0px" xml:space="preserve" font-size="40px" y="59.511448" x="27.89204" line-height="125%" fill="#000000"><tspan id="tspan3359" x="27.89204" y="59.511448">Activate Tower</tspan></text>
+<text id="text3357-3" style="word-spacing:0px;letter-spacing:0px" xml:space="preserve" font-size="40px" y="59.511448" x="341.67746" line-height="125%" fill="#b3b3b3"><tspan id="tspan3359-6" x="341.67746" y="59.511448">#2</tspan></text>
+<text id="text3389" style="word-spacing:0px;letter-spacing:0px" xml:space="preserve" font-size="19.452px" y="92.28299" x="30.696444" line-height="125%" fill="#ffffff"><tspan id="tspan3391" font-weight="bold" y="92.28299" x="30.696444" font-family="sans-serif">Open</tspan></text>
+</g>
+<rect id="rect4197" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" ry="11.477" height="70.427" width="70.427" y="149.46" x="23.708"/>
+<text id="text3389-7" style="word-spacing:0px;letter-spacing:0px" xml:space="preserve" font-size="19.452px" line-height="125%" y="92.28299" x="104.20188" font-family="sans-serif" fill="#ffffff"><tspan id="tspan3391-5" y="92.28299" x="104.20188" font-family="sans-serif" fill="#000000"><tspan id="tspan4452" font-family="sans-serif" font-weight="bold">xana</tspan> wants to merge 1 commit</tspan></text>
+</g>
+<g>
+<circle id="path4227" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" cx="58.389" cy="185.01" r="16.082" fill="#f00"/>
+<circle id="path4227-3" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" cx="58.389" cy="185.01" r="13.405"/>
+<circle id="path4227-3-5" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" cx="58.389" cy="185.01" r="5.0255" fill="#f00"/>
+</g>
+<g stroke="#f00" fill="none">
+<path id="path4259" d="m49.63 195.71-9.5953 9.5954" stroke-width="8"/>
+<path id="path4276" d="m57.719 199.35v18.092" stroke-width="8"/>
+<path id="path4302" d="m57.384 169.95v-16.752" stroke-width="5.4359"/>
+<circle id="path4304" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" cx="58.19" cy="184.92" r="9.2943" stroke-width="2.4048"/>
+<path id="path4259-9" d="m78.474 205.31-9.5953-9.5954" stroke-width="8"/>
+</g>
+<g stroke="#c8c8c8">
+<rect id="rect4426" height="40.515" stroke-width="3.4848px" fill="#f0f0f0" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" transform="translate(15.341 39.049)" width="306.52" clip-path="url(#e)" y="111.28" x="90.473"/>
+<rect id="rect4197-1" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" ry="5.6932" height="97.541" width="307.54" y="151.82" x="105.3" stroke-width="2.459" fill="none"/>
+<path id="path4454" d="m107.52 156.95-11.809 11.112 11.893 10.15" fill-rule="evenodd" stroke-width="2.49" fill="#f0f0f0"/>
+<rect id="rect4426-9" height="40.515" stroke-width="3.4848px" fill="#f0f0f0" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" transform="matrix(1 0 0 .66997 15.341 220.81)" width="306.52" clip-path="url(#d)" y="111.28" x="90.473"/>
+<rect id="rect4197-1-2" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" ry="7.5437" height="129.25" width="307.17" y="297.04" x="105.49" stroke-width="2.8289" fill="none"/>
+<path id="path4454-0" d="m107.52 301.99-11.809 11.112 11.893 10.15" fill-rule="evenodd" stroke-width="2.49" fill="#f0f0f0"/>
+</g>
+<g>
+<rect id="rect4197-3-2" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" ry="3.5227" height="21.616" width="59.577" y="397.7" x="342.95" fill="#00c800"/>
+<g stroke="#c8c8c8">
+<rect id="rect4565" height="52.167" stroke-width="3.3183" fill="#f0f0f0" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" ry="8.299" width="280.88" y="336.85" x="120.35"/>
+<g stroke-width="2.49">
+<rect id="rect4567-3" ry="6.7958" fill="#fff" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" transform="matrix(1 0 0 1.3338 0 -103.85)" width="51.6" clip-path="url(#b)" height="22.314" y="305.57" x="115.75"/>
+<circle id="path4613" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" cx="59.223" cy="328.65" r="27.612" fill="#fff"/>
+<circle id="path4615" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" cx="48.348" cy="326.84" r="6.9029"/>
+<circle id="path4617" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" cx="68.071" cy="325.86" r="6.9029"/>
+</g>
+</g>
+</g>
+<path id="path4619" d="m42.404 337.61s11.834 17.75 24.653 6.9029" stroke="#000" stroke-width="1px" fill="none"/>
+<path id="path4621" d="m48.32 302.08 8.8752 7.8891-3.9445 6.9029 13.806-6.9029-8.8752-9.8613-26.626 12.82 7.8891-17.75 37.473-1.9723 15.778 33.529-14.792-4.9307-11.834-22.681z" fill-rule="evenodd" stroke="#000" stroke-width="1px" fill="#ff0"/>
+<text id="text4623" style="word-spacing:0px;letter-spacing:0px" xml:space="preserve" font-size="24.763px" y="361.50519" x="129.20161" font-family="sans-serif" line-height="125%" fill="#000000"><tspan id="tspan4625" x="129.20161" y="361.50519">@aelita-mergebot r+</tspan></text>
+</svg>
