@@ -1165,7 +1165,7 @@ fn one_item_github_round_trip_cloud_no_staging() {
         ).as_bytes()).unwrap();
     });
 
-    info!("Aelita checks for the current contents of staging. It doesn't exist.");
+    info!("Aelita checks for the current contents of staging. There isn't.");
     single_request(&mut github_git_server, |req, mut res| {
         let path = "/repos/AelitaBot/testp/git/refs/heads/staging".to_owned();
         assert_eq!(
