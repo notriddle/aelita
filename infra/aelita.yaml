@@ -1,48 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: caddy
-spec:
-  type: LoadBalancer
-  ports:
-    - name: http
-      port: 80
-      targetPort: 80
-      protocol: TCP
-    #- name: https
-      #port: 443
-      #targetPort: 443
-      #protocol: TCP
-  selector:
-    app: caddy
-
----
-
-apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: caddy
-spec:
-  replicas: 2
-  template:
-    metadata:
-      labels:
-        app: caddy
-    spec:
-      containers:
-        - name: caddy
-          image: gcr.io/aelita-1374/caddy:INSERT_CURRENT_VERSION_HERE
-          ports:
-            - containerPort: 80
-            - containerPort: 443
-
----
-
-apiVersion: v1
-kind: Service
-metadata:
   name: aelita
 spec:
+  type: NodePort
   ports:
     - name: github-notice
       port: 6000
@@ -122,6 +83,7 @@ kind: Service
 metadata:
   name: signup
 spec:
+  type: NodePort
   ports:
     - name: http
       port: 8000
@@ -156,7 +118,7 @@ spec:
             - name: AELITA_BOT_USERNAME
               value: aelita-mergebot
             - name: AELITA_BOT_BASEURL
-              value: http://aelita-mergebot.xyz
+              value: https://aelita-mergebot.xyz
             - name: AELITA_BOT_DBURI
               value: postgresql://postgres:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE@postgres-configs
             - name: AELITA_BOT_ACCESS_TOKEN
@@ -305,4 +267,103 @@ spec:
         - name: aelita-configs
           persistentVolumeClaim:
             claimName: postgres-configs
+
+---
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    app: nginx
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: gcr.io/aelita-1374/nginx:v4
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: nginx-ingress
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    kubernetes.io/ingress.class: "gce"
+spec:
+  tls:
+    - secretName: aelitabot-tls
+      hosts:
+        - aelitabot.xyz
+        - aelita-mergebot.xyz
+  backend:
+    serviceName: nginx
+    servicePort: 80
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kube-lego
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: kube-lego
+    spec:
+      containers:
+        - name: kube-lego
+          image: jetstack/kube-lego:0.1.2
+          ports:
+            - containerPort: 8080
+          env:
+            - name: LEGO_EMAIL
+              value: "michael@notriddle.com"
+            - name: LEGO_URL
+              value: "https://acme-v01.api.letsencrypt.org/directory"
+            - name: LEGO_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: LEGO_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
 

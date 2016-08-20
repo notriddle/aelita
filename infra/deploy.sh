@@ -11,8 +11,8 @@ cd static-binary
 docker build -t=gcr.io/$PROJECT_NAME/aelita:$CURRENT_VERSION .
 cd ../signup/
 docker build -t=gcr.io/$PROJECT_NAME/signup:$CURRENT_VERSION .
-cd ../infra/caddy/
-docker build -t=gcr.io/$PROJECT_NAME/caddy:$CURRENT_VERSION .
+cd ../infra/nginx/
+docker build -t=gcr.io/$PROJECT_NAME/nginx:$CURRENT_VERSION .
 
 # Install gcloud
 cd ../
@@ -38,7 +38,7 @@ gcloud --quiet container clusters get-credentials $CLUSTER_NAME
 # Push to gcr.io
 gcloud docker push gcr.io/$PROJECT_NAME/aelita:$CURRENT_VERSION
 gcloud docker push gcr.io/$PROJECT_NAME/signup:$CURRENT_VERSION
-gcloud docker push gcr.io/$PROJECT_NAME/caddy:$CURRENT_VERSION
+gcloud docker push gcr.io/$PROJECT_NAME/nginx:$CURRENT_VERSION
 
 # Upgrade the pod
 # PASSWORD envs were added by running:

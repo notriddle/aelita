@@ -152,7 +152,7 @@ def index():
         return redirect(url_for('manage'))
 
 
-@app.route('/login')
+@app.route('/login', methods=['POST'])
 def login():
     return github.authorize(scope="user,repo")
 
