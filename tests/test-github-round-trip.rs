@@ -1182,7 +1182,7 @@ fn one_item_github_round_trip_cloud_no_staging() {
 
     info!("Aelita sets staging to master.");
     single_request(&mut github_git_server, |req, mut res| {
-        let path = "/repos/AelitaBot/testp/git/refs/heads/staging".to_owned();
+        let path = "/repos/AelitaBot/testp/git/refs".to_owned();
         assert_eq!(
             req.uri,
             RequestUri::AbsolutePath(path)
