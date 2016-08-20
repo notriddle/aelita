@@ -12,6 +12,7 @@ docker build -t=gcr.io/$PROJECT_NAME/aelita:$CURRENT_VERSION .
 cd ../signup/
 docker build -t=gcr.io/$PROJECT_NAME/signup:$CURRENT_VERSION .
 cd ../infra/nginx/
+cp -rv ../../signup/static/ .
 docker build -t=gcr.io/$PROJECT_NAME/nginx:$CURRENT_VERSION .
 
 # Install gcloud
