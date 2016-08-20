@@ -300,7 +300,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: gcr.io/aelita-1374/nginx:v4
+          image: gcr.io/aelita-1374/nginx:INSERT_CURRENT_VERSION_HERE
           ports:
             - containerPort: 80
           readinessProbe:
