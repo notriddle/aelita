@@ -209,27 +209,55 @@ impl Worker {
             let resp_desc: RefDesc = try!(json_from_reader(resp));
             let init_staging_sha = resp_desc.object.sha;
             debug!("Staging sha is: {}", init_staging_sha);
-            init_staging_sha == master_sha
+            Some(init_staging_sha == master_sha)
         } else {
-            false
+            None
         };
-        if !staging_up_to_date {
-            debug!("Set staging SHA: {}", url);
-            #[derive(Serialize)]
-            struct RefUpdateDesc {
-                force: bool,
-                sha: String,
+        match staging_up_to_date {
+            Some(false) => {
+                debug!("Set staging SHA: {}", url);
+                #[derive(Serialize)]
+                struct RefUpdateDesc {
+                    force: bool,
+                    sha: String,
+                }
+                let update_desc = try!(json_to_vec(&RefUpdateDesc {
+                    force: true,
+                    sha: master_sha,
+                }));
+                let resp = try!(self.rate_limiter.retry_send(|| {
+                    self.authed_request(Method::Patch, &url)
+                        .body(&*update_desc)
+                }));
+                if !resp.status.is_success() {
+                    return Err(GithubRequestError::HttpStatus(resp.status));
+                }
             }
-            let update_desc = try!(json_to_vec(&RefUpdateDesc {
-                force: true,
-                sha: master_sha,
-            }));
-            let resp = try!(self.rate_limiter.retry_send(|| {
-                self.authed_request(Method::Patch, &url)
-                    .body(&*update_desc)
-            }));
-            if !resp.status.is_success() {
-                return Err(GithubRequestError::HttpStatus(resp.status));
+            Some(true) => {}
+            None => {
+                let url = format!(
+                    "{}/repos/{}/{}/git/refs",
+                    self.host,
+                    repo.owner,
+                    repo.repo
+                );
+                #[derive(Serialize)]
+                struct RefCreateDesc {
+                    #[serde(rename="ref")]
+                    git_ref: String,
+                    sha: String,
+                }
+                let create_desc = try!(json_to_vec(&RefCreateDesc{
+                    git_ref: format!("refs/heads/{}", repo.staging_branch),
+                    sha: master_sha,
+                }));
+                let resp = try!(self.rate_limiter.retry_send(|| {
+                    self.authed_request(Method::Post, &url)
+                        .body(&*create_desc)
+                }));
+                if !resp.status.is_success() {
+                    return Err(GithubRequestError::HttpStatus(resp.status));
+                }
             }
         }
         // Step 3: merge the pull request into master.
