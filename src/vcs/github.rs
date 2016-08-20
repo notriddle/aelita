@@ -205,13 +205,15 @@ impl Worker {
         let resp = try!(self.rate_limiter.retry_send(|| {
             self.authed_request(Method::Get, &url)
         }));
-        if !resp.status.is_success() {
-            return Err(GithubRequestError::HttpStatus(resp.status));
-        }
-        let resp_desc: RefDesc = try!(json_from_reader(resp));
-        let init_staging_sha = resp_desc.object.sha;
-        debug!("Staging sha is: {}", init_staging_sha);
-        if init_staging_sha != master_sha {
+        let staging_up_to_date = if resp.status.is_success() {
+            let resp_desc: RefDesc = try!(json_from_reader(resp));
+            let init_staging_sha = resp_desc.object.sha;
+            debug!("Staging sha is: {}", init_staging_sha);
+            init_staging_sha == master_sha
+        } else {
+            false
+        };
+        if !staging_up_to_date {
             debug!("Set staging SHA: {}", url);
             #[derive(Serialize)]
             struct RefUpdateDesc {
