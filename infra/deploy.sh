@@ -13,6 +13,7 @@ cd ../signup/
 docker build -t=gcr.io/$PROJECT_NAME/signup:$CURRENT_VERSION .
 cd ../infra/nginx/
 cp -rv ../../signup/static/ .
+for i in static/*; do gzip $i; done
 docker build -t=gcr.io/$PROJECT_NAME/nginx:$CURRENT_VERSION .
 
 # Install gcloud
