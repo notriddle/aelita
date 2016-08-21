@@ -1,6 +1,6 @@
 // This file is released under the same terms as Rust itself.
 
-use ci::{self, buildbot, github_status, jenkins};
+use ci::{self, github_status, jenkins};
 use config::{PipelineConfig, WorkerBuilder};
 use db::{self, DbBox};
 use pipeline::{PipelineId, WorkerManager};
@@ -76,8 +76,6 @@ impl GithubBuilder {
         }
         let mut github_projects =
             StaticGithubProjectsConfig::new();
-        let mut buildbot_pipelines =
-            StaticBuildbotPipelinesConfig::new();
         let mut github_status_pipelines =
             StaticGithubStatusPipelinesConfig::new();
         let mut jenkins_pipelines =
@@ -103,15 +101,6 @@ impl GithubBuilder {
             ) {
                 Ok(()) | Err(SetupError::NotFoundConfig) => {},
                 Err(e) => return Err(GithubBuilderError::GithubProject(e)),
-            }
-            match buildbot_pipelines.add_pipeline(
-                name,
-                config,
-                def,
-                pipeline_id,
-            ) {
-                Ok(()) | Err(SetupError::NotFoundConfig) => {},
-                Err(e) => return Err(GithubBuilderError::BuildbotProject(e)),
             }
             match github_status_pipelines.add_pipeline(
                 name,
@@ -163,16 +152,6 @@ impl GithubBuilder {
             }
             pipeline_id.0 += 1;
             if def.lookup("try").is_some() {
-                match buildbot_pipelines.add_pipeline(
-                    name,
-                    config,
-                    def,
-                    pipeline_id,
-                ) {
-                    Ok(()) | Err(SetupError::NotFoundConfig) => {},
-                    Err(e) =>
-                        return Err(GithubBuilderError::BuildbotProject(e)),
-                }
                 match github_status_pipelines.add_pipeline(
                     name,
                     config,
@@ -233,11 +212,6 @@ impl GithubBuilder {
             Err(SetupError::NotFoundConfig) => None,
             Err(e) => return Err(GithubBuilderError::Github(e)),
         };
-        let buildbot = match setup_buildbot(config, buildbot_pipelines) {
-            Ok(buildbot) => Some(WorkerThread::start(buildbot)),
-            Err(SetupError::NotFoundConfig) => None,
-            Err(e) => return Err(GithubBuilderError::Buildbot(e)),
-        };
         let github_status =
             match setup_github_status(config, github_status_pipelines) {
                 Ok(github_status) => Some(WorkerThread::start(github_status)),
@@ -272,12 +246,6 @@ impl GithubBuilder {
             None
         };
         let mut cis = vec![];
-        let buildbot_idx = if let Some(buildbot) = buildbot {
-            cis.push(buildbot);
-            Some(cis.len()-1)
-        } else {
-            None
-        };
         let github_status_idx = if let Some(github_status) = github_status {
             cis.push(github_status);
             Some(cis.len()-1)
@@ -314,12 +282,6 @@ impl GithubBuilder {
             } else if def.lookup("github.status").is_some() {
                 if let Some(github_status_idx) = github_status_idx {
                     github_status_idx
-                } else {
-                    return Err(GithubBuilderError::Dangling);
-                }
-            } else if def.lookup("buildbot").is_some() {
-                if let Some(buildbot_idx) = buildbot_idx {
-                    buildbot_idx
                 } else {
                     return Err(GithubBuilderError::Dangling);
                 }
@@ -480,41 +442,6 @@ fn setup_github(config: &toml::Value, projects: StaticGithubProjectsConfig)
                     .unwrap_or("db.sqlite").to_owned()
             )[..]
         ).expect("the DB to open"),
-    ))
-}
-
-fn setup_buildbot(
-    config: &toml::Value,
-    pipelines: StaticBuildbotPipelinesConfig
-) -> Result<buildbot::Worker, SetupError<BuildbotArg>> {
-    let user = if let Some(user) = config.lookup("buildbot.user") {
-        if let Some(user) = user.as_str() {
-            Some(user.to_owned())
-        } else {
-            return Err(SetupError::InvalidArg(BuildbotArg::User, Ty::String));
-        }
-    } else {
-        None
-    };
-    let token = if let Some(token) = config.lookup("buildbot.token") {
-        if let Some(token) = token.as_str() {
-            Some(token.to_owned())
-        } else {
-            return Err(SetupError::InvalidArg(BuildbotArg::Token, Ty::String));
-        }
-    } else {
-        None
-    };
-    let auth = if let (Some(user), Some(token)) = (user, token) {
-        Some((user, token))
-    } else {
-        None
-    };
-    Ok(buildbot::Worker::new(
-        toml_arg!(config, "buildbot", "listen", String, BuildbotArg::Listen),
-        toml_arg!(config, "buildbot", "host", String, BuildbotArg::Host),
-        auth,
-        Box::new(pipelines),
     ))
 }
 
@@ -768,80 +695,6 @@ impl github::ProjectsConfig for StaticGithubProjectsConfig {
             }
         }
         return None;
-    }
-}
-
-
-struct StaticBuildbotPipelinesConfig(HashMap<PipelineId, buildbot::Job>);
-
-impl StaticBuildbotPipelinesConfig {
-    fn new() -> Self {
-        StaticBuildbotPipelinesConfig(HashMap::new())
-    }
-    fn add_pipeline(
-        &mut self,
-        _name: &str,
-        _config: &toml::Value,
-        def: &toml::Value,
-        pipeline_id: PipelineId
-    ) -> Result<(), SetupError<BuildbotProjectArg>> {
-        let builders_toml = toml_arg!(
-            def,
-            "buildbot",
-            "builders",
-            Array,
-            BuildbotProjectArg::Builders
-        );
-        let mut builders = Vec::with_capacity(builders_toml.len());
-        for builder_toml in builders_toml {
-            builders.push(if let Some(builder) = builder_toml.as_str() {
-                builder.to_owned()
-            } else {
-                return Err(SetupError::InvalidArg(
-                    BuildbotProjectArg::Builders,
-                    Ty::String
-                ));
-            });
-        }
-        let poller = toml_arg_default!(
-            def,
-            "buildbot",
-            "poller",
-            String,
-            BuildbotProjectArg::Poller,
-            ""
-        );
-        let poller = if poller == "" { None } else { Some(poller) };
-        self.0.insert(
-            pipeline_id,
-            buildbot::Job{
-                poller: poller,
-                builders: builders,
-            }
-        );
-        Ok(())
-    }
-}
-
-impl buildbot::PipelinesConfig for StaticBuildbotPipelinesConfig {
-    fn pipelines_by_builder(&self, builder: &str)
-            -> Vec<PipelineId> {
-        let mut ret_val = vec![];
-        for (pipeline, job) in self.0.iter() {
-            for it_builder in job.builders.iter() {
-                if builder == it_builder {
-                    ret_val.push(*pipeline);
-                }
-            }
-        }
-        ret_val
-    }
-    fn job_by_pipeline(&self, pipeline_id: PipelineId)
-            -> Option<buildbot::Job> {
-        self.0.get(&pipeline_id).map(Clone::clone)
-    }
-    fn all(&self) -> Vec<(PipelineId, buildbot::Job)> {
-        self.0.iter().map(|x| (x.0.clone(), x.1.clone())).collect()
     }
 }
 
@@ -1159,9 +1012,6 @@ quick_error! {
         Github(err: SetupError<GithubArg>) {
             cause(err)
         }
-        Buildbot(err: SetupError<BuildbotArg>) {
-            cause(err)
-        }
         GithubStatus(err: SetupError<GithubStatusArg>) {
             cause(err)
         }
@@ -1181,9 +1031,6 @@ quick_error! {
             cause(err)
         }
         GithubProject(err: SetupError<GithubProjectArg>) {
-            cause(err)
-        }
-        BuildbotProject(err: SetupError<BuildbotProjectArg>) {
             cause(err)
         }
         GithubStatusProject(err: SetupError<GithubStatusProjectArg>) {
@@ -1223,14 +1070,6 @@ pub enum GithubArg {
     User,
     Secret,
     Db,
-}
-
-#[derive(Debug)]
-pub enum BuildbotArg {
-    Listen,
-    Host,
-    User,
-    Token,
 }
 
 #[derive(Debug)]
@@ -1279,12 +1118,6 @@ pub enum ProjectArg {
 pub enum GithubProjectArg {
     Owner,
     Repo,
-}
-
-#[derive(Debug)]
-pub enum BuildbotProjectArg {
-    Builders,
-    Poller,
 }
 
 #[derive(Debug)]
