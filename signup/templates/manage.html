@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <title>No more broken master &mdash; Aelita</title>
 <link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css>
-<link rel=stylesheet href=/static/style.css>
 <script>
 if (!document.createElement('dialog').showModal) {
   var link = document.createElement('link');
@@ -15,8 +14,8 @@ if (!document.createElement('dialog').showModal) {
 }
 function showInviteDialog() {
   var dialog = document.getElementById('invite_dialog');
-  if (dialogPolyfill) {
-    dialogPolyfill.registerDialog(dialog);
+  if (window.dialogPolyfill) {
+    window.dialogPolyfill.registerDialog(dialog);
   }
   dialog.showModal();
 }
@@ -25,6 +24,7 @@ function closeInviteDialog() {
   dialog.close();
 }
 </script>
+<link rel=stylesheet href=/static/style2.css>
 <form action="/logout" method="POST"><button class="tb tbg">Log out</button></form>
 {% if invite_count > 0 %}
 <button class="tb tbg" onclick="showInviteDialog()">Invite</button>
