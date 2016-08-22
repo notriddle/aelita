@@ -75,6 +75,12 @@ spec:
               value: 0.0.0.0:8000
             - name: AELITA_VIEW_SECRET
               value: INSERT_VIEW_SECRET_HERE
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
 
 ---
 
