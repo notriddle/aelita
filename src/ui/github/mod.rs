@@ -694,7 +694,7 @@ impl Worker {
                 ":scream: Internal error while fast-forward master"
             )),
             ui::Status::Invalidated => Some(Cow::Borrowed(
-                ":not_good: New commits added"
+                ":no_good: New commits added"
             )),
             ui::Status::NoCommit => Some(Cow::Borrowed(
                 ":scream: Internal error: no commit found for PR"
