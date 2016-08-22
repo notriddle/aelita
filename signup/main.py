@@ -202,7 +202,7 @@ def manage():
     edit = None
     default_context = 'continuous-integration/travis-ci/push'
     for repo in all_repos:
-        if repo['permissions']['admin']:
+        if !repo['permissions']['admin']:
             continue
         on_repo = GithubProjects.query \
             .filter_by(owner=repo['owner']['login'],repo=repo['name']) \
