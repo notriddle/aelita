@@ -281,6 +281,14 @@ quick_error! {
 #[derive(Copy, Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Commit(u64, u64, u32);
 
+impl Commit {
+    pub fn to_short_string(&self) -> String {
+        let mut string = self.to_string();
+        string.truncate(5);
+        string
+    }
+}
+
 impl vcs::Commit for Commit {
     type Remote = Remote;
 }

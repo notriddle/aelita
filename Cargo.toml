@@ -6,7 +6,6 @@ license = "MIT / Apache-2.0"
 
 [profile.release]
 lto = true
-panic = 'abort'
 
 [dependencies]
 crossbeam = "0.2"

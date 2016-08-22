@@ -119,6 +119,9 @@ mod test {
         -> Option<Command<'a, git::Commit>> {
         super::parse(body, def_user)
     }
+    #[test] fn test_empty_comment() {
+        assert_eq!(parse("", ""), None);
+    }
     #[test] fn test_comment_body_not_approved() {
         assert_eq!(parse("r?", "luser"), None);
     }

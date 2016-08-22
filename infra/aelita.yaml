@@ -44,11 +44,11 @@ spec:
             - name: AELITA_UI_TYPE
               value: github
             - name: AELITA_PIPELINE_DB
-              value: postgresql://postgres:INSERT_POSTGRES_PIPELINES_PASSWORD_HERE@postgres-pipelines
+              value: postgresql://postgres:INSERT_POSTGRES_PIPELINES_PASSWORD_HERE@postgres-pipelines.default.svc.cluster.local
             - name: AELITA_PROJECT_DB
-              value: postgresql://postgres:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE@postgres-configs
+              value: postgresql://postgres:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE@postgres-configs.default.svc.cluster.local
             - name: AELITA_UI_GITHUB_DB
-              value: postgresql://postgres:INSERT_POSTGRES_CACHES_PASSWORD_HERE@postgres-caches
+              value: postgresql://postgres:INSERT_POSTGRES_CACHES_PASSWORD_HERE@postgres-caches.default.svc.cluster.local
             - name: AELITA_UI_GITHUB_LISTEN
               value: 0.0.0.0:6000
             - name: AELITA_UI_GITHUB_HOST
@@ -75,6 +75,12 @@ spec:
               value: 0.0.0.0:8000
             - name: AELITA_VIEW_SECRET
               value: INSERT_VIEW_SECRET_HERE
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
 
 ---
 
