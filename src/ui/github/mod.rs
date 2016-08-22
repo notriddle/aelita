@@ -730,8 +730,8 @@ impl Worker {
                     target_url: None,
                     description: format!(
                         "Testing {} with merge commit {}",
-                        &pull_commit.to_string()[0..5],
-                        &merge_commit.to_string()[0..5],
+                        &pull_commit.to_short_string()[..],
+                        &merge_commit.to_short_string()[..],
                     ),
                     context: context,
                 }
@@ -748,8 +748,8 @@ impl Worker {
                     target_url: url.as_ref().map(ToString::to_string),
                     description: format!(
                         "Testing {} with merge commit {}",
-                        &pull_commit.to_string()[0..5],
-                        &merge_commit.to_string()[0..5],
+                        &pull_commit.to_short_string()[..],
+                        &merge_commit.to_short_string()[..],
                     ),
                     context: context,
                 }
