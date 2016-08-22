@@ -196,12 +196,14 @@ def manage():
     if user is None:
         flash("Please log in")
         return logout()
-    all_repos = github.get('user/repos', all_pages=True)
+    all_repos = github.get('user/repos?visibility=public', all_pages=True)
     present = []
     non_present = []
     edit = None
     default_context = 'continuous-integration/travis-ci/push'
     for repo in all_repos:
+        if repo['permissions']['admin']:
+            continue
         on_repo = GithubProjects.query \
             .filter_by(owner=repo['owner']['login'],repo=repo['name']) \
             .first()
