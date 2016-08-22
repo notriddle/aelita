@@ -161,6 +161,7 @@ dialog {
     box-shadow: 0 3px 7px rgba(0, 0, 0, 0.3);
     display: none;
     overflow: hidden;
+    max-width: 1000px;
 }
 dialog h3:first-child {
     margin: -10px -10px 8px -10px;
