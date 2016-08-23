@@ -65,7 +65,7 @@ for i in POSTGRES_PIPELINES_PASSWORD POSTGRES_CACHES_PASSWORD \
          GITHUB_WEBHOOK_SECRET GITHUB_STATUS_WEBHOOK_SECRET \
          GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET \
          VIEW_SECRET CURRENT_VERSION SENTRY_DSN; do
-    sed -i s:INSERT_${i}_HERE:${!i}:g aelita.yaml
+    sed -i "s!INSERT_${i}_HERE!${!i}!g" aelita.yaml
 done
 kubectl apply -f aelita.yaml
 
