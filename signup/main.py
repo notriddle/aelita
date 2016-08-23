@@ -11,6 +11,13 @@ from sqlalchemy.ext.declarative import declarative_base
 
 
 app = Flask(__name__)
+
+
+if 'SENTRY_DSN' in os.environ:
+    from raven.contrib.flask import Sentry
+    sentry = Sentry(app)
+
+
 app.config['GITHUB_CLIENT_ID'] = os.environ['AELITA_GITHUB_CLIENT_ID']
 app.config['GITHUB_CLIENT_SECRET'] = os.environ['AELITA_GITHUB_CLIENT_SECRET']
 app.config['BOT_USERNAME'] = os.environ['AELITA_BOT_USERNAME']

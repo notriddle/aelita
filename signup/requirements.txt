@@ -2,4 +2,6 @@ flask
 GitHub-Flask
 Flask-SQLAlchemy
 psycopg2
+raven
+raven[flask]
 
