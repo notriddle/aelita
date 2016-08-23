@@ -191,6 +191,7 @@ dialog::backdrop {
     box-shadow: 0 1px 2px #999;
     background: #0acf6a;
     background: linear-gradient(0deg, #129960, #0bef6a);
+    border: solid 1px transparent;
     border-top: solid 1px #1eff8d;
     border-bottom: solid 1px #085724;
     border-radius: 10px;
@@ -200,13 +201,33 @@ dialog::backdrop {
     margin: 0;
     text-decoration: none;
     display: inline-block;
+    text-shadow: rgba(0,0,0,0.3) -1px 0, rgba(0,0,0,0.1) 0 -1px, rgba(255,255,255,0.3) 0 1px, rgba(0,0,0,0.1) -1px -2px;
 }
 .superbutton:hover, .superbutton:active, .superbutton:focus {
     background: #0acf6a;
     box-shadow: 0 0px 1px #999;
     border: solid 1px transparent;
+    text-shadow: none;
 }
 .superbuttonwrap {
     text-align: center;
     margin: 32px 0;
+}
+.ghostbutton {
+    background: transparent;
+    border: solid 1px #33b5e5;
+    border-radius: 10px;
+    font-size: 40px;
+    color: #33b5e5;
+    padding: 10px;
+    margin: 0;
+    text-decoration: none;
+    display: inline-block;
+    font-weight: lighter;
+}
+.ghostbutton:hover, .ghostbutton:active, .ghostbutton:focus {
+    background: #0082b2;
+    color: #FFF;
+    box-shadow: 0 0px 1px #999;
+    border: solid 1px transparent;
 }
