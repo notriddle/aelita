@@ -59,11 +59,12 @@ gcloud docker push gcr.io/$PROJECT_NAME/nginx:$CURRENT_VERSION
 #     travis env --repo AelitaBot/aelita set GITHUB_CLIENT_SECRET yourson
 #     RAND=`dd if=/dev/urandom of=/dev/stdout count=4096 | sha256sum -`
 #     travis env --repo AelitaBot/aelita set VIEW_SECRET $RAND
+#     travis env --repo AelitaBot/aelita set SENTRY_DSN yourdic
 for i in POSTGRES_PIPELINES_PASSWORD POSTGRES_CACHES_PASSWORD \
          POSTGRES_CONFIGS_PASSWORD GITHUB_PERSONAL_ACCESS_TOKEN \
          GITHUB_WEBHOOK_SECRET GITHUB_STATUS_WEBHOOK_SECRET \
          GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET \
-         VIEW_SECRET CURRENT_VERSION; do
+         VIEW_SECRET CURRENT_VERSION SENTRY_DSN; do
     sed -i s:INSERT_${i}_HERE:${!i}:g aelita.yaml
 done
 kubectl apply -f aelita.yaml
