@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <title>No more broken master &mdash; Aelita</title>
+<meta name=viewport content=width=device-width>
 <link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css>
-<link rel=stylesheet href=/static/style2.css>
+<link rel=stylesheet href=/static/style3.css>
 {% with messages = get_flashed_messages() %}
   {% if messages %}
     <ul class=flashes aria-role="alert">
@@ -43,7 +44,7 @@
   width="200"
   height="200"
   alt="">
-<p class="media-content">Aelita runs the tests on Travis CI.</p>
+<p class="media-content">Aelita runs the tests on Travis CI. Travis CI might've already run them, but master has changed since then.</p>
 </section>
 <section class="section media" style="width:200px">
 <img
@@ -51,9 +52,10 @@
   width="200"
   height="200"
   alt="">
-<p class="media-content">It merges it or links to the errors.</p>
+<p class="media-content">It pushes it to master or links to the errors.</p>
 </section>
 </div>
 <div class=superbuttonwrap>
-<a class=superbutton href="https://gitter.im/aelitabot/invite-requests">Join the alpha!</a>
+<a class=superbutton href="https://gitter.im/aelitabot/invite-requests">Join the beta</a>
+<a class=ghostbutton href="https://github.com/AelitaBot/aelita">Fork it on GitHub</a>
 </div>
