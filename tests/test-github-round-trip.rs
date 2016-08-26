@@ -2315,3 +2315,56 @@ fn one_item_github_round_trip_cloud_with_sqlite_12f() {
 
     aelita.kill().unwrap();
 }
+
+#[test]
+fn the_frewsxcv_test() {
+    let _lock = ONE_AT_A_TIME.lock();
+    START.call_once(|| env_logger::init().unwrap());
+
+    if !Path::new(EXECUTABLE).exists() {
+        panic!("Integration tests require the executable to be built.");
+    }
+
+    Command::new("/bin/rm")
+        .current_dir("./tests/")
+        .arg("db.sqlite")
+        .output()
+        .unwrap();
+
+    let mut github_server = HttpListener::new(&"localhost:9011").unwrap();
+    let mut jenkins_server = HttpListener::new(&"localhost:9012").unwrap();
+    let mut github_git_server = HttpListener::new(&"localhost:9013").unwrap();
+
+    let executable = Path::new(EXECUTABLE).canonicalize().unwrap();
+    let mut aelita = Command::new(executable)
+        .current_dir("./tests/")
+        .arg("test-github-round-trip-cloud.toml")
+        .spawn()
+        .unwrap();
+
+    info!("Wait a sec for it to finish starting.");
+    thread::sleep(time::Duration::new(2, 0));
+
+    info!("Pull request comes into existance.");
+    let http_client = Client::new();
+    let mut http_headers = Headers::new();
+    http_headers.set_raw("X-Github-Event", vec![b"issue_comment".to_vec()]);
+    let body = include_str!("frewsxcv_test.json");
+    http_headers.set_raw("X-Hub-Signature", vec![
+        format!("sha1={}", openssl::crypto::hmac::hmac(
+            openssl::crypto::hash::Type::SHA1,
+            "ME_SECRET_LOL".as_bytes(),
+            body.as_bytes(),
+        ).to_hex()).into_bytes()
+    ]);
+    let result = http_client.post("http://localhost:9001")
+        .body(body.as_bytes())
+        .headers(http_headers)
+        .send()
+        .unwrap();
+
+    assert_eq!(true, result.status.is_success());
+
+    aelita.kill().unwrap();
+}
+
