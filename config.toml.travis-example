@@ -41,6 +41,9 @@ owner = "MY_USER_OR_ORGANIZATON"
 # Personal access token; get it in the user account section on GitHub's website
 token = "MY_PERSONAL_ACCESS_TOKEN"
 
+# Webhook secret
+secret = "ME_SECRET_LOL"
+
 # Jenkins configuration. Not required if you're not using jenkins
 [config.github.status]
 
@@ -50,21 +53,7 @@ listen = "localhost:7000"
 
 # The git configuration section is not required, because all options have
 # defaults
-#[config.git]
-
-# Location of the `git` binary
-#executable = "git"
-
-# Base directory for all git checkouts
-#path = "./cache/"
-
-# Git committer name for the merge commit
-# Defaults to the Github username
-#name = "aelita-mergebot"
-
-# Git committer email for the merge commit
-# Defaults to the Github username @github.com
-#email = "aelita-mergebot@github.com"
+[config.github.git]
 
 # This is a project definition
 # The part after the dot is the project's name
@@ -90,12 +79,6 @@ listen = "localhost:7000"
 # There are more options, below
 github = { status = "continuous-integration/travis-ci/push" }
 
-# The Git part is implied by Github, but if you're not using Github, you'll
-# need to specify that this is a Git project
-# This is all that is typically needed; the rest of the options are described
-# below
-#git = {}
-
 # These are the options that can be configured for Github. If you use it,
 # remove the `github = {}` part
 #[projects.MY_PROJECT.github]
@@ -108,24 +91,4 @@ github = { status = "continuous-integration/travis-ci/push" }
 
 # Travis Github status is our CI
 #status = "continuous-integration/travis-ci/push"
-
-# These are the options that can be configured for Git. If you use it,
-# remove the `git = {}` part
-#[projects.MY_PROJECT.git]
-
-# The place to download this project
-# WARNING: This is not looked up using the API, so it needs to be specified
-# every time for Github Enterprise users
-#origin = "git@github.com:MY_OWNER_OR_ORGANIZATON/MY_PROJECT"
-
-# The name of the master branch. Defaults to `master`
-#master_branch = "master"
-
-# The name of the staging branch. Defaults to `staging`
-# If you're used to using homu or bors, they call it `auto`
-#staging_branch = "staging"
-
-# The project's path, below the base directory above. Defaults to the project's
-# name.
-#path = "MY_PROJECT"
 

@@ -45,21 +45,7 @@ secret = "ME_SECRET_LOL"
 
 # The git configuration section is not required, because all options have
 # defaults
-#[config.git]
-
-# Location of the `git` binary
-#executable = "git"
-
-# Base directory for all git checkouts
-#path = "./cache/"
-
-# Git committer name for the merge commit
-# Defaults to the Github username
-#name = "aelita-mergebot"
-
-# Git committer email for the merge commit
-# Defaults to the Github username @github.com
-#email = "aelita-mergebot@github.com"
+[config.github.git]
 
 # Jenkins configuration. Not required if you're not using jenkins
 [config.jenkins]
@@ -100,12 +86,6 @@ token = "MY_JENKINS_API_TOKEN"
 # below
 github = {}
 
-# The Git part is implied by Github, but if you're not using Github, you'll
-# need to specify that this is a Git project
-# This is all that is typically needed; the rest of the options are described
-# below
-#git = {}
-
 # You do need to specify the Jenkins build token; this is specified by you when
 # you enable triggering the build with the web API
 # This is all that is typically needed; the rest of the options are described
@@ -121,26 +101,6 @@ jenkins = { token = "MY_BUILD_TOKEN" }
 
 # The project's repo. It defaults to the project's name
 #repo = "MY_PROJECT"
-
-# These are the options that can be configured for Git. If you use it,
-# remove the `git = {}` part
-#[projects.MY_PROJECT.git]
-
-# The place to download this project
-# WARNING: This is not looked up using the API, so it needs to be specified
-# every time for Github Enterprise users
-#origin = "git@github.com:MY_OWNER_OR_ORGANIZATON/MY_PROJECT"
-
-# The name of the master branch. Defaults to `master`
-#master_branch = "master"
-
-# The name of the staging branch. Defaults to `staging`
-# If you're used to using homu or bors, they call it `auto`
-#staging_branch = "staging"
-
-# The project's path, below the base directory above. Defaults to the project's
-# name.
-#path = "MY_PROJECT"
 
 # These are the options that can be configured for Jenkinr. If you use it,
 # remove the `jenkins = {}` part
@@ -158,3 +118,4 @@ jenkins = { token = "MY_BUILD_TOKEN" }
 # [projects.MY_PROJECT.try.jenkins]
 # name = "TRY_MY_PROJECT"
 # token = "TRY_BUILD_TOKEN"
+

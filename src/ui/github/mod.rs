@@ -112,7 +112,7 @@ struct IssueCommentPullRequest {
 struct IssueCommentIssue {
     number: u32,
     title: String,
-    body: String,
+    body: Option<String>,
     pull_request: Option<IssueCommentPullRequest>,
     state: String,
     user: UserDesc,
@@ -577,7 +577,7 @@ impl Worker {
             issue.user.login,
             user,
             iter::repeat('_').take(72).collect::<String>(),
-            issue.body,
+            issue.body.as_ref().map(|x| &x[..]).unwrap_or(""),
         );
         send_event.send(ui::Event::Approved(
             pipeline_id,
