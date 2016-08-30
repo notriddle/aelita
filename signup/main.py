@@ -131,11 +131,10 @@ def before_request():
     g.user = None
 
 
-@app.after_request
-def after_request(response):
+@app.teardown_appcontext
+def shutdown_session(exception=None):
     db_session.remove()
     g.user = None
-    return response
 
 
 def get_user():
