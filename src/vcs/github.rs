@@ -1,22 +1,16 @@
 // This file is released under the same terms as Rust itself.
 
 use hyper;
-use hyper::client::{Client, IntoUrl, RequestBuilder};
-use hyper::header::{Headers, UserAgent};
-use hyper::method::Method;
+use hyper::header::{self, qitem, Accept};
 use hyper::status::StatusCode;
 use pipeline::{self, PipelineId};
-use serde_json::{
-    self,
-    from_reader as json_from_reader,
-    to_vec as json_to_vec
-};
+use rest::{authorization, Authorization, Client, Mime};
+use serde_json;
 use std;
 use std::convert::From;
 use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
 use util::USER_AGENT;
-use util::rate_limited_client::RateLimiter;
 use vcs;
 use vcs::git::Commit;
 
@@ -35,10 +29,7 @@ pub struct Repo {
 
 pub struct Worker {
     pipelines: Box<PipelinesConfig>,
-    host: String,
-    client: Client,
-    authorization: Vec<u8>,
-    rate_limiter: RateLimiter,
+    client: Client<Authorization<authorization::Token>>,
 }
 
 impl Worker {
@@ -47,14 +38,13 @@ impl Worker {
         token: String,
         pipelines: Box<PipelinesConfig>
     ) -> Worker {
-        let mut authorization: Vec<u8> = b"token ".to_vec();
-        authorization.extend(token.bytes());
         Worker{
             pipelines: pipelines,
-            host: host,
-            client: Client::default(),
-            authorization: authorization,
-            rate_limiter: RateLimiter::new(),
+            client: Client::new(USER_AGENT.to_owned())
+                .base(&host)
+                .authorization(Authorization(authorization::Token{
+                    token: token,
+                })),
         }
     }
 }
@@ -132,8 +122,7 @@ impl Worker {
             None => return Err(GithubRequestError::Pipeline(pipeline_id)),
         };
         let url = format!(
-            "{}/repos/{}/{}/git/refs/heads/{}",
-            self.host,
+            "/repos/{}/{}/git/refs/heads/{}",
             repo.owner,
             repo.repo,
             repo.master_branch
@@ -144,16 +133,17 @@ impl Worker {
             force: bool,
             sha: String,
         }
-        let update_desc = try!(json_to_vec(&RefUpdateDesc {
+        let update_desc = RefUpdateDesc{
             force: false,
             sha: merge_commit.to_string(),
-        }));
-        let resp = try!(self.rate_limiter.retry_send(|| {
-            self.authed_request(Method::Patch, &url)
-                .body(&*update_desc)
-        }));
-        if !resp.status.is_success() {
-            return Err(GithubRequestError::HttpStatus(resp.status));
+        };
+        let resp = try!(
+            try!(self.client.patch(&url).expect("valid url").json(&update_desc))
+                .header(Self::accept())
+                .send()
+        );
+        if !resp.is_success() {
+            return Err(GithubRequestError::HttpStatus(resp.http.status));
         }
         Ok(())
     }
@@ -169,8 +159,7 @@ impl Worker {
         };
         // Step 1: get the contents of master.
         let url = format!(
-            "{}/repos/{}/{}/git/refs/heads/{}",
-            self.host,
+            "/repos/{}/{}/git/refs/heads/{}",
             repo.owner,
             repo.repo,
             repo.master_branch
@@ -184,29 +173,32 @@ impl Worker {
         struct RefDesc {
             object: ObjectDesc,
         }
-        let resp = try!(self.rate_limiter.retry_send(|| {
-            self.authed_request(Method::Get, &url)
-        }));
-        if !resp.status.is_success() {
-            return Err(GithubRequestError::HttpStatus(resp.status));
+        let resp = try!(
+            self.client.get(&url).expect("valid url")
+                .header(Self::accept())
+                .send()
+        );
+        if !resp.is_success() {
+            return Err(GithubRequestError::HttpStatus(resp.http.status));
         }
-        let resp_desc: RefDesc = try!(json_from_reader(resp));
+        let resp_desc: RefDesc = try!(resp.json());
         let master_sha = resp_desc.object.sha;
         // Step 2: reset staging to the contents of master.
         // Do it in a single step if no rewinding is needed, but we may
         // need to rewind.
         let url = format!(
-            "{}/repos/{}/{}/git/refs/heads/{}",
-            self.host,
+            "/repos/{}/{}/git/refs/heads/{}",
             repo.owner,
             repo.repo,
             repo.staging_branch
         );
-        let resp = try!(self.rate_limiter.retry_send(|| {
-            self.authed_request(Method::Get, &url)
-        }));
-        let staging_up_to_date = if resp.status.is_success() {
-            let resp_desc: RefDesc = try!(json_from_reader(resp));
+        let resp = try!(
+            self.client.get(&url).expect("valid url")
+                .header(Self::accept())
+                .send()
+        );
+        let staging_up_to_date = if resp.is_success() {
+            let resp_desc: RefDesc = try!(resp.json());
             let init_staging_sha = resp_desc.object.sha;
             debug!("Staging sha is: {}", init_staging_sha);
             Some(init_staging_sha == master_sha)
@@ -221,23 +213,23 @@ impl Worker {
                     force: bool,
                     sha: String,
                 }
-                let update_desc = try!(json_to_vec(&RefUpdateDesc {
+                let update_desc = RefUpdateDesc {
                     force: true,
                     sha: master_sha,
-                }));
-                let resp = try!(self.rate_limiter.retry_send(|| {
-                    self.authed_request(Method::Patch, &url)
-                        .body(&*update_desc)
-                }));
-                if !resp.status.is_success() {
-                    return Err(GithubRequestError::HttpStatus(resp.status));
+                };
+                let resp = try!(
+                    try!(self.client.patch(&url).expect("valid url").json(&update_desc))
+                        .header(Self::accept())
+                        .send()
+                );
+                if !resp.is_success() {
+                    return Err(GithubRequestError::HttpStatus(resp.http.status));
                 }
             }
             Some(true) => {}
             None => {
                 let url = format!(
-                    "{}/repos/{}/{}/git/refs",
-                    self.host,
+                    "/repos/{}/{}/git/refs",
                     repo.owner,
                     repo.repo
                 );
@@ -247,23 +239,23 @@ impl Worker {
                     git_ref: String,
                     sha: String,
                 }
-                let create_desc = try!(json_to_vec(&RefCreateDesc{
+                let create_desc = RefCreateDesc{
                     git_ref: format!("refs/heads/{}", repo.staging_branch),
                     sha: master_sha,
-                }));
-                let resp = try!(self.rate_limiter.retry_send(|| {
-                    self.authed_request(Method::Post, &url)
-                        .body(&*create_desc)
-                }));
-                if !resp.status.is_success() {
-                    return Err(GithubRequestError::HttpStatus(resp.status));
+                };
+                let resp = try!(
+                    try!(self.client.patch(&url).expect("valid url").json(&create_desc))
+                        .header(Self::accept())
+                        .send()
+                );
+                if !resp.is_success() {
+                    return Err(GithubRequestError::HttpStatus(resp.http.status));
                 }
             }
         }
         // Step 3: merge the pull request into master.
         let url = format!(
-            "{}/repos/{}/{}/merges",
-            self.host,
+            "/repos/{}/{}/merges",
             repo.owner,
             repo.repo
         );
@@ -278,36 +270,26 @@ impl Worker {
         struct MergeResultDesc {
             sha: String,
         }
-        let merge_desc = try!(json_to_vec(&MergeDesc {
+        let merge_desc = MergeDesc {
             base: repo.staging_branch.clone(),
             head: pull_commit.to_string(),
             commit_message: message,
-        }));
-        let resp = try!(self.rate_limiter.retry_send(|| {
-            self.authed_request(Method::Post, &url)
-                .body(&*merge_desc)
-        }));
-        if !resp.status.is_success() {
-            return Err(GithubRequestError::HttpStatus(resp.status));
+        };
+        let resp = try!(
+            try!(self.client.post(&url).expect("valid url").json(&merge_desc))
+                .header(Self::accept())
+                .send()
+        );
+        if !resp.is_success() {
+            return Err(GithubRequestError::HttpStatus(resp.http.status));
         }
-        let resp_desc: MergeResultDesc = try!(json_from_reader(resp));
+        let resp_desc: MergeResultDesc = try!(resp.json());
         Ok(try!(Commit::from_str(&resp_desc.sha)))
     }
-    fn authed_request<'a, U: IntoUrl>(
-        &'a self,
-        method: Method,
-        url: U
-    ) -> RequestBuilder<'a> {
-        let mut headers = Headers::new();
-        let accept_type = b"application/vnd.github.v3+json";
-        headers.set_raw(
-            "Accept",
-            vec![accept_type.to_vec()],
-        );
-        headers.set_raw("Authorization", vec![self.authorization.clone()]);
-        headers.set(UserAgent(USER_AGENT.to_owned()));
-        self.client.request(method, url)
-            .headers(headers)
+    fn accept() -> Accept {
+        let mime: Mime = "application/vnd.github.v3+json"
+            .parse().expect("hard-coded mimes to be valid");
+        header::Accept(vec![qitem(mime)])
     }
 }
 
