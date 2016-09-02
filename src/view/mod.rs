@@ -17,6 +17,7 @@ use spmc;
 use std::borrow::Cow;
 use std::convert::AsRef;
 use std::error::Error;
+use std::fmt::{self, Formatter};
 use std::io::{BufWriter, Write};
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -198,10 +199,10 @@ impl<'a, P: Pr> Thread<'a, P>
         _req: Request,
         mut res: Response<::hyper::net::Streaming>,
     ) -> Result<(), Box<Error>> {
-        let pending_entries = self.db.list_pending(pipeline_id);
+        let pending_entries = try!(self.db.list_pending(pipeline_id).wc());
         let is_empty = pending_entries.is_empty();
-        let queued_entries = self.db.list_queue(pipeline_id);
-        let running_entry = self.db.peek_running(pipeline_id);
+        let queued_entries = try!(self.db.list_queue(pipeline_id).wc());
+        let running_entry = try!(self.db.peek_running(pipeline_id).wc());
         let mut running = None;
         let mut queued = Vec::new();
         let pending: Vec<_> = pending_entries.into_iter().filter_map(|entry| {
@@ -286,9 +287,9 @@ impl<'a, P: Pr> Thread<'a, P>
                         tbody {
                             @ for &(ref n, pid) in &pipelines { |t| {
                                 let n = &**n;
-                                let opened = self.db.list_pending(pid).len();
-                                let queue = self.db.list_queue(pid).len();
-                                let running = self.db.peek_running(pid)
+                                let opened = try!(self.db.list_pending(pid).wc()).len();
+                                let queue = try!(self.db.list_queue(pid).wc()).len();
+                                let running = try!(self.db.peek_running(pid).wc())
                                     .is_some();
                                 let running = if running { 1 } else { 0 };
                                 let review = opened - queue - running;
@@ -302,7 +303,8 @@ impl<'a, P: Pr> Thread<'a, P>
                                         td { : review }
                                         td { : opened }
                                     }
-                                }
+                                };
+                                Ok::<(), Box<Error>>(())
                             }}
                             @ if pipelines.is_empty() {
                                 td(colspan=5) {
@@ -331,6 +333,38 @@ impl<'a, P: Pr> Thread<'a, P>
         try!(html.write_to_io(&mut res));
         try!(res.end());
         Ok(())
+    }
+}
+
+/// Since there is no way to convert Box<Error+Send+Sync> to Box<Error>
+/// without wrapping it, this is a hack to wrap it.
+#[derive(Debug)]
+struct WrapConvert (
+    Box<Error + Send + Sync>,
+);
+
+impl Error for WrapConvert {
+    fn description(&self) -> &str {
+        self.0.description()
+    }
+    fn cause(&self) -> Option<&Error> {
+        Some(&*self.0)
+    }
+}
+
+impl fmt::Display for WrapConvert {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        self.0.fmt(fmt)
+    }
+}
+
+trait WrapConvertable<T> {
+    fn wc(self) -> Result<T, Box<Error>>;
+}
+
+impl<T> WrapConvertable<T> for Result<T, Box<Error + Send + Sync>> {
+    fn wc(self) -> Result<T, Box<Error>> {
+        self.map_err(|x| Box::new(WrapConvert(x)) as Box<Error>)
     }
 }
 

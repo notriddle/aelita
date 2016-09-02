@@ -114,10 +114,13 @@ fn run_workers<B: WorkerBuilder>(builder: B) -> !
                 let pipeline_id = event.pipeline_id();
                 let pipeline = workers.pipeline_by_id(pipeline_id);
                 if let Some(pipeline) = pipeline {
-                    db.transaction(PipelineTransaction{
+                    let result = db.transaction(PipelineTransaction{
                         pipeline: pipeline,
                         event: event,
                     });
+                    if let Err(e) = result {
+                        warn!("Event handling failed: {:?}", e);
+                    }
                 }
             }
             let id = select.wait();
@@ -158,8 +161,25 @@ impl<'cntx, P, B, U, V> db::Transaction<P>
           B: Ci<P::C> + 'cntx,
           U: Ui<P> + 'cntx,
           V: Vcs<P::C> + 'cntx {
-    fn run<D: Db<P>>(mut self, db: &mut D) -> bool {
-        self.pipeline.handle_event(db, self.event);
-        true
+    fn run<D: Db<P>>(mut self, db: &mut D) -> Result<(), Box<Error + Send + Sync>> {
+        use std::thread;
+        use std::time::Duration;
+        use util::{MIN_DELAY_SEC, MAX_DELAY_SEC};
+        let mut delay = Duration::new(MIN_DELAY_SEC, 0);
+        let max = Duration::new(MAX_DELAY_SEC, 0);
+        let mut result;
+        loop {
+            result = self.pipeline.handle_event(db, self.event.clone());
+            if let Err(ref e) = result {
+                if delay <= max {
+                    warn!("Retry handling event in {:?}: {:?}", delay, e);
+                    thread::sleep(delay);
+                    delay = delay * 2;
+                    continue;
+                }
+            }
+            break;
+        }
+        result
     }
 }

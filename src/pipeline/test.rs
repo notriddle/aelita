@@ -8,6 +8,7 @@ use hyper::client::IntoUrl;
 use pipeline::{Event, Pipeline, PipelineId};
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::error::Error;
 use std::fmt::{self, Debug, Display};
 use std::marker::PhantomData;
 use std::mem;
@@ -33,25 +34,51 @@ impl<P: Pr> MemoryDb<P> {
 }
 
 impl<P: Pr> Db<P> for MemoryDb<P> {
-    fn push_queue(&mut self, _: PipelineId, entry: QueueEntry<P>) {
+    fn push_queue(
+        &mut self,
+        _: PipelineId,
+        entry: QueueEntry<P>,
+    ) -> Result<(), Box<Error + Send + Sync>> {
         self.queue.push_back(entry);
+        Ok(())
     }
-    fn pop_queue(&mut self, _: PipelineId) -> Option<QueueEntry<P>> {
-        self.queue.pop_front()
+    fn pop_queue(
+        &mut self,
+        _: PipelineId
+    ) -> Result<Option<QueueEntry<P>>, Box<Error + Send + Sync>> {
+        Ok(self.queue.pop_front())
     }
-    fn list_queue(&mut self, _: PipelineId) -> Vec<QueueEntry<P>> {
+    fn list_queue(
+        &mut self,
+        _: PipelineId,
+    ) -> Result<Vec<QueueEntry<P>>, Box<Error + Send + Sync>> {
         unimplemented!()
     }
-    fn put_running(&mut self, _: PipelineId, entry: RunningEntry<P>) {
+    fn put_running(
+        &mut self,
+        _: PipelineId,
+        entry: RunningEntry<P>,
+    ) -> Result<(), Box<Error + Send + Sync>> {
         self.running = Some(entry);
+        Ok(())
     }
-    fn take_running(&mut self, _: PipelineId) -> Option<RunningEntry<P>> {
-        mem::replace(&mut self.running, None)
+    fn take_running(
+        &mut self,
+        _: PipelineId,
+    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
+        Ok(mem::replace(&mut self.running, None))
     }
-    fn peek_running(&mut self, _: PipelineId) -> Option<RunningEntry<P>> {
-        self.running.clone()
+    fn peek_running(
+        &mut self,
+        _: PipelineId,
+    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
+        Ok(self.running.clone())
     }
-    fn add_pending(&mut self, _: PipelineId, entry: PendingEntry<P>) {
+    fn add_pending(
+        &mut self,
+        _: PipelineId,
+        entry: PendingEntry<P>,
+    ) -> Result<(), Box<Error + Send + Sync>>{
         let mut replaced = false;
         for entry2 in self.pending.iter_mut() {
             if entry2.pr == entry.pr {
@@ -63,24 +90,25 @@ impl<P: Pr> Db<P> for MemoryDb<P> {
         if !replaced {
             self.pending.push(entry);
         }
+        Ok(())
     }
     fn peek_pending_by_pr(
         &mut self,
         _: PipelineId,
         pr: &P,
-    ) -> Option<PendingEntry<P>> {
+    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
         for entry in &self.pending {
             if entry.pr == *pr {
-                return Some(entry.clone());
+                return Ok(Some(entry.clone()));
             }
         }
-        None
+        Ok(None)
     }
     fn take_pending_by_pr(
         &mut self,
         _: PipelineId,
         pr: &P,
-    ) -> Option<PendingEntry<P>> {
+    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
         let mut entry_i = None;
         for (i, entry) in self.pending.iter().enumerate() {
             if entry.pr == *pr {
@@ -88,12 +116,19 @@ impl<P: Pr> Db<P> for MemoryDb<P> {
                 break;
             }
         }
-        entry_i.map(|entry_i| self.pending.remove(entry_i))
+        Ok(entry_i.map(|entry_i| self.pending.remove(entry_i)))
     }
-    fn list_pending(&mut self, _: PipelineId) -> Vec<PendingEntry<P>> {
+    fn list_pending(
+        &mut self,
+        _: PipelineId,
+    ) -> Result<Vec<PendingEntry<P>>, Box<Error + Send + Sync>> {
         unimplemented!()
     }
-    fn cancel_by_pr(&mut self, _: PipelineId, pr: &P) {
+    fn cancel_by_pr(
+        &mut self,
+        _: PipelineId,
+        pr: &P,
+    ) -> Result<(), Box<Error + Send + Sync>> {
         let queue = mem::replace(&mut self.queue, VecDeque::new());
         let filtered = queue.into_iter().filter(|entry| entry.pr != *pr);
         self.queue.extend(filtered);
@@ -102,13 +137,14 @@ impl<P: Pr> Db<P> for MemoryDb<P> {
                 running.canceled = true;
             }
         }
+        Ok(())
     }
     fn cancel_by_pr_different_commit(
         &mut self,
         _: PipelineId,
         pr: &P,
         commit: &P::C
-    ) -> bool {
+    ) -> Result<bool, Box<Error + Send + Sync>> {
         let len_orig = self.queue.len();
         let queue = mem::replace(&mut self.queue, VecDeque::new());
         let filtered = queue.into_iter().filter(|entry|
@@ -122,7 +158,7 @@ impl<P: Pr> Db<P> for MemoryDb<P> {
                 canceled = true;
             }
         }
-        canceled
+        Ok(canceled)
     }
 }
 
@@ -258,7 +294,7 @@ fn handle_event(
         vcs: vcs,
         ci: ci,
         id: PipelineId(0),
-    }.handle_event(db, event);
+    }.handle_event(db, event).unwrap();
 }
 
 
