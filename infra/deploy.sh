@@ -19,7 +19,7 @@ docker build -t=gcr.io/$PROJECT_NAME/nginx:$CURRENT_VERSION .
 # Install gcloud
 cd ../
 wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-117.0.0-linux-x86_64.tar.gz
-tar -xvf google-cloud-sdk-*
+tar -xf google-cloud-sdk-*
 export PATH="`pwd`/google-cloud-sdk/bin/:$PATH"
 gcloud --quiet components update
 gcloud --quiet components update kubectl
