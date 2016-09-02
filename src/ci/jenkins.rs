@@ -2,13 +2,12 @@
 
 use ci;
 use crossbeam;
-use hyper::client::{Client, IntoUrl};
-use hyper::header::{Authorization, Basic};
+use rest::{authorization, Authorization, Client, IntoUrl};
 use pipeline::{self, PipelineId};
 use serde_json::from_reader as json_from_reader;
 use std::net::TcpListener;
 use std::sync::mpsc::{Sender, Receiver};
-use util::rate_limited_client::RateLimiter;
+use util::USER_AGENT;
 use vcs::Commit;
 
 pub trait PipelinesConfig: Send + Sync + 'static {
@@ -24,11 +23,8 @@ pub struct Job {
 
 pub struct Worker {
     listen: String,
-    host: String,
     pipelines: Box<PipelinesConfig>,
-    auth: Option<(String, String)>,
-    client: Client,
-    rate_limiter: RateLimiter,
+    client: Client<Authorization<authorization::Basic>>,
 }
 
 impl Worker {
@@ -38,13 +34,20 @@ impl Worker {
         auth: Option<(String, String)>,
         pipelines: Box<PipelinesConfig>,
     ) -> Self {
+        let auth = if let Some(auth) = auth {
+            (Some(auth.0), Some(auth.1))
+        } else {
+            (None, None)
+        };
         Worker {
             listen: listen,
-            host: host,
             pipelines: pipelines,
-            auth: auth,
-            client: Client::default(),
-            rate_limiter: RateLimiter::new(),
+            client: Client::new(USER_AGENT.to_owned())
+                .base(&host)
+                .authorization(Authorization(authorization::Basic{
+                    username: auth.0.unwrap_or(String::new()),
+                    password: auth.1,
+                })),
         }
     }
 }
@@ -179,25 +182,17 @@ impl Worker {
                     },
                 };
                 let url = format!(
-                    "{}/job/{}/build?token={}",
-                    self.host,
+                    "/job/{}/build?token={}",
                     job.name,
                     job.token,
                 );
                 info!("Trigger build: {}", url);
-                let result = self.rate_limiter.retry_send(|| {
-                    let mut rb = self.client.get(&url);
-                    if let Some(ref auth) = self.auth {
-                        rb = rb.header(Authorization(Basic{
-                            username: auth.0.clone(),
-                            password: Some(auth.1.clone()),
-                        }));
-                    }
-                    rb
-                });
+                let result = self.client
+                    .get(&url).expect("valid url")
+                    .send();
                 match result {
-                    Ok(ref res) if !res.status.is_success() => {
-                        warn!("Build refused: {:?}", res.status);
+                    Ok(ref res) if !res.is_success() => {
+                        warn!("Build refused: {:?}", res.http.status);
                         send_event.send(ci::Event::BuildFailed(
                             pipeline_id,
                             commit,

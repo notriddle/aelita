@@ -137,6 +137,11 @@ spec:
               value: INSERT_GITHUB_STATUS_WEBHOOK_SECRET_HERE
             - name: SENTRY_DSN
               value: INSERT_SENTRY_DSN_HERE
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
 
 ---
 
@@ -317,6 +322,14 @@ spec:
               port: 80
             initialDelaySeconds: 5
             timeoutSeconds: 1
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+              httpHeaders:
+                Host: "aelitabot.xyz"
+            initialDelaySeconds: 30
+            timeoutSeconds: 2
 
 ---
 

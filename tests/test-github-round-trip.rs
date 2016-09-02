@@ -2317,7 +2317,7 @@ fn one_item_github_round_trip_cloud_with_sqlite_12f() {
 }
 
 #[test]
-fn the_frewsxcv_test() {
+fn test_null_body() {
     let _lock = ONE_AT_A_TIME.lock();
     START.call_once(|| env_logger::init().unwrap());
 
@@ -2349,7 +2349,7 @@ fn the_frewsxcv_test() {
     let http_client = Client::new();
     let mut http_headers = Headers::new();
     http_headers.set_raw("X-Github-Event", vec![b"issue_comment".to_vec()]);
-    let body = include_str!("frewsxcv_test.json");
+    let body = include_str!("test_null_body.json");
     http_headers.set_raw("X-Hub-Signature", vec![
         format!("sha1={}", openssl::crypto::hmac::hmac(
             openssl::crypto::hash::Type::SHA1,
@@ -2367,4 +2367,3 @@ fn the_frewsxcv_test() {
 
     aelita.kill().unwrap();
 }
-

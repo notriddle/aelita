@@ -22,6 +22,7 @@ extern crate postgres;
 #[macro_use] extern crate quick_error;
 extern crate quickersort;
 extern crate regex;
+extern crate rest;
 extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;

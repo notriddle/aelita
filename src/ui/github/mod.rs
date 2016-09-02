@@ -7,18 +7,15 @@ use db;
 use hyper;
 use hyper::Url;
 use hyper::buffer::BufReader;
-use hyper::client::{Client, IntoUrl, RequestBuilder};
-use hyper::header::{Headers, UserAgent};
-use hyper::method::Method;
+use hyper::header::{self, qitem, Accept, Headers};
 use hyper::net::{HttpListener, NetworkListener, NetworkStream};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
 use pipeline::{self, PipelineId};
+use rest::{authorization, Authorization, Client, Mime};
 use serde_json::{
     self,
-    from_reader as json_from_reader,
     from_slice as json_from_slice,
-    to_vec as json_to_vec
 };
 use std;
 use std::borrow::Cow;
@@ -33,7 +30,6 @@ use std::sync::mpsc::{Sender, Receiver};
 use ui::{self, comments};
 use util::USER_AGENT;
 use util::github_headers;
-use util::rate_limited_client::RateLimiter;
 use vcs::git::{Commit, Remote};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -64,11 +60,8 @@ pub trait ProjectsConfig: Send + Sync + 'static {
 
 pub struct Worker {
     listen: String,
-    host: String,
     projects: Box<ProjectsConfig>,
-    authorization: Vec<u8>,
-    client: Client,
-    rate_limiter: RateLimiter,
+    client: Client<Authorization<authorization::Token>>,
     user_ident: String,
     secret: String,
     cache: Mutex<cache::Cache>,
@@ -84,17 +77,16 @@ impl Worker {
         projects: Box<ProjectsConfig>,
         cache_builder: db::Builder,
     ) -> Worker {
-        let mut authorization: Vec<u8> = b"token ".to_vec();
-        authorization.extend(token.bytes());
         let user_ident = format!("@{}", user);
         Worker {
             listen: listen,
-            host: host,
             projects: projects,
-            authorization: authorization,
             user_ident: user_ident,
-            client: Client::new(),
-            rate_limiter: RateLimiter::new(),
+            client: Client::new(USER_AGENT.to_owned())
+                .base(&host)
+                .authorization(Authorization(authorization::Token{
+                    token: token,
+                })),
             secret: secret,
             cache: Mutex::new(
                 cache::from_builder(&cache_builder).expect("to get a cache")
@@ -812,57 +804,58 @@ impl Worker {
         };
         if let Some(comment_body) = comment_body {
             let url = format!(
-                "{}/repos/{}/{}/issues/{}/comments",
-                self.host,
+                "/repos/{}/{}/issues/{}/comments",
                 repo.owner,
                 repo.repo,
                 pr
             );
-            let comment = try!(json_to_vec(&PostCommentComment{
+            let comment = PostCommentComment{
                 body: comment_body.into_owned(),
-            }));
-            let resp = try!(self.rate_limiter.retry_send(|| {
-                self.authed_request(Method::Post, AcceptType::Regular, &url)
-                    .body(&*comment)
-            }));
-            if !resp.status.is_success() {
-                return Err(GithubRequestError::HttpStatus(resp.status))
+            };
+            let resp = try!(
+                try!(self.client.post(&url).expect("url").json(&comment))
+                    .header(Self::accept(AcceptType::Regular))
+                    .send()
+            );
+            if !resp.is_success() {
+                return Err(GithubRequestError::HttpStatus(resp.http.status))
             }
         }
         if let Some(status) = status {
             let (pull_commit, merge_commit, status_body) = status;
             let url = format!(
-                "{}/repos/{}/{}/statuses/{}",
-                self.host,
+                "/repos/{}/{}/statuses/{}",
                 repo.owner,
                 repo.repo,
                 pull_commit
             );
-            let status_body = try!(json_to_vec(&status_body));
-            let resp = try!(self.rate_limiter.retry_send(|| {
-                self.authed_request(Method::Post, AcceptType::Regular, &url)
-                    .body(&*status_body)
-            }));
-            if !resp.status.is_success() {
-                return Err(GithubRequestError::HttpStatus(resp.status))
+            let resp = try!(
+                try!(self.client.post(&url).expect("url").json(&status_body))
+                    .header(Self::accept(AcceptType::Regular))
+                    .send()
+            );
+            if !resp.is_success() {
+                return Err(GithubRequestError::HttpStatus(resp.http.status))
             }
             if let Some(merge_commit) = merge_commit {
                 let url = format!(
-                    "{}/repos/{}/{}/statuses/{}",
-                    self.host,
+                    "/repos/{}/{}/statuses/{}",
                     repo.owner,
                     repo.repo,
                     merge_commit
                 );
-                let resp = try!(self.rate_limiter.retry_send(|| {
-                    self.authed_request(
-                        Method::Post,
-                        AcceptType::Regular,
-                        &url
-                    ).body(&*status_body)
-                }));
-                if !resp.status.is_success() {
-                    return Err(GithubRequestError::HttpStatus(resp.status))
+                let resp = try!(
+                    try!(
+                        self.client.post(&url).expect("url")
+                            .json(&status_body)
+                    )
+                        .header(Self::accept(AcceptType::Regular))
+                        .send()
+                );
+                if !resp.is_success() {
+                    return Err(GithubRequestError::HttpStatus(
+                    	resp.http.status
+                    ))
                 }
             }
         }
@@ -875,24 +868,21 @@ impl Worker {
         team: TeamId,
     ) -> Result<bool, GithubRequestError> {
         let url = format!(
-            "{}/teams/{}/members/{}",
-            self.host,
+            "/teams/{}/members/{}",
             team.0,
             user,
         );
-        let resp = try!(self.rate_limiter.retry_send(|| {
-            self.authed_request(
-                Method::Get,
-                AcceptType::Regular,
-                &url
-            )
-        }));
-        if resp.status == StatusCode::NotFound {
+        let resp = try!(
+            self.client.get(&url).expect("valid url")
+                .header(Self::accept(AcceptType::Regular))
+                .send()
+        );
+        if resp.http.status == StatusCode::NotFound {
             Ok(false)
-        } else if resp.status.is_success() {
+        } else if resp.is_success() {
             Ok(true)
         } else {
-            Err(GithubRequestError::HttpStatus(resp.status))
+            Err(GithubRequestError::HttpStatus(resp.http.status))
         }
     }
 
@@ -902,25 +892,22 @@ impl Worker {
         repo: &Repo,
     ) -> Result<bool, GithubRequestError> {
         let url = format!(
-            "{}/repos/{}/{}/collaborators/{}",
-            self.host,
+            "/repos/{}/{}/collaborators/{}",
             repo.owner,
             repo.repo,
             user,
         );
-        let resp = try!(self.rate_limiter.retry_send(|| {
-            self.authed_request(
-                Method::Get,
-                AcceptType::Regular,
-                &url
-            )
-        }));
-        if resp.status == StatusCode::NotFound {
+        let resp = try!(
+            self.client.get(&url).expect("valid url")
+                .header(Self::accept(AcceptType::Regular))
+                .send()
+        );
+        if resp.http.status == StatusCode::NotFound {
             Ok(false)
-        } else if resp.status.is_success() {
+        } else if resp.is_success() {
             Ok(true)
         } else {
-            Err(GithubRequestError::HttpStatus(resp.status))
+            Err(GithubRequestError::HttpStatus(resp.http.status))
         }
     }
 
@@ -929,20 +916,17 @@ impl Worker {
         repo: &Repo,
     ) -> Result<bool, GithubRequestError> {
         let url = format!(
-            "{}/repos/{}/{}",
-            self.host,
+            "/repos/{}/{}",
             repo.owner,
             repo.repo,
         );
-        let resp = try!(self.rate_limiter.retry_send(|| {
-            self.authed_request(
-                Method::Get,
-                AcceptType::Regular,
-                &url
-            )
-        }));
-        if resp.status.is_success() {
-            let repo_desc = try!(json_from_reader::<_, RepositoryDesc>(resp));
+        let resp = try!(
+            self.client.get(&url).expect("valid url")
+                .header(Self::accept(AcceptType::Regular))
+                .send()
+        );
+        if resp.is_success() {
+            let repo_desc: RepositoryDesc = try!(resp.json());
             Ok(match &repo_desc.owner.owner_type[..] {
                 "User" => false,
                 "Organization" => true,
@@ -955,7 +939,7 @@ impl Worker {
                 }
             })
         } else {
-            Err(GithubRequestError::HttpStatus(resp.status))
+            Err(GithubRequestError::HttpStatus(resp.http.status))
         }
     }
 
@@ -964,38 +948,30 @@ impl Worker {
         repo: &Repo,
     ) -> Result<HashSet<TeamId>, GithubRequestError> {
         let url = format!(
-            "{}/orgs/{}/teams",
-            self.host,
+            "/orgs/{}/teams",
             repo.owner,
         );
-        let resp = try!(self.rate_limiter.retry_send(||{
-            self.authed_request(
-                Method::Get,
-                AcceptType::Regular,
-                &url
-            )
-        }));
-        if resp.status.is_success() {
-            let all_teams = try!(json_from_reader::<_, Vec<TeamDesc>>(resp));
+        let resp = try!(
+            self.client.get(&url).expect("valid url")
+                .header(Self::accept(AcceptType::Regular))
+                .send()
+        );
+        if resp.is_success() {
+            let all_teams: Vec<TeamDesc> = try!(resp.json());
             let mut writing_teams = HashSet::new();
             for team in all_teams {
                 let url = format!(
-                    "{}/teams/{}/repos/{}/{}",
-                    self.host,
+                    "/teams/{}/repos/{}/{}",
                     team.id,
                     repo.owner,
                     repo.repo
                 );
-                let resp = try!(self.rate_limiter.retry_send(|| {
-                    self.authed_request(
-                        Method::Get,
-                        AcceptType::Repository,
-                        &url
-                    )
-                }));
-                let team_repo = try!(json_from_reader::<_, TeamRepoDesc>(
-                    resp
-                ));
+                let resp = try!(
+                    self.client.get(&url).expect("valid url")
+                        .header(Self::accept(AcceptType::Repository))
+                        .send()
+                );
+                let team_repo: TeamRepoDesc = try!(resp.json());
                 if let Some(ref permissions) = team_repo.permissions {
                     if permissions.admin || permissions.push {
                         writing_teams.insert(TeamId(team.id));
@@ -1004,29 +980,16 @@ impl Worker {
             }
             Ok(writing_teams)
         } else {
-            Err(GithubRequestError::HttpStatus(resp.status))
+            Err(GithubRequestError::HttpStatus(resp.http.status))
         }
     }
-    fn authed_request<'a, U: IntoUrl>(
-        &'a self,
-        method: Method,
-        accept_type: AcceptType,
-        url: U
-    ) -> RequestBuilder<'a> {
-        let mut headers = Headers::new();
-        let accept_type: &'static [u8] = match accept_type {
-            AcceptType::Regular => b"application/vnd.github.v3+json",
+    fn accept(accept_type: AcceptType) -> Accept {
+        let mime: Mime = match accept_type {
+            AcceptType::Regular => "application/vnd.github.v3+json",
             AcceptType::Repository =>
-                b"application/vnd.github.v3.repository+json",
-        };
-        headers.set_raw(
-            "Accept",
-            vec![accept_type.to_vec()],
-        );
-        headers.set_raw("Authorization", vec![self.authorization.clone()]);
-        headers.set(UserAgent(USER_AGENT.to_owned()));
-        self.client.request(method, url)
-            .headers(headers)
+                "application/vnd.github.v3.repository+json",
+        }.parse().expect("hard-coded mimes to be valid");
+        header::Accept(vec![qitem(mime)])
     }
 }
 
