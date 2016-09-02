@@ -285,11 +285,11 @@ impl<'a, P: Pr> Thread<'a, P>
                             th { : "Opened" }
                         }
                         tbody {
-                            @ for &(ref n, pid) in &pipelines { |t| {
+                            @ for &(ref n, pid) in &pipelines { |t| retry!{{
                                 let n = &**n;
-                                let opened = try!(self.db.list_pending(pid).wc()).len();
-                                let queue = try!(self.db.list_queue(pid).wc()).len();
-                                let running = try!(self.db.peek_running(pid).wc())
+                                let opened = retry_unwrap!(self.db.list_pending(pid).wc()).len();
+                                let queue = retry_unwrap!(self.db.list_queue(pid).wc()).len();
+                                let running = retry_unwrap!(self.db.peek_running(pid).wc())
                                     .is_some();
                                 let running = if running { 1 } else { 0 };
                                 let review = opened - queue - running;
@@ -303,9 +303,8 @@ impl<'a, P: Pr> Thread<'a, P>
                                         td { : review }
                                         td { : opened }
                                     }
-                                };
-                                Ok::<(), Box<Error>>(())
-                            }}
+                                }
+                            }}}
                             @ if pipelines.is_empty() {
                                 td(colspan=5) {
                                     : "No configured repositories"

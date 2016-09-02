@@ -717,7 +717,6 @@ mod postgres {
     use postgres::{Connection, ConnectParams, IntoConnectParams, SslMode};
     use std::borrow::Cow;
     use std::error::Error;
-    use std::sync::Mutex;
     use ui::github::{self, ProjectsConfig as TGithubProjectsConfig};
     use ci::jenkins::{self, PipelinesConfig as TJenkinsPipelinesConfig};
     use ci::github_status;

@@ -563,7 +563,7 @@ fn handle_merge_failed_notify_user() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -597,12 +597,12 @@ fn handle_merge_failed_notify_user_merge_next_commit() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "M!".to_owned(),
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -644,7 +644,7 @@ fn handle_merge_succeeded_notify_user_start_ci() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -691,7 +691,7 @@ fn handle_ci_failed_notify_user() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -731,12 +731,12 @@ fn handle_ci_failed_notify_user_next_commit() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "M!".to_owned(),
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -783,7 +783,7 @@ fn handle_ci_started_notify_user() {
         canceled: false,
         message: "MSG!".to_owned(),
         built: false,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -821,7 +821,7 @@ fn handle_ci_succeeded_move_to_master() {
         canceled: false,
         message: "MSG!".to_owned(),
         built: false,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -862,7 +862,7 @@ fn handle_ci_double_succeeded_move_to_master() {
         canceled: false,
         message: "MSG!".to_owned(),
         built: false,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -927,7 +927,7 @@ fn handle_move_failed_notify_user() {
         canceled: false,
         message: "MSG!".to_owned(),
         built: true,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -965,12 +965,12 @@ fn handle_move_failed_notify_user_next_commit() {
         canceled: false,
         message: "MSG!".to_owned(),
         built: true,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "M!".to_owned(),
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -1015,7 +1015,7 @@ fn handle_move_succeeded_notify_user() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: true,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -1052,12 +1052,12 @@ fn handle_move_succeeded_notify_user_next_commit() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: true,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "M!".to_owned(),
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -1104,7 +1104,7 @@ fn handle_ui_cancel() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -1138,7 +1138,7 @@ fn handle_ui_changed_cancel() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -1175,7 +1175,7 @@ fn handle_ui_changed_no_real_change() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -1212,12 +1212,12 @@ fn handle_ui_changed_cancel_queue() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "MSG!".to_owned(),
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -1255,12 +1255,12 @@ fn handle_ui_changed_no_real_change_queue() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "MSG!".to_owned(),
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -1302,7 +1302,7 @@ fn handle_ui_closed() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
