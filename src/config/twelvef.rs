@@ -714,10 +714,9 @@ mod sqlite {
 mod postgres {
     use config::PipelineConfig as TPipelineConfig;
     use pipeline::PipelineId;
-    use postgres::{Connection, IntoConnectParams, SslMode};
+    use postgres::{Connection, ConnectParams, IntoConnectParams, SslMode};
     use std::borrow::Cow;
     use std::error::Error;
-    use std::sync::Mutex;
     use ui::github::{self, ProjectsConfig as TGithubProjectsConfig};
     use ci::jenkins::{self, PipelinesConfig as TJenkinsPipelinesConfig};
     use ci::github_status;
@@ -728,23 +727,26 @@ mod postgres {
     use vcs::github::PipelinesConfig as TGithubGitPipelinesConfig;
     use view::{PipelinesConfig as TViewPipelinesConfig};
     pub struct PipelineConfig {
-        conn: Mutex<Connection>,
+        params: ConnectParams,
     }
     impl PipelineConfig {
         pub fn new<Q: IntoConnectParams>(params: Q)
                 -> Result<Self, Box<Error + Send + Sync + 'static>>
         {
-            let conn = try!(Connection::connect(params, SslMode::None));
-            try!(conn.batch_execute(r###"
+            let result = PipelineConfig{
+                params: try!(params.into_connect_params()),
+            };
+            try!(try!(result.conn()).batch_execute(r###"
                 CREATE TABLE IF NOT EXISTS twelvef_config_pipeline (
                     pipeline_id SERIAL PRIMARY KEY,
                     name TEXT,
                     UNIQUE (name)
                 );
             "###));
-            Ok(PipelineConfig{
-                conn: Mutex::new(conn),
-            })
+            Ok(result)
+        }
+        fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
+            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
         }
     }
     impl TPipelineConfig for PipelineConfig {
@@ -752,31 +754,33 @@ mod postgres {
             (0, 0, 0)
         }
         fn len(&self) -> usize {
-            let conn = self.conn.lock().unwrap();
-            let sql = r###"
-                SELECT COUNT(*)
-                FROM twelvef_config_pipeline
-            "###;
-            let stmt = conn.prepare(&sql)
-                .expect("Prepare pipeline count query");
-            let rows = stmt.query(&[]);
-            let rows = rows.expect("Get pipeline count");
-            let rows = rows.iter();
-            let mut rows = rows.map(|row| {
-                row.get::<_, i64>(0) as usize
-            });
-            rows.next().unwrap()
+            retry!{{
+                let conn = retry_unwrap!(self.conn());
+                let sql = r###"
+                    SELECT COUNT(*)
+                    FROM twelvef_config_pipeline
+                "###;
+                let stmt = retry_unwrap!(conn.prepare(&sql));
+                let rows = retry_unwrap!(stmt.query(&[]));
+                let rows = rows.iter();
+                let mut rows = rows.map(|row| {
+                    row.get::<_, i64>(0) as usize
+                });
+                rows.next().unwrap()
+            }}
         }
     }
     pub struct GithubProjectsConfig {
-        conn: Mutex<Connection>,
+        params: ConnectParams,
     }
     impl GithubProjectsConfig {
         pub fn new<Q: IntoConnectParams>(params: Q)
                 -> Result<Self, Box<Error + Send + Sync + 'static>>
         {
-            let conn = try!(Connection::connect(params, SslMode::None));
-            try!(conn.batch_execute(r###"
+            let result = GithubProjectsConfig{
+                params: try!(params.into_connect_params()),
+            };
+            try!(try!(result.conn()).batch_execute(r###"
                 CREATE TABLE IF NOT EXISTS twelvef_github_projects (
                     pipeline_id INTEGER PRIMARY KEY,
                     try_pipeline_id INTEGER NULL,
@@ -785,145 +789,155 @@ mod postgres {
                     UNIQUE (owner, repo)
                 );
             "###));
-            Ok(GithubProjectsConfig{
-                conn: Mutex::new(conn),
-            })
+            Ok(result)
+        }
+        fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
+            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
         }
     }
     impl TGithubProjectsConfig for GithubProjectsConfig {
         fn pipelines_by_repo(&self, repo: &github::Repo)
                 -> Option<github::RepoPipelines>
         {
-            let conn = self.conn.lock().unwrap();
-            let sql = r###"
-                SELECT pipeline_id, try_pipeline_id
-                FROM twelvef_github_projects
-                WHERE owner = $1 AND repo = $2
-            "###;
-            let stmt = conn.prepare(&sql)
-                .expect("Prepare pipelines query");
-            let rows = stmt.query(&[&repo.owner, &repo.repo]);
-            let rows = rows.expect("Get pipelines");
-            let rows = rows.iter();
-            let mut rows = rows.map(|row| {
-                github::RepoPipelines{
-                    pipeline_id:
-                        PipelineId(row.get::<_, i32>(0)),
-                    try_pipeline_id:
-                        row.get::<_, Option<i32>>(1).map(PipelineId),
-                }
-            });
-            rows.next()
+            retry!{{
+                let conn = retry_unwrap!(self.conn());
+                let sql = r###"
+                    SELECT pipeline_id, try_pipeline_id
+                    FROM twelvef_github_projects
+                    WHERE owner = $1 AND repo = $2
+                "###;
+                let stmt = retry_unwrap!(conn.prepare(&sql));
+                let rows = retry_unwrap!(
+                    stmt.query(&[&repo.owner, &repo.repo])
+                );
+                let rows = rows.iter();
+                let mut rows = rows.map(|row| {
+                    github::RepoPipelines{
+                        pipeline_id:
+                            PipelineId(row.get::<_, i32>(0)),
+                        try_pipeline_id:
+                            row.get::<_, Option<i32>>(1).map(PipelineId),
+                    }
+                });
+                rows.next()
+            }}
         }
         fn repo_by_pipeline(&self, pipeline_id: PipelineId)
                 -> Option<(github::Repo, github::PipelineType)>
         {
-            let conn = self.conn.lock().unwrap();
-            let sql = r###"
-                SELECT owner, repo, pipeline_id
-                FROM twelvef_github_projects
-                WHERE pipeline_id = $1 OR try_pipeline_id = $2
-            "###;
-            let stmt = conn.prepare(&sql)
-                .expect("Prepare repo query");
-            let rows = stmt.query(&[&pipeline_id.0, &pipeline_id.0]);
-            let rows = rows.expect("Get repos");
-            let rows = rows.iter();
-            let mut rows = rows.map(|row| {
-                let pipeline_type =
-                    if row.get::<_, i32>(2) == pipeline_id.0 {
-                        github::PipelineType::Stage
-                    } else {
-                        github::PipelineType::Try
-                    };
-                (
-                    github::Repo{
-                        owner:
-                            row.get::<_, String>(0),
-                        repo:
-                            row.get::<_, String>(1),
-                    },
-                    pipeline_type
-                )
-            });
-            rows.next()
+            retry!{{
+                let conn = retry_unwrap!(self.conn());
+                let sql = r###"
+                    SELECT owner, repo, pipeline_id
+                    FROM twelvef_github_projects
+                    WHERE pipeline_id = $1 OR try_pipeline_id = $2
+                "###;
+                let stmt = retry_unwrap!(conn.prepare(&sql));
+                let rows = retry_unwrap!(stmt.query(
+                    &[&pipeline_id.0, &pipeline_id.0]
+                ));
+                let rows = rows.iter();
+                let mut rows = rows.map(|row| {
+                    let pipeline_type =
+                        if row.get::<_, i32>(2) == pipeline_id.0 {
+                            github::PipelineType::Stage
+                        } else {
+                            github::PipelineType::Try
+                        };
+                    (
+                        github::Repo{
+                            owner:
+                                row.get::<_, String>(0),
+                            repo:
+                                row.get::<_, String>(1),
+                        },
+                        pipeline_type
+                    )
+                });
+                rows.next()
+            }}
         }
     }
     pub struct JenkinsPipelinesConfig {
-        conn: Mutex<Connection>,
+        params: ConnectParams,
     }
     impl JenkinsPipelinesConfig {
         pub fn new<Q: IntoConnectParams>(params: Q)
                 -> Result<Self, Box<Error + Send + Sync + 'static>>
         {
-            let conn = try!(Connection::connect(params, SslMode::None));
-            try!(conn.batch_execute(r###"
+            let result = JenkinsPipelinesConfig{
+                params: try!(params.into_connect_params()),
+            };
+            try!(try!(result.conn()).batch_execute(r###"
                 CREATE TABLE IF NOT EXISTS twelvef_jenkins_pipelines (
                     pipeline_id INTEGER PRIMARY KEY,
                     name TEXT,
                     token TEXT
                 );
             "###));
-            Ok(JenkinsPipelinesConfig{
-                conn: Mutex::new(conn),
-            })
+            Ok(result)
+        }
+        fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
+            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
         }
     }
     impl TJenkinsPipelinesConfig for JenkinsPipelinesConfig {
         fn job_by_pipeline(&self, pipeline_id: PipelineId)
                 -> Option<jenkins::Job>
         {
-            let conn = self.conn.lock().unwrap();
-            let sql = r###"
-                SELECT name, token
-                FROM twelvef_jenkins_pipelines
-                WHERE pipeline_id = $1
-            "###;
-            let stmt = conn.prepare(&sql)
-                .expect("Prepare repo query");
-            let rows = stmt.query(&[&pipeline_id.0]);
-            let rows = rows.expect("Get repos");
-            let rows = rows.iter();
-            let mut rows = rows.map(|row| {
-                jenkins::Job{
-                    name:
-                        row.get::<_, String>(0),
-                    token:
-                        row.get::<_, String>(1),
-                }
-            });
-            rows.next()
+            retry!{{
+                let conn = retry_unwrap!(self.conn());
+                let sql = r###"
+                    SELECT name, token
+                    FROM twelvef_jenkins_pipelines
+                    WHERE pipeline_id = $1
+                "###;
+                let stmt = retry_unwrap!(conn.prepare(&sql));
+                let rows = retry_unwrap!(stmt.query(&[&pipeline_id.0]));
+                let rows = rows.iter();
+                let mut rows = rows.map(|row| {
+                    jenkins::Job{
+                        name:
+                            row.get::<_, String>(0),
+                        token:
+                            row.get::<_, String>(1),
+                    }
+                });
+                rows.next()
+            }}
         }
         fn pipelines_by_job_name(&self, job: &str)
                 -> Vec<PipelineId>
         {
-            let conn = self.conn.lock().unwrap();
-            let sql = r###"
-                SELECT pipeline_id
-                FROM twelvef_jenkins_pipelines
-                WHERE name = $1
-            "###;
-            let stmt = conn.prepare(&sql)
-                .expect("Prepare repo query");
-            let rows = stmt.query(&[&job]);
-            let rows = rows.expect("Get repos");
-            let rows = rows.iter();
-            let rows = rows.map(|row| {
-                PipelineId(row.get::<_, i32>(0))
-            });
-            let rows = rows.collect();
-            rows
+            retry!{{
+                let conn = retry_unwrap!(self.conn());
+                let sql = r###"
+                    SELECT pipeline_id
+                    FROM twelvef_jenkins_pipelines
+                    WHERE name = $1
+                "###;
+                let stmt = retry_unwrap!(conn.prepare(&sql));
+                let rows = retry_unwrap!(stmt.query(&[&job]));
+                let rows = rows.iter();
+                let rows = rows.map(|row| {
+                    PipelineId(row.get::<_, i32>(0))
+                });
+                let rows = rows.collect();
+                rows
+            }}
         }
     }
     pub struct GithubStatusPipelinesConfig {
-        conn: Mutex<Connection>,
+        params: ConnectParams,
     }
     impl GithubStatusPipelinesConfig {
         pub fn new<Q: IntoConnectParams>(params: Q)
                 -> Result<Self, Box<Error + Send + Sync + 'static>>
         {
-            let conn = try!(Connection::connect(params, SslMode::None));
-            try!(conn.batch_execute(r###"
+            let result = GithubStatusPipelinesConfig{
+                params: try!(params.into_connect_params()),
+            };
+            try!(try!(result.conn()).batch_execute(r###"
                 CREATE TABLE IF NOT EXISTS twelvef_github_status_pipelines (
                     pipeline_id INTEGER PRIMARY KEY,
                     owner TEXT,
@@ -931,68 +945,73 @@ mod postgres {
                     context TEXT
                 );
             "###));
-            Ok(GithubStatusPipelinesConfig{
-                conn: Mutex::new(conn),
-            })
+            Ok(result)
+        }
+        fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
+            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
         }
     }
     impl TGithubStatusPipelinesConfig for GithubStatusPipelinesConfig {
         fn repo_by_pipeline(&self, pipeline_id: PipelineId)
                 -> Option<github_status::Repo>
         {
-            let conn = self.conn.lock().unwrap();
-            let sql = r###"
-                SELECT owner, repo, context
-                FROM twelvef_github_status_pipelines
-                WHERE pipeline_id = $1
-            "###;
-            let stmt = conn.prepare(&sql)
-                .expect("Prepare repo query");
-            let rows = stmt.query(&[&pipeline_id.0]);
-            let rows = rows.expect("Get repos");
-            let rows = rows.iter();
-            let mut rows = rows.map(|row| {
-                github_status::Repo{
-                    owner:
-                        row.get::<_, String>(0),
-                    repo:
-                        row.get::<_, String>(1),
-                    context:
-                        row.get::<_, String>(2),
-                }
-            });
-            rows.next()
+            retry!{{
+                let conn = retry_unwrap!(self.conn());
+                let sql = r###"
+                    SELECT owner, repo, context
+                    FROM twelvef_github_status_pipelines
+                    WHERE pipeline_id = $1
+                "###;
+                let stmt = retry_unwrap!(conn.prepare(&sql));
+                let rows = retry_unwrap!(stmt.query(&[&pipeline_id.0]));
+                let rows = rows.iter();
+                let mut rows = rows.map(|row| {
+                    github_status::Repo{
+                        owner:
+                            row.get::<_, String>(0),
+                        repo:
+                            row.get::<_, String>(1),
+                        context:
+                            row.get::<_, String>(2),
+                    }
+                });
+                rows.next()
+            }}
         }
         fn pipelines_by_repo(&self, repo: &github_status::Repo)
                 -> Vec<PipelineId>
         {
-            let conn = self.conn.lock().unwrap();
-            let sql = r###"
-                SELECT pipeline_id
-                FROM twelvef_github_status_pipelines
-                WHERE owner = $1 AND repo = $2 AND context = $3
-            "###;
-            let stmt = conn.prepare(&sql)
-                .expect("Prepare repo query");
-            let rows = stmt.query(&[&repo.owner, &repo.repo, &repo.context]);
-            let rows = rows.expect("Get repos");
-            let rows = rows.iter();
-            let rows = rows.map(|row| {
-                PipelineId(row.get::<_, i32>(0))
-            });
-            let rows = rows.collect();
-            rows
+            retry!{{
+                let conn = retry_unwrap!(self.conn());
+                let sql = r###"
+                    SELECT pipeline_id
+                    FROM twelvef_github_status_pipelines
+                    WHERE owner = $1 AND repo = $2 AND context = $3
+                "###;
+                let stmt = retry_unwrap!(conn.prepare(&sql));
+                let rows = retry_unwrap!(
+                    stmt.query(&[&repo.owner, &repo.repo, &repo.context])
+                );
+                let rows = rows.iter();
+                let rows = rows.map(|row| {
+                    PipelineId(row.get::<_, i32>(0))
+                });
+                let rows = rows.collect();
+                rows
+            }}
         }
     }
     pub struct GithubGitPipelinesConfig {
-        conn: Mutex<Connection>,
+        params: ConnectParams,
     }
     impl GithubGitPipelinesConfig {
         pub fn new<Q: IntoConnectParams>(params: Q)
                 -> Result<Self, Box<Error + Send + Sync + 'static>>
         {
-            let conn = try!(Connection::connect(params, SslMode::None));
-            try!(conn.batch_execute(r###"
+            let result = GithubGitPipelinesConfig{
+                params: try!(params.into_connect_params()),
+            };
+            try!(try!(result.conn()).batch_execute(r###"
                 CREATE TABLE IF NOT EXISTS twelvef_github_git_pipelines (
                     pipeline_id INTEGER PRIMARY KEY,
                     owner TEXT,
@@ -1002,57 +1021,60 @@ mod postgres {
                     push_to_master BOOLEAN
                 );
             "###));
-            Ok(GithubGitPipelinesConfig{
-                conn: Mutex::new(conn),
-            })
+            Ok(result)
+        }
+        fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
+            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
         }
     }
     impl TGithubGitPipelinesConfig for GithubGitPipelinesConfig {
         fn repo_by_pipeline(&self, pipeline_id: PipelineId)
                 -> Option<github_git::Repo>
         {
-            let conn = self.conn.lock().unwrap();
-            let sql = r###"
-                SELECT
-                    owner,
-                    repo,
-                    master_branch,
-                    staging_branch,
-                    push_to_master
-                FROM twelvef_github_git_pipelines
-                WHERE pipeline_id = $1
-            "###;
-            let stmt = conn.prepare(&sql)
-                .expect("Prepare repo query");
-            let rows = stmt.query(&[&pipeline_id.0]);
-            let rows = rows.expect("Get repos");
-            let rows = rows.iter();
-            let mut rows = rows.map(|row| {
-                github_git::Repo{
-                    owner:
-                        row.get::<_, String>(0),
-                    repo:
-                        row.get::<_, String>(1),
-                    master_branch:
-                        row.get::<_, String>(2),
-                    staging_branch:
-                        row.get::<_, String>(3),
-                    push_to_master:
-                        row.get::<_, bool>(4),
-                }
-            });
-            rows.next()
+            retry!{{
+                let conn = retry_unwrap!(self.conn());
+                let sql = r###"
+                    SELECT
+                        owner,
+                        repo,
+                        master_branch,
+                        staging_branch,
+                        push_to_master
+                    FROM twelvef_github_git_pipelines
+                    WHERE pipeline_id = $1
+                "###;
+                let stmt = retry_unwrap!(conn.prepare(&sql));
+                let rows = retry_unwrap!(stmt.query(&[&pipeline_id.0]));
+                let rows = rows.iter();
+                let mut rows = rows.map(|row| {
+                    github_git::Repo{
+                        owner:
+                            row.get::<_, String>(0),
+                        repo:
+                            row.get::<_, String>(1),
+                        master_branch:
+                            row.get::<_, String>(2),
+                        staging_branch:
+                            row.get::<_, String>(3),
+                        push_to_master:
+                            row.get::<_, bool>(4),
+                    }
+                });
+                rows.next()
+            }}
         }
     }
     pub struct GitPipelinesConfig {
-        conn: Mutex<Connection>,
+        params: ConnectParams,
     }
     impl GitPipelinesConfig {
         pub fn new<Q: IntoConnectParams>(params: Q)
                 -> Result<Self, Box<Error + Send + Sync + 'static>>
         {
-            let conn = try!(Connection::connect(params, SslMode::None));
-            try!(conn.batch_execute(r###"
+            let result = GitPipelinesConfig{
+                params: try!(params.into_connect_params()),
+            };
+            try!(try!(result.conn()).batch_execute(r###"
                 CREATE TABLE IF NOT EXISTS twelvef_git_pipelines (
                     pipeline_id INTEGER PRIMARY KEY,
                     path TEXT,
@@ -1062,100 +1084,104 @@ mod postgres {
                     push_to_master TEXT
                 );
             "###));
-            Ok(GitPipelinesConfig{
-                conn: Mutex::new(conn),
-            })
+            Ok(result)
+        }
+        fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
+            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
         }
     }
     impl TGitPipelinesConfig for GitPipelinesConfig {
         fn repo_by_pipeline(&self, pipeline_id: PipelineId)
                 -> Option<git::Repo>
         {
-            let conn = self.conn.lock().unwrap();
-            let sql = r###"
-                SELECT
-                    path,
-                    origin,
-                    master_branch,
-                    staging_branch,
-                    push_to_master
-                FROM twelvef_git_pipelines
-                WHERE pipeline_id = $1
-            "###;
-            let stmt = conn.prepare(&sql)
-                .expect("Prepare repo query");
-            let rows = stmt.query(&[&pipeline_id.0]);
-            let rows = rows.expect("Get repos");
-            let rows = rows.iter();
-            let mut rows = rows.map(|row| {
-                git::Repo{
-                    path:
-                        row.get::<_, String>(0),
-                    origin:
-                        row.get::<_, String>(1),
-                    master_branch:
-                        row.get::<_, String>(2),
-                    staging_branch:
-                        row.get::<_, String>(3),
-                    push_to_master:
-                        row.get::<_, bool>(4),
-                }
-            });
-            rows.next()
+            retry!{{
+                let conn = retry_unwrap!(self.conn());
+                let sql = r###"
+                    SELECT
+                        path,
+                        origin,
+                        master_branch,
+                        staging_branch,
+                        push_to_master
+                    FROM twelvef_git_pipelines
+                    WHERE pipeline_id = $1
+                "###;
+                let stmt = retry_unwrap!(conn.prepare(&sql));
+                let rows = retry_unwrap!(stmt.query(&[&pipeline_id.0]));
+                let rows = rows.iter();
+                let mut rows = rows.map(|row| {
+                    git::Repo{
+                        path:
+                            row.get::<_, String>(0),
+                        origin:
+                            row.get::<_, String>(1),
+                        master_branch:
+                            row.get::<_, String>(2),
+                        staging_branch:
+                            row.get::<_, String>(3),
+                        push_to_master:
+                            row.get::<_, bool>(4),
+                    }
+                });
+                rows.next()
+            }}
         }
     }
     pub struct ViewPipelinesConfig {
-        conn: Mutex<Connection>,
+        params: ConnectParams,
     }
     impl ViewPipelinesConfig {
         pub fn new<Q: IntoConnectParams>(params: Q)
                 -> Result<Self, Box<Error + Send + Sync + 'static>>
         {
-            let conn = try!(Connection::connect(params, SslMode::None));
-            Ok(ViewPipelinesConfig{
-                conn: Mutex::new(conn),
-            })
+            let result = ViewPipelinesConfig{
+                params: try!(params.into_connect_params()),
+            };
+            Ok(result)
+        }
+        fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
+            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
         }
     }
     impl TViewPipelinesConfig for ViewPipelinesConfig {
         fn pipeline_by_name(&self, name: &str)
                 -> Option<PipelineId>
         {
-            let conn = self.conn.lock().unwrap();
-            let sql = r###"
-                SELECT pipeline_id
-                FROM twelvef_config_pipeline
-                WHERE name = $1
-            "###;
-            let stmt = conn.prepare(&sql)
-                .expect("Prepare repo query");
-            let rows = stmt.query(&[&name]);
-            let rows = rows.expect("Get repos");
-            let rows = rows.iter();
-            let mut rows = rows.map(|row| {
-                PipelineId(row.get::<_, i32>(0))
-            });
-            rows.next()
+            retry!{{
+                let conn = retry_unwrap!(self.conn());
+                let sql = r###"
+                    SELECT pipeline_id
+                    FROM twelvef_config_pipeline
+                    WHERE name = $1
+                "###;
+                let stmt = retry_unwrap!(conn.prepare(&sql));
+                let rows = retry_unwrap!(stmt.query(&[&name]));
+                let rows = rows.iter();
+                let mut rows = rows.map(|row| {
+                    PipelineId(row.get::<_, i32>(0))
+                });
+                rows.next()
+            }}
         }
         fn all(&self) -> Vec<(Cow<str>, PipelineId)> {
-            let conn = self.conn.lock().unwrap();
-            let sql = r###"
-                SELECT name, pipeline_id
-                FROM twelvef_config_pipeline
-            "###;
-            let stmt = conn.prepare(&sql)
-                .expect("Prepare repo query");
-            let rows = stmt.query(&[]);
-            let rows = rows.expect("Get repos");
-            let rows = rows.iter();
-            let rows = rows.map(|row| {
-                (
-                    Cow::Owned(row.get::<_, String>(0)),
-                    PipelineId(row.get::<_, i32>(1)),
-                )
-            });
-            let rows = rows.collect();
-            rows
+            retry!{{
+                let conn = retry_unwrap!(self.conn());
+                let sql = r###"
+                    SELECT name, pipeline_id
+                    FROM twelvef_config_pipeline
+                "###;
+                let stmt = retry_unwrap!(conn.prepare(&sql));
+                let rows = retry_unwrap!(stmt.query(&[]));
+                let rows = rows.iter();
+                let rows = rows.map(|row| {
+                    (
+                        Cow::Owned(row.get::<_, String>(0)),
+                        PipelineId(row.get::<_, i32>(1)),
+                    )
+                });
+                let rows = rows.collect();
+                rows
+            }}
         }
     }
 }

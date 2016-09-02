@@ -53,7 +53,10 @@ impl<P: Pr> Db<P> for DbBox<P>
     where <<P as Pr>::C as FromStr>::Err: Error,
           <P as FromStr>::Err: Error
 {
-    fn transaction<T: Transaction<P>>(&mut self, t: T) {
+    fn transaction<T: Transaction<P>>(
+        &mut self,
+        t: T,
+    ) -> Result<(), Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) => d.transaction(t),
             DbBox::Postgres(ref mut d) => d.transaction(t),
@@ -63,7 +66,7 @@ impl<P: Pr> Db<P> for DbBox<P>
         &mut self,
         pipeline_id: PipelineId,
         queue_entry: QueueEntry<P>,
-    ) {
+    ) -> Result<(), Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) =>
                 d.push_queue(pipeline_id, queue_entry),
@@ -71,13 +74,19 @@ impl<P: Pr> Db<P> for DbBox<P>
                 d.push_queue(pipeline_id, queue_entry),
         }
     }
-    fn pop_queue(&mut self, pipeline_id: PipelineId) -> Option<QueueEntry<P>> {
+    fn pop_queue(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Result<Option<QueueEntry<P>>, Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) => d.pop_queue(pipeline_id),
             DbBox::Postgres(ref mut d) => d.pop_queue(pipeline_id),
         }
     }
-    fn list_queue(&mut self, pipeline_id: PipelineId) -> Vec<QueueEntry<P>> {
+    fn list_queue(
+        &mut self,
+        pipeline_id: PipelineId,
+    ) -> Result<Vec<QueueEntry<P>>, Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) => d.list_queue(pipeline_id),
             DbBox::Postgres(ref mut d) => d.list_queue(pipeline_id),
@@ -87,7 +96,7 @@ impl<P: Pr> Db<P> for DbBox<P>
         &mut self,
         pipeline_id: PipelineId,
         running_entry: RunningEntry<P>
-    ) {
+    ) -> Result<(), Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) =>
                 d.put_running(pipeline_id, running_entry),
@@ -98,7 +107,7 @@ impl<P: Pr> Db<P> for DbBox<P>
     fn take_running(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Option<RunningEntry<P>> {
+    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) => d.take_running(pipeline_id),
             DbBox::Postgres(ref mut d) => d.take_running(pipeline_id),
@@ -107,7 +116,7 @@ impl<P: Pr> Db<P> for DbBox<P>
     fn peek_running(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Option<RunningEntry<P>> {
+    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) => d.peek_running(pipeline_id),
             DbBox::Postgres(ref mut d) => d.peek_running(pipeline_id),
@@ -117,7 +126,7 @@ impl<P: Pr> Db<P> for DbBox<P>
         &mut self,
         pipeline_id: PipelineId,
         pending_entry: PendingEntry<P>,
-    ) {
+    ) -> Result<(), Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) =>
                 d.add_pending(pipeline_id, pending_entry),
@@ -129,7 +138,7 @@ impl<P: Pr> Db<P> for DbBox<P>
         &mut self,
         pipeline_id: PipelineId,
         pr: &P,
-    ) -> Option<PendingEntry<P>> {
+    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) =>
                 d.peek_pending_by_pr(pipeline_id, pr),
@@ -141,7 +150,7 @@ impl<P: Pr> Db<P> for DbBox<P>
         &mut self,
         pipeline_id: PipelineId,
         pr: &P,
-    ) -> Option<PendingEntry<P>> {
+    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) =>
                 d.take_pending_by_pr(pipeline_id, pr),
@@ -152,13 +161,17 @@ impl<P: Pr> Db<P> for DbBox<P>
     fn list_pending(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Vec<PendingEntry<P>> {
+    ) -> Result<Vec<PendingEntry<P>>, Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) => d.list_pending(pipeline_id),
             DbBox::Postgres(ref mut d) => d.list_pending(pipeline_id),
         }
     }
-    fn cancel_by_pr(&mut self, pipeline_id: PipelineId, pr: &P) {
+    fn cancel_by_pr(
+        &mut self,
+        pipeline_id: PipelineId,
+        pr: &P,
+    ) -> Result<(), Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) => d.cancel_by_pr(pipeline_id, pr),
             DbBox::Postgres(ref mut d) => d.cancel_by_pr(pipeline_id, pr),
@@ -169,7 +182,7 @@ impl<P: Pr> Db<P> for DbBox<P>
         pipeline_id: PipelineId,
         pr: &P,
         commit: &P::C,
-    ) -> bool {
+    ) -> Result<bool, Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) =>
                 d.cancel_by_pr_different_commit(pipeline_id, pr, commit),
@@ -182,30 +195,75 @@ impl<P: Pr> Db<P> for DbBox<P>
 
 /// A build queue
 pub trait Db<P: Pr>: Sized {
-    fn transaction<T: Transaction<P>>(&mut self, t: T) {
-        t.run(self);
+    fn transaction<T: Transaction<P>>(
+        &mut self,
+        t: T,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        t.run(self)
     }
-    fn push_queue(&mut self, PipelineId, QueueEntry<P>);
-    fn pop_queue(&mut self, PipelineId) -> Option<QueueEntry<P>>;
-    fn list_queue(&mut self, PipelineId) -> Vec<QueueEntry<P>>;
-    fn put_running(&mut self, PipelineId, RunningEntry<P>);
-    fn take_running(&mut self, PipelineId) -> Option<RunningEntry<P>>;
-    fn peek_running(&mut self, PipelineId) -> Option<RunningEntry<P>>;
-    fn add_pending(&mut self, PipelineId, PendingEntry<P>);
-    fn peek_pending_by_pr(&mut self, PipelineId, &P)
-        -> Option<PendingEntry<P>>;
-    fn take_pending_by_pr(&mut self, PipelineId, &P)
-        -> Option<PendingEntry<P>>;
-    fn list_pending(&mut self, PipelineId) -> Vec<PendingEntry<P>>;
-    fn cancel_by_pr(&mut self, PipelineId, &P);
+    fn push_queue(
+        &mut self,
+        PipelineId,
+        QueueEntry<P>,
+    ) -> Result<(), Box<Error + Send + Sync>>;
+    fn pop_queue(
+        &mut self,
+        PipelineId,
+    ) -> Result<Option<QueueEntry<P>>, Box<Error + Send + Sync>>;
+    fn list_queue(
+        &mut self,
+        PipelineId,
+    ) -> Result<Vec<QueueEntry<P>>, Box<Error + Send + Sync>>;
+    fn put_running(
+        &mut self,
+        PipelineId,
+        RunningEntry<P>,
+    ) -> Result<(), Box<Error + Send + Sync>>;
+    fn take_running(
+        &mut self,
+        PipelineId,
+    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>>;
+    fn peek_running(
+        &mut self,
+        PipelineId,
+    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>>;
+    fn add_pending(
+        &mut self,
+        PipelineId,
+        PendingEntry<P>,
+    ) -> Result<(), Box<Error + Send + Sync>>;
+    fn peek_pending_by_pr(
+        &mut self,
+        PipelineId,
+        &P,
+    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>>;
+    fn take_pending_by_pr(
+        &mut self,
+        PipelineId,
+        &P,
+    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>>;
+    fn list_pending(
+        &mut self,
+        PipelineId,
+    ) -> Result<Vec<PendingEntry<P>>, Box<Error + Send + Sync>>;
+    fn cancel_by_pr(
+        &mut self,
+        PipelineId,
+        &P,
+    ) -> Result<(), Box<Error + Send + Sync>>;
     /// Cancel all queued and running entries in the given pipeline
     /// with the same PR number and a different commit number.
     /// Returns true if an actual cancel occurred.
-    fn cancel_by_pr_different_commit(&mut self, PipelineId, &P, &P::C) -> bool;
+    fn cancel_by_pr_different_commit(
+        &mut self,
+        PipelineId,
+        &P,
+        &P::C,
+    ) -> Result<bool, Box<Error + Send + Sync>>;
 }
 
 pub trait Transaction<P: Pr> {
-    fn run<D: Db<P>>(self, &mut D) -> bool;
+    fn run<D: Db<P>>(self, &mut D) -> Result<(), Box<Error + Send + Sync>>;
 }
 
 /// An item not yet in the build queue

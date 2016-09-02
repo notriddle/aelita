@@ -8,6 +8,7 @@ use hyper::client::IntoUrl;
 use pipeline::{Event, Pipeline, PipelineId};
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::error::Error;
 use std::fmt::{self, Debug, Display};
 use std::marker::PhantomData;
 use std::mem;
@@ -33,25 +34,51 @@ impl<P: Pr> MemoryDb<P> {
 }
 
 impl<P: Pr> Db<P> for MemoryDb<P> {
-    fn push_queue(&mut self, _: PipelineId, entry: QueueEntry<P>) {
+    fn push_queue(
+        &mut self,
+        _: PipelineId,
+        entry: QueueEntry<P>,
+    ) -> Result<(), Box<Error + Send + Sync>> {
         self.queue.push_back(entry);
+        Ok(())
     }
-    fn pop_queue(&mut self, _: PipelineId) -> Option<QueueEntry<P>> {
-        self.queue.pop_front()
+    fn pop_queue(
+        &mut self,
+        _: PipelineId
+    ) -> Result<Option<QueueEntry<P>>, Box<Error + Send + Sync>> {
+        Ok(self.queue.pop_front())
     }
-    fn list_queue(&mut self, _: PipelineId) -> Vec<QueueEntry<P>> {
+    fn list_queue(
+        &mut self,
+        _: PipelineId,
+    ) -> Result<Vec<QueueEntry<P>>, Box<Error + Send + Sync>> {
         unimplemented!()
     }
-    fn put_running(&mut self, _: PipelineId, entry: RunningEntry<P>) {
+    fn put_running(
+        &mut self,
+        _: PipelineId,
+        entry: RunningEntry<P>,
+    ) -> Result<(), Box<Error + Send + Sync>> {
         self.running = Some(entry);
+        Ok(())
     }
-    fn take_running(&mut self, _: PipelineId) -> Option<RunningEntry<P>> {
-        mem::replace(&mut self.running, None)
+    fn take_running(
+        &mut self,
+        _: PipelineId,
+    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
+        Ok(mem::replace(&mut self.running, None))
     }
-    fn peek_running(&mut self, _: PipelineId) -> Option<RunningEntry<P>> {
-        self.running.clone()
+    fn peek_running(
+        &mut self,
+        _: PipelineId,
+    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
+        Ok(self.running.clone())
     }
-    fn add_pending(&mut self, _: PipelineId, entry: PendingEntry<P>) {
+    fn add_pending(
+        &mut self,
+        _: PipelineId,
+        entry: PendingEntry<P>,
+    ) -> Result<(), Box<Error + Send + Sync>>{
         let mut replaced = false;
         for entry2 in self.pending.iter_mut() {
             if entry2.pr == entry.pr {
@@ -63,24 +90,25 @@ impl<P: Pr> Db<P> for MemoryDb<P> {
         if !replaced {
             self.pending.push(entry);
         }
+        Ok(())
     }
     fn peek_pending_by_pr(
         &mut self,
         _: PipelineId,
         pr: &P,
-    ) -> Option<PendingEntry<P>> {
+    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
         for entry in &self.pending {
             if entry.pr == *pr {
-                return Some(entry.clone());
+                return Ok(Some(entry.clone()));
             }
         }
-        None
+        Ok(None)
     }
     fn take_pending_by_pr(
         &mut self,
         _: PipelineId,
         pr: &P,
-    ) -> Option<PendingEntry<P>> {
+    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
         let mut entry_i = None;
         for (i, entry) in self.pending.iter().enumerate() {
             if entry.pr == *pr {
@@ -88,12 +116,19 @@ impl<P: Pr> Db<P> for MemoryDb<P> {
                 break;
             }
         }
-        entry_i.map(|entry_i| self.pending.remove(entry_i))
+        Ok(entry_i.map(|entry_i| self.pending.remove(entry_i)))
     }
-    fn list_pending(&mut self, _: PipelineId) -> Vec<PendingEntry<P>> {
+    fn list_pending(
+        &mut self,
+        _: PipelineId,
+    ) -> Result<Vec<PendingEntry<P>>, Box<Error + Send + Sync>> {
         unimplemented!()
     }
-    fn cancel_by_pr(&mut self, _: PipelineId, pr: &P) {
+    fn cancel_by_pr(
+        &mut self,
+        _: PipelineId,
+        pr: &P,
+    ) -> Result<(), Box<Error + Send + Sync>> {
         let queue = mem::replace(&mut self.queue, VecDeque::new());
         let filtered = queue.into_iter().filter(|entry| entry.pr != *pr);
         self.queue.extend(filtered);
@@ -102,13 +137,14 @@ impl<P: Pr> Db<P> for MemoryDb<P> {
                 running.canceled = true;
             }
         }
+        Ok(())
     }
     fn cancel_by_pr_different_commit(
         &mut self,
         _: PipelineId,
         pr: &P,
         commit: &P::C
-    ) -> bool {
+    ) -> Result<bool, Box<Error + Send + Sync>> {
         let len_orig = self.queue.len();
         let queue = mem::replace(&mut self.queue, VecDeque::new());
         let filtered = queue.into_iter().filter(|entry|
@@ -122,7 +158,7 @@ impl<P: Pr> Db<P> for MemoryDb<P> {
                 canceled = true;
             }
         }
-        canceled
+        Ok(canceled)
     }
 }
 
@@ -258,7 +294,7 @@ fn handle_event(
         vcs: vcs,
         ci: ci,
         id: PipelineId(0),
-    }.handle_event(db, event);
+    }.handle_event(db, event).unwrap();
 }
 
 
@@ -527,7 +563,7 @@ fn handle_merge_failed_notify_user() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -561,12 +597,12 @@ fn handle_merge_failed_notify_user_merge_next_commit() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "M!".to_owned(),
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -608,7 +644,7 @@ fn handle_merge_succeeded_notify_user_start_ci() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -655,7 +691,7 @@ fn handle_ci_failed_notify_user() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -695,12 +731,12 @@ fn handle_ci_failed_notify_user_next_commit() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "M!".to_owned(),
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -747,7 +783,7 @@ fn handle_ci_started_notify_user() {
         canceled: false,
         message: "MSG!".to_owned(),
         built: false,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -785,7 +821,7 @@ fn handle_ci_succeeded_move_to_master() {
         canceled: false,
         message: "MSG!".to_owned(),
         built: false,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -826,7 +862,7 @@ fn handle_ci_double_succeeded_move_to_master() {
         canceled: false,
         message: "MSG!".to_owned(),
         built: false,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -891,7 +927,7 @@ fn handle_move_failed_notify_user() {
         canceled: false,
         message: "MSG!".to_owned(),
         built: true,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -929,12 +965,12 @@ fn handle_move_failed_notify_user_next_commit() {
         canceled: false,
         message: "MSG!".to_owned(),
         built: true,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "M!".to_owned(),
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -979,7 +1015,7 @@ fn handle_move_succeeded_notify_user() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: true,
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -1016,12 +1052,12 @@ fn handle_move_succeeded_notify_user_next_commit() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: true,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "M!".to_owned(),
-    });
+    }).unwrap();
     vcs.borrow_mut().staging = Some(MemoryCommit::B);
     handle_event(
         &mut ui,
@@ -1068,7 +1104,7 @@ fn handle_ui_cancel() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -1102,7 +1138,7 @@ fn handle_ui_changed_cancel() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -1139,7 +1175,7 @@ fn handle_ui_changed_no_real_change() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -1176,12 +1212,12 @@ fn handle_ui_changed_cancel_queue() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "MSG!".to_owned(),
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -1219,12 +1255,12 @@ fn handle_ui_changed_no_real_change_queue() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     db.push_queue(PipelineId(0), QueueEntry{
         commit: MemoryCommit::C,
         pr: MemoryPr::B,
         message: "MSG!".to_owned(),
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,
@@ -1266,7 +1302,7 @@ fn handle_ui_closed() {
         message: "MSG!".to_owned(),
         canceled: false,
         built: false,
-    });
+    }).unwrap();
     handle_event(
         &mut ui,
         &mut vcs,

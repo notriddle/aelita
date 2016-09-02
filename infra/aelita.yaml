@@ -327,7 +327,8 @@ spec:
               path: /
               port: 80
               httpHeaders:
-                - Host: "aelitabot.xyz"
+                - name: Host
+                  value: "aelitabot.xyz"
             initialDelaySeconds: 30
             timeoutSeconds: 2
 

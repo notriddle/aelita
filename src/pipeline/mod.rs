@@ -3,6 +3,7 @@
 use ci;
 use config::PipelineConfig;
 use db::{Db, PendingEntry, QueueEntry, RunningEntry};
+use std::error::Error;
 use std::marker::PhantomData;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
@@ -210,7 +211,7 @@ where P: Pr + 'static,
         &mut self,
         db: &mut D,
         event: Event<P>,
-    ) {
+    ) -> Result<(), Box<Error + Send + Sync>> {
         match event {
             Event::UiEvent(ui::Event::Approved(
                 pipeline_id,
@@ -221,7 +222,8 @@ where P: Pr + 'static,
                 assert_eq!(&pipeline_id, &self.id);
                 let commit = match (
                     commit,
-                    db.peek_pending_by_pr(self.id, &pr).map(|p| p.commit),
+                    try!(db.peek_pending_by_pr(self.id, &pr))
+                        .map(|p| p.commit),
                 ) {
                     (Some(reviewed_pr), Some(current_pr)) => {
                         if reviewed_pr != current_pr {
@@ -256,51 +258,55 @@ where P: Pr + 'static,
                         pr.clone(),
                         ui::Status::Approved(commit.clone()),
                     );
-                    db.cancel_by_pr(self.id, &pr);
-                    db.push_queue(self.id, QueueEntry{
+                    try!(db.cancel_by_pr(self.id, &pr));
+                    try!(db.push_queue(self.id, QueueEntry{
                         commit: commit,
                         pr: pr,
                         message: message,
-                    });
+                    }));
                 }
             },
             Event::UiEvent(ui::Event::Opened(
                 pipeline_id, pr, commit, title, url
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                db.add_pending(self.id, PendingEntry{
+                try!(db.add_pending(self.id, PendingEntry{
                     commit: commit,
                     pr: pr,
                     title: title,
                     url: url,
-                });
+                }));
             },
             Event::UiEvent(ui::Event::Changed(
                 pipeline_id, pr, commit, title, url
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                if db.cancel_by_pr_different_commit(self.id, &pr, &commit) {
+                if try!(db.cancel_by_pr_different_commit(
+                    self.id,
+                    &pr,
+                    &commit,
+                )) {
                     self.ui.send_result(
                         self.id,
                         pr.clone(),
                         ui::Status::Invalidated,
                     );
                 }
-                db.add_pending(self.id, PendingEntry{
+                try!(db.add_pending(self.id, PendingEntry{
                     commit: commit,
                     pr: pr,
                     title: title,
                     url: url,
-                });
+                }));
             },
             Event::UiEvent(ui::Event::Closed(pipeline_id, pr)) => {
                 assert_eq!(&pipeline_id, &self.id);
-                db.take_pending_by_pr(self.id, &pr);
-                db.cancel_by_pr(self.id, &pr);
+                try!(db.take_pending_by_pr(self.id, &pr));
+                try!(db.cancel_by_pr(self.id, &pr));
             },
             Event::UiEvent(ui::Event::Canceled(pipeline_id, pr)) => {
                 assert_eq!(&pipeline_id, &self.id);
-                db.cancel_by_pr(self.id, &pr);
+                try!(db.cancel_by_pr(self.id, &pr));
             },
             Event::VcsEvent(vcs::Event::MergedToStaging(
                 pipeline_id,
@@ -308,7 +314,7 @@ where P: Pr + 'static,
                 merge_commit
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                if let Some(mut running) = db.take_running(self.id) {
+                if let Some(mut running) = try!(db.take_running(self.id)) {
                     if running.pull_commit != pull_commit {
                         warn!("VCS merged event with wrong commit");
                     } else if running.merge_commit.is_some() {
@@ -331,7 +337,7 @@ where P: Pr + 'static,
                                 merge_commit,
                             ),
                         );
-                        db.put_running(self.id, running);
+                        try!(db.put_running(self.id, running));
                     }
                 } else {
                     warn!("VCS merged event with no queued PR");
@@ -342,7 +348,7 @@ where P: Pr + 'static,
                 pull_commit,
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                if let Some(running) = db.take_running(self.id) {
+                if let Some(running) = try!(db.take_running(self.id)) {
                     if running.pull_commit != pull_commit {
                         warn!("VCS merged event with wrong commit");
                     } else if running.merge_commit.is_some() {
@@ -368,7 +374,7 @@ where P: Pr + 'static,
                 url,
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                if let Some(running) = db.peek_running(self.id) {
+                if let Some(running) = try!(db.peek_running(self.id)) {
                     if let Some(merged_commit) = running.merge_commit {
                         if merged_commit != building_commit {
                             warn!("Building a different commit");
@@ -400,17 +406,17 @@ where P: Pr + 'static,
                 url,
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                if let Some(running) = db.take_running(self.id) {
+                if let Some(running) = try!(db.take_running(self.id)) {
                     if let Some(ref merged_commit) = running.merge_commit {
                         if merged_commit != &built_commit {
                             warn!("Finished building a different commit");
-                            db.put_running(self.id, running.clone());
+                            try!(db.put_running(self.id, running.clone()));
                         } else if running.canceled {
                             // Drop it on the floor. It's canceled.
                         } else if running.built {
                             warn!("Got duplicate BuildFailed event");
                             // Put it back
-                            db.put_running(self.id, running.clone());
+                            try!(db.put_running(self.id, running.clone()));
                         } else {
                             self.ui.send_result(
                                 self.id,
@@ -435,17 +441,17 @@ where P: Pr + 'static,
                 url,
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                if let Some(mut running) = db.take_running(self.id) {
+                if let Some(mut running) = try!(db.take_running(self.id)) {
                     if let Some(ref merged_commit) = running.merge_commit {
                         if merged_commit != &built_commit {
                             warn!("Finished building a different commit");
-                            db.put_running(self.id, running.clone());
+                            try!(db.put_running(self.id, running.clone()));
                         } else if running.canceled {
                             // Canceled; drop on the floor.
                         } else if running.built {
                             warn!("Got duplicate BuildSucceeded event");
                             // Put it back.
-                            db.put_running(self.id, running.clone());
+                            try!(db.put_running(self.id, running.clone()));
                         } else {
                             self.vcs.move_staging_to_master(
                                 self.id,
@@ -462,7 +468,7 @@ where P: Pr + 'static,
                             );
                             // Put it back with it marked as built.
                             running.built = true;
-                            db.put_running(self.id, running.clone());
+                            try!(db.put_running(self.id, running.clone()));
                         }
                     } else {
                         warn!("Finished building a commit that never merged");
@@ -476,7 +482,7 @@ where P: Pr + 'static,
                 merge_commit,
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                if let Some(running) = db.take_running(self.id) {
+                if let Some(running) = try!(db.take_running(self.id)) {
                     if let Some(running_merge_commit) = running.merge_commit {
                         if running_merge_commit != merge_commit {
                             warn!("VCS move event with wrong commit");
@@ -506,7 +512,7 @@ where P: Pr + 'static,
                 merge_commit,
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                if let Some(running) = db.take_running(self.id) {
+                if let Some(running) = try!(db.take_running(self.id)) {
                     if let Some(running_merge_commit) = running.merge_commit {
                         if running_merge_commit != merge_commit {
                             warn!("VCS move event with wrong commit");
@@ -532,24 +538,25 @@ where P: Pr + 'static,
                 }
             }
         }
-        if db.peek_running(self.id).is_none() {
-            if let Some(next) = db.pop_queue(self.id) {
+        if try!(db.peek_running(self.id)).is_none() {
+            if let Some(next) = try!(db.pop_queue(self.id)) {
                 self.vcs.merge_to_staging(
                     self.id,
                     next.commit.clone(),
                     next.message.clone(),
                     next.pr.remote(),
                 );
-                db.put_running(self.id, RunningEntry{
+                try!(db.put_running(self.id, RunningEntry{
                     pr: next.pr,
                     message: next.message,
                     pull_commit: next.commit,
                     merge_commit: None,
                     canceled: false,
                     built: false,
-                });
+                }));
             }
         }
+        Ok(())
     }
 }
 
