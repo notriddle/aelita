@@ -56,7 +56,7 @@ impl<P: Pr> Db<P> for DbBox<P>
     fn transaction<T: Transaction<P>>(
         &mut self,
         t: T,
-    ) -> Result<(), Box<Error + Send + Sync>> {
+    ) -> Result<T::Return, Box<Error + Send + Sync>> {
         match *self {
             DbBox::Sqlite(ref mut d) => d.transaction(t),
             DbBox::Postgres(ref mut d) => d.transaction(t),
@@ -198,7 +198,7 @@ pub trait Db<P: Pr>: Sized {
     fn transaction<T: Transaction<P>>(
         &mut self,
         t: T,
-    ) -> Result<(), Box<Error + Send + Sync>> {
+    ) -> Result<T::Return, Box<Error + Send + Sync>> {
         t.run(self)
     }
     fn push_queue(
@@ -263,7 +263,11 @@ pub trait Db<P: Pr>: Sized {
 }
 
 pub trait Transaction<P: Pr> {
-    fn run<D: Db<P>>(self, &mut D) -> Result<(), Box<Error + Send + Sync>>;
+    type Return;
+    fn run<D: Db<P>>(
+        self,
+        &mut D,
+    ) -> Result<Self::Return, Box<Error + Send + Sync>>;
 }
 
 /// An item not yet in the build queue

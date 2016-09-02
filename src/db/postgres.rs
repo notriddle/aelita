@@ -67,14 +67,14 @@ impl<P> Db<P> for PostgresDb<P>
     fn transaction<T: db::Transaction<P>>(
         &mut self,
         t: T,
-    ) -> Result<(), Box<Error + Send + Sync>> {
+    ) -> Result<T::Return, Box<Error + Send + Sync>> {
         let conn = try!(self.conn());
         let mut transaction = PostgresTransaction::new(
             try!(conn.transaction())
         );
-        try!(t.run(&mut transaction));
+        let return_ = try!(t.run(&mut transaction));
         try!(transaction.conn.commit());
-        Ok(())
+        Ok(return_)
     }
     fn push_queue(
         &mut self,
