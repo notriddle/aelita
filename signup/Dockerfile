@@ -1,5 +1,5 @@
 FROM alpine:edge
-RUN apk add --no-cache postgresql-libs python2 py-pip py-psycopg2 uwsgi \
+RUN apk add --no-cache postgresql-libs python2 py2-pip py-psycopg2 uwsgi \
         uwsgi-python && \
     pip install flask GitHub-Flask Flask-SQLAlchemy raven 'raven[flask]' \
         blinker
