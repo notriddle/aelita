@@ -161,6 +161,7 @@ impl<'cntx, P, B, U, V> db::Transaction<P>
           B: Ci<P::C> + 'cntx,
           U: Ui<P> + 'cntx,
           V: Vcs<P::C> + 'cntx {
+    type Return = ();
     fn run<D: Db<P>>(
         mut self,
         db: &mut D

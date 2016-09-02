@@ -3,7 +3,7 @@
 mod auth;
 
 use crossbeam;
-use db::{self, Db, DbBox, PendingEntry};
+use db::{self, Db, DbBox, PendingEntry, QueueEntry, RunningEntry, Transaction};
 use horrorshow::prelude::*;
 use hyper::buffer::BufReader;
 use hyper::header::{ContentType, Headers};
@@ -199,10 +199,11 @@ impl<'a, P: Pr> Thread<'a, P>
         _req: Request,
         mut res: Response<::hyper::net::Streaming>,
     ) -> Result<(), Box<Error>> {
-        let pending_entries = try!(self.db.list_pending(pipeline_id).wc());
+        let (pending_entries, queued_entries, running_entry) =
+            try!(self.db.transaction(InfoTransaction{
+                pipeline_id: pipeline_id
+            }).wc());
         let is_empty = pending_entries.is_empty();
-        let queued_entries = try!(self.db.list_queue(pipeline_id).wc());
-        let running_entry = try!(self.db.peek_running(pipeline_id).wc());
         let mut running = None;
         let mut queued = Vec::new();
         let pending: Vec<_> = pending_entries.into_iter().filter_map(|entry| {
@@ -285,17 +286,15 @@ impl<'a, P: Pr> Thread<'a, P>
                             th { : "Opened" }
                         }
                         tbody {
-                            @ for &(ref n, pid) in &pipelines { |t| retry!{{
+                            @ for &(ref n, pid) in &pipelines { |t| {
                                 let n = &**n;
-                                let opened = retry_unwrap!(
-                                    self.db.list_pending(pid).wc()
-                                ).len();
-                                let queue = retry_unwrap!(
-                                    self.db.list_queue(pid).wc()
-                                ).len();
-                                let running = retry_unwrap!(
-                                    self.db.peek_running(pid).wc()
-                                ).is_some();
+                                let (opened, queue, running) = 
+                                    self.db.transaction(InfoTransaction{
+                                        pipeline_id: pid
+                                    }).unwrap_or((vec![], vec![], None));
+                                let opened = opened.len();
+                                let queue = queue.len();
+                                let running = running.is_some();
                                 let running = if running { 1 } else { 0 };
                                 let review = opened - queue - running;
                                 t << html!{
@@ -309,7 +308,7 @@ impl<'a, P: Pr> Thread<'a, P>
                                         td { : opened }
                                     }
                                 }
-                            }}}
+                            }}
                             @ if pipelines.is_empty() {
                                 td(colspan=5) {
                                     : "No configured repositories"
@@ -337,6 +336,35 @@ impl<'a, P: Pr> Thread<'a, P>
         try!(html.write_to_io(&mut res));
         try!(res.end());
         Ok(())
+    }
+}
+
+struct InfoTransaction {
+    pipeline_id: PipelineId,
+}
+
+impl<P: Pr> Transaction<P> for InfoTransaction {
+    type Return = (
+        Vec<PendingEntry<P>>,
+        Vec<QueueEntry<P>>,
+        Option<RunningEntry<P>>,
+    );
+    fn run<D: Db<P>>(
+        self,
+        db: &mut D
+    ) -> Result<Self::Return, Box<Error + Send + Sync>> {
+        retry!{{
+            let pending_entries = retry_unwrap!(
+                db.list_pending(self.pipeline_id)
+            );
+            let queued_entries = retry_unwrap!(
+                db.list_queue(self.pipeline_id)
+            );
+            let running_entry = retry_unwrap!(
+                db.peek_running(self.pipeline_id)
+            );
+            Ok((pending_entries, queued_entries, running_entry))
+        }}
     }
 }
 
