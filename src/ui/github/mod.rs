@@ -813,7 +813,7 @@ impl Worker {
                 body: comment_body.into_owned(),
             };
             let resp = try!(
-                try!(self.client.post(&url).expect("valid url").json(&comment))
+                try!(self.client.post(&url).expect("url").json(&comment))
                     .header(Self::accept(AcceptType::Regular))
                     .send()
             );
@@ -830,7 +830,7 @@ impl Worker {
                 pull_commit
             );
             let resp = try!(
-                try!(self.client.post(&url).expect("valid url").json(&status_body))
+                try!(self.client.post(&url).expect("url").json(&status_body))
                     .header(Self::accept(AcceptType::Regular))
                     .send()
             );
@@ -845,12 +845,17 @@ impl Worker {
                     merge_commit
                 );
                 let resp = try!(
-                    try!(self.client.post(&url).expect("valid url").json(&status_body))
+                    try!(
+                        self.client.post(&url).expect("url")
+                            .json(&status_body)
+                    )
                         .header(Self::accept(AcceptType::Regular))
                         .send()
                 );
                 if !resp.is_success() {
-                    return Err(GithubRequestError::HttpStatus(resp.http.status))
+                    return Err(GithubRequestError::HttpStatus(
+                    	resp.http.status
+                    ))
                 }
             }
         }

@@ -138,7 +138,10 @@ impl Worker {
             sha: merge_commit.to_string(),
         };
         let resp = try!(
-            try!(self.client.patch(&url).expect("valid url").json(&update_desc))
+            try!(
+                self.client.patch(&url).expect("valid url")
+                    .json(&update_desc)
+            )
                 .header(Self::accept())
                 .send()
         );
@@ -218,12 +221,17 @@ impl Worker {
                     sha: master_sha,
                 };
                 let resp = try!(
-                    try!(self.client.patch(&url).expect("valid url").json(&update_desc))
+                    try!(
+                        self.client.patch(&url).expect("valid url")
+                            .json(&update_desc)
+                    )
                         .header(Self::accept())
                         .send()
                 );
                 if !resp.is_success() {
-                    return Err(GithubRequestError::HttpStatus(resp.http.status));
+                    return Err(GithubRequestError::HttpStatus(
+                    	resp.http.status
+                    ));
                 }
             }
             Some(true) => {}
@@ -244,12 +252,17 @@ impl Worker {
                     sha: master_sha,
                 };
                 let resp = try!(
-                    try!(self.client.patch(&url).expect("valid url").json(&create_desc))
+                    try!(
+                    	self.client.patch(&url).expect("valid url")
+                    		.json(&create_desc)
+                    )
                         .header(Self::accept())
                         .send()
                 );
                 if !resp.is_success() {
-                    return Err(GithubRequestError::HttpStatus(resp.http.status));
+                    return Err(GithubRequestError::HttpStatus(
+                    	resp.http.status
+                    ));
                 }
             }
         }
