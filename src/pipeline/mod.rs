@@ -222,7 +222,8 @@ where P: Pr + 'static,
                 assert_eq!(&pipeline_id, &self.id);
                 let commit = match (
                     commit,
-                    try!(db.peek_pending_by_pr(self.id, &pr)).map(|p| p.commit),
+                    try!(db.peek_pending_by_pr(self.id, &pr))
+                        .map(|p| p.commit),
                 ) {
                     (Some(reviewed_pr), Some(current_pr)) => {
                         if reviewed_pr != current_pr {
@@ -280,7 +281,11 @@ where P: Pr + 'static,
                 pipeline_id, pr, commit, title, url
             )) => {
                 assert_eq!(&pipeline_id, &self.id);
-                if try!(db.cancel_by_pr_different_commit(self.id, &pr, &commit)) {
+                if try!(db.cancel_by_pr_different_commit(
+                    self.id,
+                    &pr,
+                    &commit,
+                )) {
                     self.ui.send_result(
                         self.id,
                         pr.clone(),

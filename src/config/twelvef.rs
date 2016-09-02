@@ -807,7 +807,9 @@ mod postgres {
                     WHERE owner = $1 AND repo = $2
                 "###;
                 let stmt = retry_unwrap!(conn.prepare(&sql));
-                let rows = retry_unwrap!(stmt.query(&[&repo.owner, &repo.repo]));
+                let rows = retry_unwrap!(
+                    stmt.query(&[&repo.owner, &repo.repo])
+                );
                 let rows = rows.iter();
                 let mut rows = rows.map(|row| {
                     github::RepoPipelines{
@@ -831,7 +833,9 @@ mod postgres {
                     WHERE pipeline_id = $1 OR try_pipeline_id = $2
                 "###;
                 let stmt = retry_unwrap!(conn.prepare(&sql));
-                let rows = retry_unwrap!(stmt.query(&[&pipeline_id.0, &pipeline_id.0]));
+                let rows = retry_unwrap!(stmt.query(
+                    &[&pipeline_id.0, &pipeline_id.0]
+                ));
                 let rows = rows.iter();
                 let mut rows = rows.map(|row| {
                     let pipeline_type =
@@ -985,7 +989,9 @@ mod postgres {
                     WHERE owner = $1 AND repo = $2 AND context = $3
                 "###;
                 let stmt = retry_unwrap!(conn.prepare(&sql));
-                let rows = retry_unwrap!(stmt.query(&[&repo.owner, &repo.repo, &repo.context]));
+                let rows = retry_unwrap!(
+                    stmt.query(&[&repo.owner, &repo.repo, &repo.context])
+                );
                 let rows = rows.iter();
                 let rows = rows.map(|row| {
                     PipelineId(row.get::<_, i32>(0))

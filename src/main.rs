@@ -161,7 +161,10 @@ impl<'cntx, P, B, U, V> db::Transaction<P>
           B: Ci<P::C> + 'cntx,
           U: Ui<P> + 'cntx,
           V: Vcs<P::C> + 'cntx {
-    fn run<D: Db<P>>(mut self, db: &mut D) -> Result<(), Box<Error + Send + Sync>> {
+    fn run<D: Db<P>>(
+        mut self,
+        db: &mut D
+    ) -> Result<(), Box<Error + Send + Sync>> {
         use std::thread;
         use std::time::Duration;
         use util::{MIN_DELAY_SEC, MAX_DELAY_SEC};

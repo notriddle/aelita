@@ -287,10 +287,15 @@ impl<'a, P: Pr> Thread<'a, P>
                         tbody {
                             @ for &(ref n, pid) in &pipelines { |t| retry!{{
                                 let n = &**n;
-                                let opened = retry_unwrap!(self.db.list_pending(pid).wc()).len();
-                                let queue = retry_unwrap!(self.db.list_queue(pid).wc()).len();
-                                let running = retry_unwrap!(self.db.peek_running(pid).wc())
-                                    .is_some();
+                                let opened = retry_unwrap!(
+                                    self.db.list_pending(pid).wc()
+                                ).len();
+                                let queue = retry_unwrap!(
+                                    self.db.list_queue(pid).wc()
+                                ).len();
+                                let running = retry_unwrap!(
+                                    self.db.peek_running(pid).wc()
+                                ).is_some();
                                 let running = if running { 1 } else { 0 };
                                 let review = opened - queue - running;
                                 t << html!{
