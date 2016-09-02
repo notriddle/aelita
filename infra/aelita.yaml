@@ -80,7 +80,7 @@ spec:
               path: /
               port: 8000
             initialDelaySeconds: 5
-            timeoutSeconds: 1
+            timeoutSeconds: 2
 
 ---
 
@@ -141,7 +141,7 @@ spec:
             tcpSocket:
               port: 8000
             initialDelaySeconds: 5
-            timeoutSeconds: 1
+            timeoutSeconds: 2
 
 ---
 
@@ -321,7 +321,7 @@ spec:
               path: /healthz
               port: 80
             initialDelaySeconds: 5
-            timeoutSeconds: 1
+            timeoutSeconds: 2
           livenessProbe:
             httpGet:
               path: /
@@ -330,7 +330,7 @@ spec:
                 - name: Host
                   value: "aelitabot.xyz"
             initialDelaySeconds: 30
-            timeoutSeconds: 2
+            timeoutSeconds: 4
 
 ---
 
@@ -387,5 +387,5 @@ spec:
               path: /healthz
               port: 8080
             initialDelaySeconds: 5
-            timeoutSeconds: 1
+            timeoutSeconds: 2
 
