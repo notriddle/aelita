@@ -31,12 +31,12 @@ extern crate toml;
 extern crate url;
 extern crate void;
 
+#[macro_use] mod util;
 mod ci;
 mod config;
 mod db;
 mod pipeline;
 mod ui;
-mod util;
 mod view;
 mod vcs;
 

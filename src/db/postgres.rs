@@ -2,7 +2,7 @@
 
 use db::{self, Db, PendingEntry, QueueEntry, RunningEntry};
 use hyper::Url;
-use postgres::{self, Connection, IntoConnectParams, SslMode};
+use postgres::{self, Connection, ConnectParams, IntoConnectParams, SslMode};
 use std::error::Error;
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -13,7 +13,7 @@ pub struct PostgresDb<P>
     where P: Pr + Into<String> + FromStr
 {
     _pr: PhantomData<P>,
-    conn: Connection,
+    params: ConnectParams,
 }
 
 impl<P> PostgresDb<P>
@@ -22,8 +22,11 @@ impl<P> PostgresDb<P>
     pub fn open<Q: IntoConnectParams>(
         params: Q
     ) -> Result<Self, Box<Error + Send + Sync>> {
-        let conn = try!(Connection::connect(params, SslMode::None));
-        try!(conn.batch_execute(r###"
+        let result = PostgresDb{
+            _pr: PhantomData,
+            params: try!(params.into_connect_params()),
+        };
+        try!(try!(result.conn()).batch_execute(r###"
             CREATE TABLE IF NOT EXISTS queue (
                 id SERIAL PRIMARY KEY,
                 pipeline_id INTEGER,
@@ -49,10 +52,10 @@ impl<P> PostgresDb<P>
                 url TEXT
             );
         "###));
-        Ok(PostgresDb{
-            conn: conn,
-            _pr: PhantomData,
-        })
+        Ok(result)
+    }
+    fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
+        Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
     }
 }
 
@@ -65,8 +68,9 @@ impl<P> Db<P> for PostgresDb<P>
         &mut self,
         t: T,
     ) -> Result<(), Box<Error + Send + Sync>> {
+        let conn = try!(self.conn());
         let mut transaction = PostgresTransaction::new(
-            try!(self.conn.transaction())
+            try!(conn.transaction())
         );
         try!(t.run(&mut transaction));
         try!(transaction.conn.commit());
@@ -77,93 +81,115 @@ impl<P> Db<P> for PostgresDb<P>
         pipeline_id: PipelineId,
         queue_entry: QueueEntry<P>,
     ) -> Result<(), Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).push_queue(pipeline_id, queue_entry)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).push_queue(pipeline_id, queue_entry);
+        result
     }
     fn pop_queue(
         &mut self,
         pipeline_id: PipelineId,
     ) -> Result<Option<QueueEntry<P>>, Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).pop_queue(pipeline_id)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).pop_queue(pipeline_id);
+        result
     }
     fn list_queue(
         &mut self,
         pipeline_id: PipelineId,
     ) -> Result<Vec<QueueEntry<P>>, Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).list_queue(pipeline_id)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).list_queue(pipeline_id);
+        result
     }
     fn put_running(
         &mut self,
         pipeline_id: PipelineId,
         running_entry: RunningEntry<P>
     ) -> Result<(), Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).put_running(pipeline_id, running_entry)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).put_running(pipeline_id, running_entry);
+        result
     }
     fn take_running(
         &mut self,
         pipeline_id: PipelineId,
     ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).take_running(pipeline_id)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).take_running(pipeline_id);
+        result
     }
     fn peek_running(
         &mut self,
         pipeline_id: PipelineId,
     ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).peek_running(pipeline_id)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).peek_running(pipeline_id);
+        result
     }
     fn add_pending(
         &mut self,
         pipeline_id: PipelineId,
         entry: PendingEntry<P>,
     ) -> Result<(), Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).add_pending(pipeline_id, entry)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).add_pending(pipeline_id, entry);
+        result
     }
     fn take_pending_by_pr(
         &mut self,
         pipeline_id: PipelineId,
         pr: &P,
     ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).take_pending_by_pr(pipeline_id, pr)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).take_pending_by_pr(pipeline_id, pr);
+        result
     }
     fn peek_pending_by_pr(
         &mut self,
         pipeline_id: PipelineId,
         pr: &P,
     ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).peek_pending_by_pr(pipeline_id, pr)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).peek_pending_by_pr(pipeline_id, pr);
+        result
     }
     fn list_pending(
         &mut self,
         pipeline_id: PipelineId,
     ) -> Result<Vec<PendingEntry<P>>, Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).list_pending(pipeline_id)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).list_pending(pipeline_id);
+        result
     }
     fn cancel_by_pr(
         &mut self,
         pipeline_id: PipelineId, pr: &P
     ) -> Result<(), Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).cancel_by_pr(pipeline_id, pr)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).cancel_by_pr(pipeline_id, pr);
+        result
     }
     fn cancel_by_pr_different_commit(
         &mut self,
@@ -171,9 +197,11 @@ impl<P> Db<P> for PostgresDb<P>
         pr: &P,
         commit: &P::C,
     ) -> Result<bool, Box<Error + Send + Sync>> {
-        PostgresTransaction::new(
-            try!(self.conn.transaction())
-        ).cancel_by_pr_different_commit(pipeline_id, pr, commit)
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).cancel_by_pr_different_commit(pipeline_id, pr, commit);
+        result
     }
 }
 
