@@ -230,7 +230,7 @@ impl Worker {
                 );
                 if !resp.is_success() {
                     return Err(GithubRequestError::HttpStatus(
-                    	resp.http.status
+                        resp.http.status
                     ));
                 }
             }
@@ -253,15 +253,15 @@ impl Worker {
                 };
                 let resp = try!(
                     try!(
-                    	self.client.patch(&url).expect("valid url")
-                    		.json(&create_desc)
+                        self.client.post(&url).expect("valid url")
+                            .json(&create_desc)
                     )
                         .header(Self::accept())
                         .send()
                 );
                 if !resp.is_success() {
                     return Err(GithubRequestError::HttpStatus(
-                    	resp.http.status
+                        resp.http.status
                     ));
                 }
             }
