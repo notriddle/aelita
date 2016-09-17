@@ -28,6 +28,7 @@ use hex::ToHex;
 use hyper::buffer::BufReader;
 use hyper::client::Client;
 use hyper::header::{Authorization, Basic, Headers};
+use hyper::method::Method;
 use hyper::net::{HttpListener, NetworkListener, NetworkStream};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
@@ -1190,6 +1191,10 @@ fn one_item_github_round_trip_cloud_no_staging() {
         assert_eq!(
             &req.headers.get_raw("Authorization").unwrap()[0][..],
             b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        assert_eq!(
+            req.method,
+            Method::Post
         );
         *res.status_mut() = StatusCode::Ok;
         res.send(&[]).unwrap();
