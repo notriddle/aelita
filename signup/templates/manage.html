@@ -2,33 +2,11 @@
 <title>No more broken master &mdash; Aelita</title>
 <meta name=viewport content=width=device-width>
 <link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css>
-<script>
-if (!document.createElement('dialog').showModal) {
-  var link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = 'static/dialog-polyfill.css';
-  var script = document.createElement('script');
-  script.src = 'static/dialog-polyfill.js';
-  var head = document.getElementsByTagName('head')[0];
-  head.appendChild(link);
-  head.appendChild(script);
-}
-function showInviteDialog() {
-  var dialog = document.getElementById('invite_dialog');
-  if (window.dialogPolyfill) {
-    window.dialogPolyfill.registerDialog(dialog);
-  }
-  dialog.showModal();
-}
-function closeInviteDialog() {
-  var dialog = document.getElementById('invite_dialog');
-  dialog.close();
-}
-</script>
+<script src=/static/invite-dialog.js></script>
 <link rel=stylesheet href=/static/style3.css>
 <form action="/logout" method="POST"><button class="tb tbg">Log out</button></form>
 {% if invite_count > 0 %}
-<button class="tb tbg" onclick="showInviteDialog()">Invite</button>
+<button class="tb tbg" id="showInviteDialog">Invite</button>
 <dialog id="invite_dialog" aria-role="dialog">
 <h3>{{invite_count}} remaining invites</h3>
 <form action="/invite" method="POST">
@@ -39,7 +17,7 @@ function closeInviteDialog() {
 </tr>
 </table>
 </form>
-<button class="tk" aria-label="Close" onclick="closeInviteDialog()">
+<button class="tk" aria-label="Close" id="closeInviteDialog">
     &times;
 </button>
 </dialog>
