@@ -173,6 +173,12 @@ impl<'a, P: Pr> Thread<'a, P>
                         *res.status_mut() = StatusCode::Ok;
                         Some((path.to_owned(), pipeline_id))
                     }
+                    None if path == "style.css" => {
+                        res.headers_mut().set(ContentType(mime!(Text/Css)));
+                        let mut res = try!(res.start());
+                        try!(res.write_all(include_bytes!("style.css")));
+                        return Ok(());
+                    }
                     None => {
                         *res.status_mut() = StatusCode::NotFound;
                         return Ok(());
@@ -223,7 +229,7 @@ impl<'a, P: Pr> Thread<'a, P>
                 head {
                     title { : name }
                     link(rel="stylesheet", href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css");
-                    style { : raw!(include_str!("style.css")) }
+                    link(rel="stylesheet", href="/style.css");
                 }
                 body {
                     h1 { : name }
@@ -273,7 +279,7 @@ impl<'a, P: Pr> Thread<'a, P>
                 head {
                     title { : "Aelita" }
                     link(rel="stylesheet", href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css");
-                    style { : raw!(include_str!("style.css")) }
+                    link(rel="stylesheet", href="/style.css");
                 }
                 body {
                     h1 { : "Pipelines" }
