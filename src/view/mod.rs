@@ -230,6 +230,7 @@ impl<'a, P: Pr> Thread<'a, P>
                     title { : name }
                     link(rel="stylesheet", href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css");
                     link(rel="stylesheet", href="/style.css");
+                    meta(name="viewport", content="width=device-width");
                 }
                 body {
                     h1 { : name }
@@ -280,9 +281,10 @@ impl<'a, P: Pr> Thread<'a, P>
                     title { : "Aelita" }
                     link(rel="stylesheet", href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css");
                     link(rel="stylesheet", href="/style.css");
+                    meta(name="viewport", content="width=device-width");
                 }
                 body {
-                    h1 { : "Pipelines" }
+                    h1 { : "Repositories" }
                     table {
                         thead {
                             th { : "Name" }
@@ -330,10 +332,6 @@ impl<'a, P: Pr> Thread<'a, P>
                         dt { : raw!("<code>r=@username</code>") }
                         dd { : "Add the pull request as \"username.\"" }
                         dt { : raw!("<code>r-</code>") }
-                        dd { : "Cancel the pull request." }
-                        dt { : raw!("<code>try+</code>") }
-                        dd { : "Test the pull request without merging it." }
-                        dt { : raw!("<code>try-</code>") }
                         dd { : "Cancel the pull request." }
                     }
                 }
