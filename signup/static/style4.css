@@ -11,7 +11,7 @@ a {
 a:hover, a:active, a:focus {
     text-decoration: none;
 }
-.table, .section {
+.section {
     width: 100%;
     border: solid 1px #CCC;
     border-radius: 8px;
@@ -37,43 +37,7 @@ a:hover, a:active, a:focus {
     padding-top: 10px;
     margin: 0;
 }
-.table tr {
-    transition-duration: 0.25s;
-    transition-timing-function: ease;
-    transition-property: background;
-}
-.table tbody > tr:hover {
-    background: #EEE;
-}
-.table tr td {
-    border-top: solid 1px #CCC;
-}
-.table tr:first-child td {
-    border-top: none;
-}
-.table th {
-    border-bottom: solid 2px #CCC;
-    color: #666;
-    font-weight: bold;
-    text-align: left;
-}
-.table th, .table td {
-    padding: 8px 10px;
-    border-left: solid 1px #CCC;
-}
-.table th:first-child, .table td:first-child {
-    border-left:none;
-}
-.fill-link {
-    overflow: hidden;
-}
-.fill-link > * {
-    display: block;
-    margin: -10em;
-    padding: 10em;
-}
-.tb, .tk {
-    color: #0C0;
+.empty-btn, .switch-btn, .close-btn, .secondary-btn {
     text-decoration: none;
     text-align: center;
     border: none;
@@ -84,46 +48,62 @@ a:hover, a:active, a:focus {
     cursor: pointer;
     font-weight: bold;
     background: none;
+    margin: none;
+    padding: none;
 }
-.tb:hover, .tb:active, .tb:focus {
-    background: #0C0;
+.empty-btn:hover, .empty-btn:active, .empty-btn:focus {
+    color: inherit;
+}
+.double-size {
+    font-size: 1.5em;
+}
+.close-btn {
+    color: #666;
+    font-size: 0.75em;
+    position: absolute;
+    top: 0; right: 0;
+    padding: 4px;
+}
+.secondary-btn {
+    color: #666;
+    font-size: 0.75em;
+    border: solid 1px #CCC;
+    border-radius: 8px;
+    float: right;
+    margin-left: 8px;
+    padding: 6px 8px;
+}
+.secondary-btn:hover, .secondary-btn:active, .secondary-btn:focus {
+    background: #666;
     color: #FFF;
+    border-color: transparent;
+    box-shadow: 0 0 1px #999;
+}
+.switch-btn {
+    text-indent: -99999999px;
+}
+.switch-btn span {
+    display: block;
+    width: 71px; height: 36px;
+}
+.switch-btn-on span {
+    background: url(on-switch.svg);
+}
+.switch-btn-off span {
+    background: url(off-switch.svg);
+}
+.switch-btn:hover span, .switch-btn:active span, .switch-btn:focus span {
+    background-position: 0 -36px;
 }
 th input, td input {
     width: 100%;
     box-sizing: border-box;
-}
-.tbb {
-    color: #C00;
-}
-.tbb:hover, .tbb:active, .tbb:focus {
-    background: #C00;
-}
-.tbg {
-    border: solid 1px #CCC;
-    border-bottom: solid 2px #999;
-    float: right;
-    margin-left: 8px;
-    padding: 6px 8px;
-    font-size: 0.75em;
-    border-radius: 8px;
-    color: #000;
-}
-.tbg:hover, .tbg:active, .tbg:focus {
-    background: #666;
 }
 .clearfix:after {
     content: ". . . . . . . . . . . .";
     display: block;
     width: 0; height: 0; font-size: 0;
     clear: both;
-}
-.tk {
-    color: #666;
-    font-size: 0.75em;
-    position: absolute;
-    top: 0; right: 0;
-    padding: 4px;
 }
 .f {
    width: 20px;
@@ -230,4 +210,12 @@ dialog::backdrop {
     color: #FFF;
     box-shadow: 0 0px 1px #999;
     border: solid 1px transparent;
+}
+.fill-link {
+    overflow: hidden;
+}
+.fill-link > * {
+    display: block;
+    margin: -10em;
+    padding: 10em;
 }
