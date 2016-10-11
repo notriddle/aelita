@@ -83,6 +83,9 @@ a:hover, a:active, a:focus {
     border-color: transparent;
     box-shadow: 0 0 1px #999;
 }
+.switch-btn-width {
+    width: 71px;
+}
 .switch-btn {
     text-indent: -99999999px;
 }

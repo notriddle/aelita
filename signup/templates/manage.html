@@ -71,23 +71,22 @@
 </form>
 {% else %}
 <p>Turn <a href="https://travis-ci.org/">Travis CI</a> on, then turn the switch on here.</p>
+<form action="" method="POST">
 <table class=blank aria-role="main">
     {% for repo in repo_defs %}
         {% if repo.present %}
         <tr>
-            <td class=fill-link style="width:71px">
-                <form action="" method="POST">
-                    <button
-                        name="remove"
-                        value="{{ repo.id }}"
-                        class="switch-btn switch-btn-on"
-                        title="Remove"
-                    >
-                        <span>On</span>
-                    </button>
-                </form>
+            <td class="fill-link switch-btn-width">
+                <button
+                    name="remove"
+                    value="{{ repo.id }}"
+                    class="switch-btn switch-btn-on"
+                    title="Remove"
+                >
+                    <span>On</span>
+                </button>
             </td>
-            <td class=fill-link style="width:71px">
+            <td class="fill-link switch-btn-width">
                 <a
                     aria-label="Edit"
                     title="Edit"
@@ -105,17 +104,15 @@
         </tr>
         {% else %}
         <tr>
-            <td class=fill-link style="width:71px">
-                <form action="" method="POST">
-                    <button
-                        name="add"
-                        value="{{ repo.id }}"
-                        class="switch-btn switch-btn-off"
-                        title="Add"
-                    >
-                        <span>Off</span>
-                    </button>
-                </form>
+            <td class="fill-link switch-btn-width">
+                <button
+                    name="add"
+                    value="{{ repo.id }}"
+                    class="switch-btn switch-btn-off"
+                    title="Add"
+                >
+                    <span>Off</span>
+                </button>
             </td>
             <td></td>
             <td>{{ repo.name }}</td>
@@ -123,6 +120,7 @@
         {% endif %}
     {% endfor %}
 </table>
+</form>
 <h2>Usage</h2>
 <p>Once <code>@aelita-mergebot</code> is enabled on a repo,
 instead of merging pull requests, say a command to it in a comment.</p>
