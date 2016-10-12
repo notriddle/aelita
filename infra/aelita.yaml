@@ -173,7 +173,7 @@ spec:
     spec:
       containers:
         - name: postgres-pipelines
-          image: postgres
+          image: postgres:9.5.3
           ports:
             - containerPort: 5432
           env:
@@ -219,7 +219,7 @@ spec:
     spec:
       containers:
         - name: postgres-caches
-          image: postgres
+          image: postgres:9.5.3
           ports:
             - containerPort: 5432
           env:
@@ -265,7 +265,7 @@ spec:
     spec:
       containers:
         - name: postgres-configs
-          image: postgres
+          image: postgres:9.5.3
           ports:
             - containerPort: 5432
           env:

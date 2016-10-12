@@ -203,8 +203,7 @@ def manage():
         flash("Please log in")
         return logout()
     all_repos = github.get('user/repos?visibility=public', all_pages=True)
-    present = []
-    non_present = []
+    repo_defs = []
     edit = None
     default_context = 'continuous-integration/travis-ci/push'
     for repo in all_repos:
@@ -218,6 +217,7 @@ def manage():
             "repo": repo['name'],
             "name": repo['full_name'],
             "id": repo['id'],
+            "present": on_repo is not None,
         }
         if request.method == 'POST':
             if 'add' in request.form and \
@@ -232,10 +232,8 @@ def manage():
                     int(request.form['edit']) == repo['id'] and \
                     on_repo is not None:
                 return edit_repo(on_repo)
-        if on_repo is None:
-            non_present.append(repo_def)
-        else:
-            present.append(repo_def)
+        repo_defs.append(repo_def)
+        if on_repo is not None:
             if request.args.get('edit') and \
                     request.args.get('edit') == str(repo['id']):
                 edit = repo_def
@@ -251,8 +249,7 @@ def manage():
     return render_template(
         'manage.html',
         username=user.username,
-        non_present=non_present,
-        present=present,
+        repo_defs=repo_defs,
         edit=edit,
         invite_count=user.invite_count,
         base_url=app.config['BOT_BASEURL'],

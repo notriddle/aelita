@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg id="svg2" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://www.w3.org/2000/svg" height="72.326" viewBox="0 0 70.978997 72.325334" width="70.979" version="1.1" xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<defs id="defs15">
+<filter id="a" style="color-interpolation-filters:sRGB">
+<feFlood id="feFlood3345" flood-color="rgb(153,153,153)" result="flood"/>
+<feComposite id="feComposite3347" operator="in" in="flood" in2="SourceGraphic" result="composite1"/>
+<feGaussianBlur id="feGaussianBlur3349" in="composite1" stdDeviation="1" result="blur"/>
+<feOffset id="feOffset3351" dy="0" dx="0" result="offset"/>
+<feComposite id="feComposite3353" operator="over" in="SourceGraphic" in2="offset" result="composite2"/>
+</filter>
+</defs>
+<metadata id="metadata7">
+<rdf:RDF>
+<cc:Work rdf:about="">
+<dc:format>image/svg+xml</dc:format>
+<dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+<dc:title/>
+</cc:Work>
+</rdf:RDF>
+</metadata>
+<g id="layer1" fill="none" transform="translate(.58077 .58047)">
+<rect id="rect3336" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" rx="8" ry="8" height="35.162" width="69.979" stroke="#ccc" y="-.080768" x="-.080768"/>
+<rect id="rect3336-3" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" rx="6" ry="6" height="31.092" width="31.092" stroke="#666" y="1.9538" x="2.0637" stroke-width="2"/>
+<text id="text4138" style="word-spacing:0px;letter-spacing:0px" xml:space="preserve" font-size="40px" line-height="125%" y="32.056786" x="0.64506412" font-family="sans-serif" fill="#00cc00"><tspan id="tspan4140" y="32.056786" x="0.64506412">✓</tspan></text>
+<rect id="rect3336-3-7" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" rx="6" ry="6" height="31.092" filter="url(#a)" width="31.092" stroke="#0c0" y="38.118" x="2.0637" stroke-width="2" fill="#0c0"/>
+<text id="text4138-5" style="word-spacing:0px;letter-spacing:0px" xml:space="preserve" font-size="40px" line-height="125%" y="68.221313" x="0.64506418" font-family="sans-serif" fill="#ffffff"><tspan id="tspan4140-3" y="68.221313" x="0.64506418">✓</tspan></text>
+<rect id="rect3336-36" style="color-rendering:auto;color:#000000;isolation:auto;mix-blend-mode:normal;shape-rendering:auto;solid-color:#000000;image-rendering:auto" rx="8" ry="8" height="35.162" width="69.979" stroke="#ccc" y="36.084" x="-.080768"/>
+</g>
+</svg>

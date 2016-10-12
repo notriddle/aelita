@@ -1,12 +1,13 @@
 <!DOCTYPE html>
+<meta charset=utf-8>
 <title>No more broken master &mdash; Aelita</title>
 <meta name=viewport content=width=device-width>
 <link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css>
-<script src=/static/invite-dialog.js></script>
-<link rel=stylesheet href=/static/style3.css>
-<form action="/logout" method="POST"><button class="tb tbg">Log out</button></form>
+<script src=/static/manage.js></script>
+<link rel=stylesheet href=/static/style4.css>
+<form action="/logout" method="POST"><button class="secondary-btn">Log out</button></form>
 {% if invite_count > 0 %}
-<button class="tb tbg" id="showInviteDialog">Invite</button>
+<button class="secondary-btn openDialog" data-target="invite_dialog">Invite</button>
 <dialog id="invite_dialog" aria-role="dialog">
 <h3>{{invite_count}} remaining invites</h3>
 <form action="/invite" method="POST">
@@ -17,7 +18,7 @@
 </tr>
 </table>
 </form>
-<button class="tk" aria-label="Close" id="closeInviteDialog">
+<button class="close-btn closeDialog" aria-label="Close" data-target="invite_dialog">
     &times;
 </button>
 </dialog>
@@ -36,10 +37,6 @@
 <form action="" method="POST">
 <h2>{{ edit.name }}</h2>
 <table class=blank aria-role="main">
-<tr>
-<td align=right aria-role="presentation">&rarr;</td>
-<td><a href="{{ base_url }}/{{ edit.name }}">Show queue</a></td>
-</tr>
 <tr>
 <td align=right><label for=context>Required context</label></td>
 <td width="100%"><input
@@ -73,53 +70,57 @@
 </table>
 </form>
 {% else %}
+<p>Turn <a href="https://travis-ci.org/profile">Travis CI</a> on, then turn the switch on here.</p>
 <form action="" method="POST">
-<table class=table aria-role="main">
-    <thead>
-        <tr><th></th><th>Repo</th></tr>
-    </thead>
-    <tbody>{% for repo in non_present %}
+<table class=blank aria-role="main">
+    {% for repo in repo_defs %}
+        {% if repo.present %}
         <tr>
-            <td class="fill-link f">
-                <button
-                    name="add"
-                    value="{{ repo.id }}"
-                    class=tb
-                    aria-label="Add"
-                    title="Add"
-                >
-                    &check;
-                </button>
-            </td>
-            <td>{{ repo.name }}</td>
-        </tr>
-    {% endfor %}
-    {% for repo in present %}
-        <tr>
-            <td class="fill-link f">
+            <td class="fill-link switch-btn-width">
                 <button
                     name="remove"
                     value="{{ repo.id }}"
-                    class="tb tbb"
-                    aria-label="Remove"
+                    class="switch-btn switch-btn-on"
                     title="Remove"
                 >
-                    &times;
+                    <span>On</span>
                 </button>
             </td>
-            <td class=fill-link>
+            <td class="fill-link switch-btn-width">
                 <a
-                    aria-label="Edit {{ repo.name }}"
+                    aria-label="Edit"
+                    title="Edit"
                     href="?edit={{ repo.id }}"
+                    class="empty-btn double-size"
                 >
+                    ⚙
+                </a>
+            </td>
+            <td class=fill-link>
+                <a href="{{ base_url }}/{{ repo.name }}">
                     {{ repo.name }}
                 </a>
             </td>
         </tr>
-    {% endfor %}</tbody>
+        {% else %}
+        <tr>
+            <td class="fill-link switch-btn-width">
+                <button
+                    name="add"
+                    value="{{ repo.id }}"
+                    class="switch-btn switch-btn-off"
+                    title="Add"
+                >
+                    <span>Off</span>
+                </button>
+            </td>
+            <td></td>
+            <td>{{ repo.name }}</td>
+        </tr>
+        {% endif %}
+    {% endfor %}
 </table>
 </form>
-{% endif %}
 <h2>Usage</h2>
 <p>Once <code>@aelita-mergebot</code> is enabled on a repo,
 instead of merging pull requests, say a command to it in a comment.</p>
@@ -131,3 +132,4 @@ instead of merging pull requests, say a command to it in a comment.</p>
 <dt><code>@aelita-mergebot r-</code></dt>
 <dd>Cancel the pull request.</dd>
 </dl>
+{% endif %}
