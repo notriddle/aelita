@@ -7,7 +7,7 @@
 <link rel=stylesheet href=/static/style4.css>
 <form action="/logout" method="POST"><button class="secondary-btn">Log out</button></form>
 {% if invite_count > 0 %}
-<button class="secondary-btn" id="openDialog" data-target="invite_dialog">Invite</button>
+<button class="secondary-btn openDialog" data-target="invite_dialog">Invite</button>
 <dialog id="invite_dialog" aria-role="dialog">
 <h3>{{invite_count}} remaining invites</h3>
 <form action="/invite" method="POST">
@@ -18,7 +18,7 @@
 </tr>
 </table>
 </form>
-<button class="close-btn" aria-label="Close" id="closeDialog" data-target="invite_dialog">
+<button class="close-btn closeDialog" aria-label="Close" data-target="invite_dialog">
     &times;
 </button>
 </dialog>
