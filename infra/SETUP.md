@@ -34,10 +34,15 @@
 
  8. Run `kubectl apply -f aelita-ingress.yml`
 
- 9. Run `kubectl get ing` to see the entrypoint load balancer;
+ 9. Create three GCE disks:
+    postgres-caches, postgres-configs, postgres-pipelines
+
+10. Run `kubectl apply -f aelita-volumes.yml`
+
+11. Run `kubectl get ing` to see the entrypoint load balancer;
     copy the IP address into your DNS server, and wait for it to propagate
 
-10. Push to your Travis-enabled branch,
+12. Push to your Travis-enabled branch,
     and wait for it to build and deploy
 
 # Congratulations! You've set up a copy of hosted aelita!
