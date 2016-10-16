@@ -1,9 +1,6 @@
 #!/bin/bash
 set -e
 
-#     travis env --repo AelitaBot/aelita set PROJECT_NAME aelita-1374
-#     travis env --repo AelitaBot/aelita set CLUSTER_NAME aelita-cluster
-#     travis env --repo AelitaBot/aelita set COMPUTE_ZONE us-central-1f
 CURRENT_VERSION=v$TRAVIS_BUILD_NUMBER
 
 # Build Docker containers
@@ -63,12 +60,16 @@ gcloud docker push gcr.io/$PROJECT_NAME/nginx:$CURRENT_VERSION
 #     travis env --repo AelitaBot/aelita set SIGNUP_DOMAIN aelitabot.xyz
 #     travis env --repo AelitaBot/aelita set BOT_DOMAIN aelita-mergebot.xyz
 #     travis env --repo AelitaBot/aelita set BOT_USERNAME aelita-mergebot
+#     travis env --repo AelitaBot/aelita set PROJECT_NAME aelita-1374
+#     travis env --repo AelitaBot/aelita set CLUSTER_NAME aelita-cluster
+#     travis env --repo AelitaBot/aelita set COMPUTE_ZONE us-central-1f
 for i in POSTGRES_PIPELINES_PASSWORD POSTGRES_CACHES_PASSWORD \
          POSTGRES_CONFIGS_PASSWORD GITHUB_PERSONAL_ACCESS_TOKEN \
          GITHUB_WEBHOOK_SECRET GITHUB_STATUS_WEBHOOK_SECRET \
          GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET \
          VIEW_SECRET CURRENT_VERSION SENTRY_DSN \
-         SIGNUP_DOMAIN BOT_DOMAIN BOT_USERNAME; do
+         SIGNUP_DOMAIN BOT_DOMAIN BOT_USERNAME \
+         PROJECT_NAME CLUSTER_NAME COMPUTE_ZONE; do
     sed -i "s!INSERT_${i}_HERE!${!i}!g" aelita.yaml
     sed -i "s!INSERT_${i}_HERE!${!i}!g" nginx/default.conf
 done
