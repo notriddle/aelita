@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
         - name: aelita
-          image: gcr.io/aelita-1374/aelita:INSERT_CURRENT_VERSION_HERE
+          image: gcr.io/INSERT_PROJECT_NAME_HERE/aelita:INSERT_CURRENT_VERSION_HERE
           ports:
             - containerPort: 5000
             - containerPort: 6000
@@ -113,7 +113,7 @@ spec:
     spec:
       containers:
         - name: signup
-          image: gcr.io/aelita-1374/signup:INSERT_CURRENT_VERSION_HERE
+          image: gcr.io/INSERT_PROJECT_NAME_HERE/signup:INSERT_CURRENT_VERSION_HERE
           ports:
             - containerPort: 8000
           env:
@@ -313,7 +313,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: gcr.io/aelita-1374/nginx:INSERT_CURRENT_VERSION_HERE
+          image: gcr.io/INSERT_PROJECT_NAME_HERE/nginx:INSERT_CURRENT_VERSION_HERE
           ports:
             - containerPort: 80
           readinessProbe:
