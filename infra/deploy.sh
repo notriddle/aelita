@@ -1,20 +1,10 @@
 #!/bin/bash
 set -e
+cd infra/
 
 CURRENT_VERSION=v$TRAVIS_BUILD_NUMBER
 
-# Build Docker containers
-cd static-binary
-docker build -t=gcr.io/$PROJECT_NAME/aelita:$CURRENT_VERSION .
-cd ../signup/
-docker build -t=gcr.io/$PROJECT_NAME/signup:$CURRENT_VERSION .
-cd ../infra/nginx/
-cp -rv ../../signup/static/ .
-for i in static/*; do gzip $i; done
-docker build -t=gcr.io/$PROJECT_NAME/nginx:$CURRENT_VERSION .
-
 # Install gcloud
-cd ../
 wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-117.0.0-linux-x86_64.tar.gz
 tar -xf google-cloud-sdk-*
 export PATH="`pwd`/google-cloud-sdk/bin/:$PATH"
@@ -34,13 +24,7 @@ gcloud config set container/cluster $CLUSTER_NAME
 gcloud config set container/use_client_certificate true
 gcloud --quiet container clusters get-credentials $CLUSTER_NAME
 
-# Push to gcr.io
-gcloud docker push gcr.io/$PROJECT_NAME/aelita:$CURRENT_VERSION
-gcloud docker push gcr.io/$PROJECT_NAME/signup:$CURRENT_VERSION
-gcloud docker push gcr.io/$PROJECT_NAME/nginx:$CURRENT_VERSION
-
-# Upgrade the pod
-# PASSWORD envs were added by running:
+# envs were added by running:
 #     RAND=`dd if=/dev/urandom of=/dev/stdout count=4096 | sha256sum -`
 #     travis env --repo AelitaBot/aelita set POSTGRES_PIPELINES_PASSWORD $RAND
 #     RAND=`dd if=/dev/urandom of=/dev/stdout count=4096 | sha256sum -`
@@ -73,5 +57,23 @@ for i in POSTGRES_PIPELINES_PASSWORD POSTGRES_CACHES_PASSWORD \
     sed -i "s!INSERT_${i}_HERE!${!i}!g" aelita.yaml
     sed -i "s!INSERT_${i}_HERE!${!i}!g" nginx/default.conf
 done
+
+# Build Docker containers
+cd ../static-binary
+docker build -t=gcr.io/$PROJECT_NAME/aelita:$CURRENT_VERSION .
+cd ../signup/
+docker build -t=gcr.io/$PROJECT_NAME/signup:$CURRENT_VERSION .
+cd ../infra/nginx/
+cp -rv ../../signup/static/ .
+for i in static/*; do gzip $i; done
+docker build -t=gcr.io/$PROJECT_NAME/nginx:$CURRENT_VERSION .
+cd ..
+
+# Push to gcr.io
+gcloud docker -- push gcr.io/$PROJECT_NAME/aelita:$CURRENT_VERSION
+gcloud docker -- push gcr.io/$PROJECT_NAME/signup:$CURRENT_VERSION
+gcloud docker -- push gcr.io/$PROJECT_NAME/nginx:$CURRENT_VERSION
+
+# Upgrade the pod
 kubectl apply -f aelita.yaml
 
