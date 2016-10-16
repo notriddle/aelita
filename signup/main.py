@@ -204,10 +204,20 @@ def manage():
         return logout()
     all_repos = github.get('user/repos?visibility=public', all_pages=True)
     repo_defs = []
+    owner_set = {}
     edit = None
     default_context = 'continuous-integration/travis-ci/push'
+    if request.args.get('owner') is not None:
+        filter_owner = request.args.get('owner')
+    if request.method == 'POST' or request.args.get('owner') == '-':
+        filter_owner = None
+    else:
+        filter_owner = user.username
     for repo in all_repos:
         if not repo['permissions']['admin']:
+            continue
+        owner_set[repo['owner']['login']] = repo['owner']
+        if filter_owner is not None and filter_owner != repo['owner']['login']:
             continue
         on_repo = GithubProjects.query \
             .filter_by(owner=repo['owner']['login'],repo=repo['name']) \
@@ -246,10 +256,21 @@ def manage():
                 edit['context'] = on_status.context
                 edit['master_branch'] = on_git.master_branch
                 edit['staging_branch'] = on_git.staging_branch
+    # Order: <me> <other users> <orgs>
+    def owner_key(item):
+        if item['login'] == user.username:
+            return "0"
+        elif item['type'] == 'User':
+            return "0" + item['login']
+        else:
+            return "1" + item['login']
+    owner_defs = sorted(item[1] for item in owner_set.items(), key=owner_key)
     return render_template(
         'manage.html',
         username=user.username,
         repo_defs=repo_defs,
+        owner_defs=owner_defs,
+        filter_owner=filter_owner,
         edit=edit,
         invite_count=user.invite_count,
         base_url=app.config['BOT_BASEURL'],

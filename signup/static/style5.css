@@ -11,17 +11,40 @@ a {
 a:hover, a:active, a:focus {
     text-decoration: none;
 }
-.section {
-    width: 100%;
+a.item {
+    display: block;
+    padding: 8px 10px;
+}
+a.activate {
+    text-decoration: none;
+    background: #666;
+    color: #FFF;
+}
+.section, .menu {
     border: solid 1px #CCC;
     border-radius: 8px;
     border-collapse: separate;
     border-spacing: 0;
     overflow: hidden;
 }
+.menu {
+    padding: 8px 0;
+}
 .section {
+    width: 100%;
     padding: 8px 10px;
     margin: 8px auto;
+}
+@media (max-width:2000px) {
+    .aside {
+        position: absolute;
+        direction: rtl;
+    }
+    .aside-section {
+        direction: ltr;
+        display: inline-block;
+        width: 500px;
+    }
 }
 .row {
     display: flex;
@@ -225,4 +248,7 @@ dialog::backdrop {
     display: block;
     margin: -10em;
     padding: 10em;
+}
+h1 weak {
+    font-weight: normal;
 }
