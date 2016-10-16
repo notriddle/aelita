@@ -1,0 +1,17 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: nginx-ingress
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    kubernetes.io/ingress.class: "gce"
+spec:
+  tls:
+    - secretName: aelitabot-tls
+      hosts:
+        - INSERT_SIGNUP_DOMAIN_HERE
+        - INSERT_BOT_DOMAIN_HERE
+  backend:
+    serviceName: nginx
+    servicePort: 80
+
