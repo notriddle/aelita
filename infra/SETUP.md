@@ -1,6 +1,7 @@
  1. Create a GitHub account for the bot
  2. Get a Personal Access Token from GitHub, with "repo" permission
- 3. Register an oAuth application
+ 3. Register an oAuth application,
+    with Callback = <SIGNUP_DOMAIN>/github-callback
  2. Create a Google Cloud Platform (GCP) project
  3. Create a Google Container Engine (GKE) cluster (I use 3 micro servers)
  4. Create a GCP IAM Service Account (I call it "Aelita Deploy")
