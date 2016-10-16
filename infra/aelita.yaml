@@ -54,7 +54,7 @@ spec:
             - name: AELITA_UI_GITHUB_HOST
               value: https://api.github.com
             - name: AELITA_UI_GITHUB_USER
-              value: aelita-mergebot
+              value: INSERT_BOT_USERNAME_HERE
             - name: AELITA_UI_GITHUB_TOKEN
               value: INSERT_GITHUB_PERSONAL_ACCESS_TOKEN_HERE
             - name: AELITA_UI_GITHUB_SECRET
