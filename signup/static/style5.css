@@ -15,7 +15,7 @@ a.item {
     display: block;
     padding: 8px 10px;
 }
-a.activate {
+a.active {
     text-decoration: none;
     background: #666;
     color: #FFF;
@@ -35,16 +35,15 @@ a.activate {
     padding: 8px 10px;
     margin: 8px auto;
 }
-@media (max-width:2000px) {
-    .aside {
-        position: absolute;
-        direction: rtl;
-    }
-    .aside-section {
-        direction: ltr;
-        display: inline-block;
-        width: 500px;
-    }
+.aside {
+    float: right;
+    clear: right;
+    width: 300px;
+    margin-top: 8px;
+    margin-left: 10px;
+}
+.block-formatting-context {
+    overflow: hidden;
 }
 .row {
     display: flex;
@@ -52,6 +51,11 @@ a.activate {
 @media (max-width:1000px) {
     .row {
         flex-wrap: wrap;
+    }
+    .aside {
+        float: none;
+        width: auto;
+        margin: 0;
     }
 }
 .media {
@@ -108,6 +112,11 @@ a.activate {
 }
 .switch-btn-width {
     width: 71px;
+}
+.empty-btn-disabled {
+    text-align: center;
+    display: block;
+    opacity: .333333333;
 }
 .switch-btn {
     text-indent: -99999999px;

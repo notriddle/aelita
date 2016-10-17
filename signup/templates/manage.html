@@ -23,7 +23,6 @@
 </button>
 </dialog>
 {% endif %}
-<h1><weak>{{ length(repo_defs) }}</weak> Repositories</h1>
 {% with messages = get_flashed_messages() %}
   {% if messages %}
     <ul class=flashes aria-role="alert">
@@ -33,18 +32,38 @@
     </ul>
   {% endif %}
 {% endwith %}
-<aside class=aside><section class=aside-section><nav class=menu>
-  {% for owner_def in owner_defs %}
-    {% if owner_filter == owner_def.login %}
-    <a class="active item">{{ owner_def.login }}</a>
-    {% else %}
-    <a class="item" href="?owner={{ owner_def.login }}">{{ owner_def.login }}</a>
-    {% endif %}
-  {% endfor %}
-</nav></section></aside>
+{% if owner_defs %}
+<aside class=aside>
+    <nav class=menu>
+        {% for owner_def in owner_defs %}
+            {% if filter_owner == owner_def.login %}
+            <a class="active item">{{ owner_def.login }}</a>
+            {% else %}
+            <a class="item" href="?owner={{ owner_def.login }}">
+                {{ owner_def.login }}
+            </a>
+            {% endif %}
+        {% endfor %}
+    </nav>
+    <h2>Usage</h2>
+    <p>
+        Once <code>@aelita-mergebot</code> is enabled on a repo,
+        instead of merging pull requests, say a command to it in a comment.
+    </p>
+    <dl>
+        <dt><code>@aelita-mergebot r+</code></dt>
+        <dd>Add the pull request to the merge queue.</dd>
+        <dt><code>@aelita-mergebot r=@username</code></dt>
+        <dd>Add the pull request as "username."</dd>
+        <dt><code>@aelita-mergebot r-</code></dt>
+        <dd>Cancel the pull request.</dd>
+    </dl>
+</aside>
+<article class=block-formatting-context>
+{% endif %}
 {% if edit %}
+<h1>{{ edit.name }}</h1>
 <form action="" method="POST">
-<h2>{{ edit.name }}</h2>
 <table class=blank aria-role="main">
 <tr>
 <td align=right><label for=context>Required context</label></td>
@@ -76,10 +95,12 @@
 <tr>
 <td aria-role="presentation"></td>
 <td><button name="edit" value="{{ edit.id }}">Save</button></td>
+</tr>
 </table>
 </form>
 {% else %}
-<p>Turn <a href="https://travis-ci.org/profile">Travis CI</a> on, then turn the switch on here.</p>
+<h1>{{ repo_defs|length }} <weak>Repositories</weak></h1>
+<p>Turn <a href="https://travis-ci.org/profile/{{ filter_owner }}">Travis CI</a> on, then turn the switch on here.</p>
 <form action="" method="POST">
 <table class=blank aria-role="main">
     {% for repo in repo_defs %}
@@ -123,22 +144,16 @@
                     <span>Off</span>
                 </button>
             </td>
-            <td></td>
+            <td class="switch-btn-width">
+                <span class="empty-btn-disabled double-size">⚙</span>
+            </td>
             <td>{{ repo.name }}</td>
         </tr>
         {% endif %}
     {% endfor %}
 </table>
 </form>
-<h2>Usage</h2>
-<p>Once <code>@aelita-mergebot</code> is enabled on a repo,
-instead of merging pull requests, say a command to it in a comment.</p>
-<dl>
-<dt><code>@aelita-mergebot r+</code></dt>
-<dd>Add the pull request to the merge queue.</dd>
-<dt><code>@aelita-mergebot r=@username</code></dt>
-<dd>Add the pull request as "username."</dd>
-<dt><code>@aelita-mergebot r-</code></dt>
-<dd>Cancel the pull request.</dd>
-</dl>
+{% endif %}
+{% if owner_defs %}
+</article>
 {% endif %}
