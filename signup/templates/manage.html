@@ -4,7 +4,7 @@
 <meta name=viewport content=width=device-width>
 <link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css>
 <script src=/static/manage.js></script>
-<link rel=stylesheet href=/static/style4.css>
+<link rel=stylesheet href=/static/style5.css>
 <form action="/logout" method="POST"><button class="secondary-btn">Log out</button></form>
 {% if invite_count > 0 %}
 <button class="secondary-btn openDialog" data-target="invite_dialog">Invite</button>
@@ -23,7 +23,7 @@
 </button>
 </dialog>
 {% endif %}
-<h1>{{ username }}</h1>
+<h1><weak>{{ length(repo_defs) }}</weak> Repositories</h1>
 {% with messages = get_flashed_messages() %}
   {% if messages %}
     <ul class=flashes aria-role="alert">
@@ -33,6 +33,15 @@
     </ul>
   {% endif %}
 {% endwith %}
+<aside class=aside><section class=aside-section><nav class=menu>
+  {% for owner_def in owner_defs %}
+    {% if owner_filter == owner_def.login %}
+    <a class="active item">{{ owner_def.login }}</a>
+    {% else %}
+    <a class="item" href="?owner={{ owner_def.login }}">{{ owner_def.login }}</a>
+    {% endif %}
+  {% endfor %}
+</nav></section></aside>
 {% if edit %}
 <form action="" method="POST">
 <h2>{{ edit.name }}</h2>

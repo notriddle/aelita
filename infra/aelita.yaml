@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
         - name: aelita
-          image: gcr.io/aelita-1374/aelita:INSERT_CURRENT_VERSION_HERE
+          image: gcr.io/INSERT_PROJECT_NAME_HERE/aelita:INSERT_CURRENT_VERSION_HERE
           ports:
             - containerPort: 5000
             - containerPort: 6000
@@ -54,7 +54,7 @@ spec:
             - name: AELITA_UI_GITHUB_HOST
               value: https://api.github.com
             - name: AELITA_UI_GITHUB_USER
-              value: aelita-mergebot
+              value: INSERT_BOT_USERNAME_HERE
             - name: AELITA_UI_GITHUB_TOKEN
               value: INSERT_GITHUB_PERSONAL_ACCESS_TOKEN_HERE
             - name: AELITA_UI_GITHUB_SECRET
@@ -113,7 +113,7 @@ spec:
     spec:
       containers:
         - name: signup
-          image: gcr.io/aelita-1374/signup:INSERT_CURRENT_VERSION_HERE
+          image: gcr.io/INSERT_PROJECT_NAME_HERE/signup:INSERT_CURRENT_VERSION_HERE
           ports:
             - containerPort: 8000
           env:
@@ -122,9 +122,9 @@ spec:
             - name: AELITA_GITHUB_CLIENT_SECRET
               value: INSERT_GITHUB_CLIENT_SECRET_HERE
             - name: AELITA_BOT_USERNAME
-              value: aelita-mergebot
+              value: INSERT_BOT_USERNAME_HERE
             - name: AELITA_BOT_BASEURL
-              value: https://aelita-mergebot.xyz
+              value: https://INSERT_BOT_DOMAIN_HERE
             - name: AELITA_BOT_DBURI
               value: postgresql://postgres:INSERT_POSTGRES_CONFIGS_PASSWORD_HERE@postgres-configs
             - name: AELITA_BOT_ACCESS_TOKEN
@@ -313,7 +313,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: gcr.io/aelita-1374/nginx:INSERT_CURRENT_VERSION_HERE
+          image: gcr.io/INSERT_PROJECT_NAME_HERE/nginx:INSERT_CURRENT_VERSION_HERE
           ports:
             - containerPort: 80
           readinessProbe:
@@ -328,7 +328,7 @@ spec:
               port: 80
               httpHeaders:
                 - name: Host
-                  value: "aelitabot.xyz"
+                  value: "INSERT_SIGNUP_DOMAIN_HERE"
             initialDelaySeconds: 30
             timeoutSeconds: 4
 
@@ -345,8 +345,8 @@ spec:
   tls:
     - secretName: aelitabot-tls
       hosts:
-        - aelitabot.xyz
-        - aelita-mergebot.xyz
+        - INSERT_SIGNUP_DOMAIN_HERE
+        - INSERT_BOT_DOMAIN_HERE
   backend:
     serviceName: nginx
     servicePort: 80
