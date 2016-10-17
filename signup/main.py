@@ -207,12 +207,12 @@ def manage():
     owner_set = {}
     edit = None
     default_context = 'continuous-integration/travis-ci/push'
-    if request.args.get('owner') is not None:
-        filter_owner = request.args.get('owner')
-    if request.method == 'POST' or request.args.get('owner') == '-':
-        filter_owner = None
-    else:
+    filter_owner = request.args.get('owner')
+    if filter_owner is None and request.method == "GET" and \
+            request.args.get("edit") is None:
         filter_owner = user.username
+    elif filter_owner == "-":
+        filter_owner = None
     for repo in all_repos:
         if not repo['permissions']['admin']:
             continue
@@ -264,7 +264,11 @@ def manage():
             return "0" + item['login']
         else:
             return "1" + item['login']
-    owner_defs = sorted(item[1] for item in owner_set.items(), key=owner_key)
+    if len(owner_set) > 1:
+        owner_defs = sorted(
+            (item[1] for item in owner_set.items()),
+            key=owner_key
+        )
     return render_template(
         'manage.html',
         username=user.username,
