@@ -980,6 +980,33 @@ fn one_item_github_round_trip_cloud() {
     ).unwrap();
     drop(tcp_client);
 
+    info!("Aelita marks staging a success.");
+    single_request(&mut github_git_server, |req, mut res| {
+        let path = format!("/repos/AelitaBot/testp/statuses/{}",
+            "ba218f56b14c9653891f9e74264a383fa43fefbd"
+        );
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath(path)
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        #[derive(Deserialize)]
+        struct StatusDesc {
+            state: String,
+            target_url: Option<String>,
+            description: String,
+            context: String,
+        }
+        let desc: StatusDesc =
+            serde_json::from_reader(req).expect("valid JSON");
+        *res.status_mut() = StatusCode::Ok;
+        res.send(&[]).unwrap();
+        assert_eq!("success", &desc.state[..]);
+    });
+
     info!("Aelita fast-forwards master to staging.");
     let master_string = single_request(&mut github_git_server, |req, mut res| {
         let path = "/repos/AelitaBot/testp/git/refs/heads/master".to_owned();
@@ -1250,6 +1277,33 @@ fn one_item_github_round_trip_cloud_no_staging() {
         br#"{"name":"testp","build":{"phase":"COMPLETED","status":"SUCCESS","full_url":"http://jenkins.com/job/1/","scm":{"commit":"ba218f56b14c9653891f9e74264a383fa43fefbd"}}}"#
     ).unwrap();
     drop(tcp_client);
+
+    info!("Aelita marks staging a success.");
+    single_request(&mut github_git_server, |req, mut res| {
+        let path = format!("/repos/AelitaBot/testp/statuses/{}",
+            "ba218f56b14c9653891f9e74264a383fa43fefbd"
+        );
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath(path)
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        #[derive(Deserialize)]
+        struct StatusDesc {
+            state: String,
+            target_url: Option<String>,
+            description: String,
+            context: String,
+        }
+        let desc: StatusDesc =
+            serde_json::from_reader(req).expect("valid JSON");
+        *res.status_mut() = StatusCode::Ok;
+        res.send(&[]).unwrap();
+        assert_eq!("success", &desc.state[..]);
+    });
 
     info!("Aelita fast-forwards master to staging.");
     let master_string = single_request(&mut github_git_server, |req, mut res| {
@@ -1941,6 +1995,33 @@ fn one_item_github_round_trip_cloud_with_postgres_12f() {
         .send()
         .unwrap();
 
+    info!("Aelita marks staging a success.");
+    single_request(&mut github_git_server, |req, mut res| {
+        let path = format!("/repos/AelitaBot/testp/statuses/{}",
+            "ba218f56b14c9653891f9e74264a383fa43fefbd"
+        );
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath(path)
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        #[derive(Deserialize)]
+        struct StatusDesc {
+            state: String,
+            target_url: Option<String>,
+            description: String,
+            context: String,
+        }
+        let desc: StatusDesc =
+            serde_json::from_reader(req).expect("valid JSON");
+        *res.status_mut() = StatusCode::Ok;
+        res.send(&[]).unwrap();
+        assert_eq!("success", &desc.state[..]);
+    });
+
     info!("Aelita fast-forwards master to staging.");
     let master_string = single_request(&mut github_git_server, |req, mut res| {
         let path = "/repos/AelitaBot/testp/git/refs/heads/master".to_owned();
@@ -2293,6 +2374,33 @@ fn one_item_github_round_trip_cloud_with_sqlite_12f() {
         .headers(http_headers)
         .send()
         .unwrap();
+
+    info!("Aelita marks staging a success.");
+    single_request(&mut github_git_server, |req, mut res| {
+        let path = format!("/repos/AelitaBot/testp/statuses/{}",
+            "ba218f56b14c9653891f9e74264a383fa43fefbd"
+        );
+        assert_eq!(
+            req.uri,
+            RequestUri::AbsolutePath(path)
+        );
+        assert_eq!(
+            &req.headers.get_raw("Authorization").unwrap()[0][..],
+            b"token MY_PERSONAL_ACCESS_TOKEN"
+        );
+        #[derive(Deserialize)]
+        struct StatusDesc {
+            state: String,
+            target_url: Option<String>,
+            description: String,
+            context: String,
+        }
+        let desc: StatusDesc =
+            serde_json::from_reader(req).expect("valid JSON");
+        *res.status_mut() = StatusCode::Ok;
+        res.send(&[]).unwrap();
+        assert_eq!("success", &desc.state[..]);
+    });
 
     info!("Aelita fast-forwards master to staging.");
     let master_string = single_request(&mut github_git_server, |req, mut res| {

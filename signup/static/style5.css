@@ -5,6 +5,14 @@ body {
     margin: 0 auto;
     padding: 16px 20px;
 }
+button, input, a {
+    outline: none;
+}
+a:focus, button:focus, input[type="submit"]:focus {
+    /* Outlines are broken on parts of the layout. */
+    /* Don't worry, I add other focus styles everywhere. */
+    outline: 0;
+}
 a {
     text-decoration: underline;
 }
@@ -94,21 +102,6 @@ a.active {
     position: absolute;
     top: 0; right: 0;
     padding: 4px;
-}
-.secondary-btn {
-    color: #666;
-    font-size: 0.75em;
-    border: solid 1px #CCC;
-    border-radius: 8px;
-    float: right;
-    margin-left: 8px;
-    padding: 6px 8px;
-}
-.secondary-btn:hover, .secondary-btn:active, .secondary-btn:focus {
-    background: #666;
-    color: #FFF;
-    border-color: transparent;
-    box-shadow: 0 0 1px #999;
 }
 .switch-btn-width {
     width: 71px;
@@ -206,6 +199,24 @@ dialog::backdrop {
     bottom: 0;
     background-color: rgba(0, 0, 0, 0.8);
 }
+.secondary-btn {
+    color: #666;
+    font-size: 0.75em;
+    border: solid 1px #CCC;
+    border-radius: 8px;
+    float: right;
+    margin-left: 8px;
+    padding: 6px 8px;
+}
+.secondary-btn:hover, .secondary-btn:active, .secondary-btn:focus {
+    background: #666;
+    color: #FFF;
+    border-color: transparent;
+    box-shadow: 0 1px 2px #999;
+}
+.secondary-btn:focus {
+    box-shadow: 0 0px 1px #999;
+}
 .superbutton {
     box-shadow: 0 1px 2px #999;
     background: #0acf6a;
@@ -224,9 +235,12 @@ dialog::backdrop {
 }
 .superbutton:hover, .superbutton:active, .superbutton:focus {
     background: #0acf6a;
-    box-shadow: 0 0px 1px #999;
+    box-shadow: 0 1px 2px #999;
     border: solid 1px transparent;
     text-shadow: none;
+}
+.superbutton:focus {
+    box-shadow: 0 0px 1px #999;
 }
 .superbuttonwrap {
     text-align: center;
@@ -247,8 +261,11 @@ dialog::backdrop {
 .ghostbutton:hover, .ghostbutton:active, .ghostbutton:focus {
     background: #0082b2;
     color: #FFF;
-    box-shadow: 0 0px 1px #999;
+    box-shadow: 0 1px 2px #999;
     border: solid 1px transparent;
+}
+.ghostbutton:focus {
+    box-shadow: 0 0px 1px #999;
 }
 .fill-link {
     overflow: hidden;
