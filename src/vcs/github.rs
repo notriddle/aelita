@@ -121,13 +121,45 @@ impl Worker {
             Some(repo) => repo,
             None => return Err(GithubRequestError::Pipeline(pipeline_id)),
         };
+
+        // If GitHub's UI is also being used, it will also do this. But
+        // protected branches rely on a strict happens-before relationship.
+        debug!("Set master status (avoid race)");
+        let url = format!(
+            "/repos/{}/{}/statuses/{}",
+            repo.owner,
+            repo.repo,
+            merge_commit
+        );
+        #[derive(Deserialize, Serialize)]
+        struct StatusDesc {
+            state: String,
+            target_url: Option<String>,
+            description: String,
+            context: String,
+        }
+        let status_body = StatusDesc{
+            state: "success".to_owned(),
+            target_url: None,
+            description: "Tests passed".to_owned(),
+            context: "continuous-integration/aelita".to_owned(),
+        };
+        let resp = try!(
+            try!(self.client.post(&url).expect("url").json(&status_body))
+                .header(Self::accept())
+                .send()
+        );
+        if !resp.is_success() {
+            return Err(GithubRequestError::HttpStatus(resp.http.status))
+        }
+
+        debug!("Set master SHA: {}", url);
         let url = format!(
             "/repos/{}/{}/git/refs/heads/{}",
             repo.owner,
             repo.repo,
             repo.master_branch
         );
-        debug!("Set master SHA: {}", url);
         #[derive(Serialize)]
         struct RefUpdateDesc {
             force: bool,
