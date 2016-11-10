@@ -3,6 +3,7 @@
 from flask import Flask, g, redirect, render_template, request, session
 from flask import flash, url_for
 from flask_github import GitHub
+import json
 import os
 import requests
 from sqlalchemy import create_engine, Column, Integer, String, Boolean
@@ -312,14 +313,14 @@ def add_repo(repo, context):
     headers = {
         "Content-Type": "application/vnd.github.swamp-thing-preview+json",
     }
-    invite=github.request(
+    invite = github.request(
         'PUT',
         'repos/' + repo['full_name'] + '/collaborators/' + \
             app.config['BOT_USERNAME'],
         headers=headers,
     )
     headers = {
-        "Accept": "token " + app.config['BOT_ACCESS_TOKEN'],
+        "Authorization": "token " + app.config['BOT_ACCESS_TOKEN'],
         "Content-Type": "application/vnd.github.swamp-thing-preview+json",
     }
     requests.request(
@@ -327,6 +328,9 @@ def add_repo(repo, context):
         invite.url,
         headers=headers,
     )
+    # Add our user as a member of the organization, if we aren't already
+    if repo['owner']['type'] == 'Organization':
+        add_me_to_org(repo['owner']['login'])
     # Add our webhooks
     github.post(
         'repos/' + repo['full_name'] + '/hooks',
@@ -413,6 +417,27 @@ def edit_repo(project):
     db_session.commit()
     flash("Saved successfully")
     return redirect(url_for('manage'))
+
+
+def add_me_to_org(login):
+    invite = github.request(
+        'PUT',
+        'orgs/' + login + '/memberships/' + \
+            app.config['BOT_USERNAME'],
+    )
+    if invite['state'] != "active":
+        headers = {
+            "Authorization": "token " + app.config['BOT_ACCESS_TOKEN'],
+            "Content-Type": "application/json",
+        }
+        requests.request(
+            'PATCH',
+            "https://api.github.com/user/memberships/orgs/" + login,
+            data=json.dumps({
+                "state": "active"
+            }),
+            headers=headers
+        ).raise_for_status()
 
 
 @app.route('/invite', methods=['POST'])
