@@ -5,7 +5,7 @@ WORKDIR /tmp
 ADD musl-target-version /musl-target-version
 RUN curl `cat /musl-target-version` | tar -xzf - && \
     cd musl-* && \
-    ./configure CFLAGS="-fPIE" && \
+    ./configure && \
     make -j2 && \
     make install
 # Install kernel headers (libressl needs them)
@@ -17,16 +17,21 @@ RUN curl `cat /kheaders-target-version` | tar -xJf - && \
 ADD libressl-target-version /libressl-target-version
 RUN curl `cat /libressl-target-version` | tar -xzf - && \
     cd libressl-* && \
-    ./configure --disable-dynamic --prefix= --host=x86_64-unknown-linux-musl CC=musl-gcc && \
-    make -j2 && \
-    make install DESTDIR=/usr/local/musl/
+    ./configure --enable-shared=no --prefix= --host=x86_64-unknown-linux-musl CC=musl-gcc CFLAGS=-static && \
+    # The openssl program won't build right
+    make -j2 -C crypto && make -j2 -C ssl && make -j2 -C tls && \
+    cp crypto/.libs/libcrypto.a /usr/local/musl/lib/libcrypto.a && \
+    cp ssl/.libs/libssl.a /usr/local/musl/lib/libssl.a && \
+    cp tls/.libs/libtls.a /usr/local/musl/lib/libtls.a && \
+    make -C include install DESTDIR=/usr/local/musl/ && \
+    mkdir -p /usr/local/musl/etc/ssl/ && cp apps/openssl/cert.pem /usr/local/musl/etc/ssl/cert.pem
 # Install sqlite (Aelita uses it)
 ADD sqlite-target-version /sqlite-target-version
 RUN curl `cat /sqlite-target-version` | tar -xzf - && \
     cd sqlite-* && \
-    ./configure --disable-dynamic --prefix= --host=x86_64-unknown-linux-musl CC=musl-gcc && \
-    make -j2 && \
-    make install DESTDIR=/usr/local/musl/
+    ./configure --enable-shared=no --prefix= --host=x86_64-unknown-linux-musl CC=musl-gcc CFLAGS=-static && \
+    make -j2 libsqlite3.la && \
+    cp .libs/libsqlite3.a /usr/local/musl/lib/libsqlite3.a
 # Install Rust (Aelita and the bulk of its deps need it)
 ADD rust-target-version /rust-target-version
 RUN curl `cat /rust-target-version` | tar -xzf - && \
