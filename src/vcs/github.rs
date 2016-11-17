@@ -131,7 +131,7 @@ impl Worker {
             repo.repo,
             merge_commit
         );
-        #[derive(Deserialize, Serialize)]
+        #[derive(Serialize)]
         struct StatusDesc {
             state: String,
             target_url: Option<String>,
@@ -200,11 +200,11 @@ impl Worker {
             repo.master_branch
         );
         debug!("Get master SHA: {}", url);
-        #[derive(Deserialize)]
+        #[derive(Deserialize, Serialize)]
         struct ObjectDesc {
             sha: String,
         }
-        #[derive(Deserialize)]
+        #[derive(Deserialize, Serialize)]
         struct RefDesc {
             object: ObjectDesc,
         }
@@ -311,7 +311,7 @@ impl Worker {
             head: String,
             commit_message: String,
         }
-        #[derive(Deserialize)]
+        #[derive(Deserialize, Serialize)]
         struct MergeResultDesc {
             sha: String,
         }

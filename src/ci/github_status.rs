@@ -49,7 +49,7 @@ impl Worker {
 
 
 // JSON API structs
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct PingDesc {
     zen: String,
 }
@@ -61,12 +61,12 @@ struct StatusDesc {
     sha: String,
     repository: RepositoryDesc,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct RepositoryDesc {
     name: String,
     owner: OwnerDesc,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct OwnerDesc {
     login: String,
 }

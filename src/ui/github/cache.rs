@@ -2,8 +2,8 @@
 
 use db::Builder;
 use rusqlite::{self, Connection};
-use postgres::{Connection as PgConnection, SslMode};
-use postgres::{ConnectParams, IntoConnectParams};
+use postgres::{Connection as PgConnection, TlsMode};
+use postgres::params::{ConnectParams, IntoConnectParams};
 use std::convert::AsRef;
 use std::error::Error;
 use std::path::Path;
@@ -181,7 +181,7 @@ impl Postgres {
         Ok(result)
     }
     fn conn(&self) -> Result<PgConnection, Box<Error + Send + Sync>> {
-        Ok(try!(PgConnection::connect(self.params.clone(), SslMode::None)))
+        Ok(try!(PgConnection::connect(self.params.clone(), TlsMode::None)))
     }
     fn set_teams_with_write<T: Clone + Iterator<Item=TeamId>>(
         &mut self,

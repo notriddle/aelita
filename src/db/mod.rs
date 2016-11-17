@@ -11,7 +11,7 @@ use db::sqlite::SqliteDb;
 use hyper::Url;
 use ui::Pr;
 use pipeline::PipelineId;
-use postgres::{ConnectParams, IntoConnectParams};
+use postgres::params::{ConnectParams, IntoConnectParams};
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;

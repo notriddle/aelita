@@ -2,7 +2,9 @@
 
 use db::{self, Db, PendingEntry, QueueEntry, RunningEntry};
 use hyper::Url;
-use postgres::{self, Connection, ConnectParams, IntoConnectParams, SslMode};
+use postgres::{Connection, TlsMode};
+use postgres::params::{ConnectParams, IntoConnectParams};
+use postgres::transaction::Transaction as PgTransaction;
 use std::error::Error;
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -55,7 +57,7 @@ impl<P> PostgresDb<P>
         Ok(result)
     }
     fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
-        Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
+        Ok(try!(Connection::connect(self.params.clone(), TlsMode::None)))
     }
 }
 
@@ -210,13 +212,13 @@ pub struct PostgresTransaction<'a, P>
     where P: Pr + Into<String> + FromStr
 {
     _pr: PhantomData<P>,
-    conn: postgres::Transaction<'a>,
+    conn: PgTransaction<'a>,
 }
 
 impl<'a, P> PostgresTransaction<'a, P>
     where P: Pr + Into<String> + FromStr
 {
-    pub fn new(conn: postgres::Transaction<'a>) -> Self {
+    pub fn new(conn: PgTransaction<'a>) -> Self {
         PostgresTransaction {
             _pr: PhantomData,
             conn: conn,
