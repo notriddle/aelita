@@ -327,11 +327,11 @@ impl<'a, P: Pr> Thread<'a, P>
                     h2 { : "Github cheat sheet" }
                     p { : "To use the robot, say a command to it." }
                     dl {
-                        dt { : raw!("<code>r+</code>") }
+                        dt { : Raw("<code>r+</code>") }
                         dd { : "Add the pull request to the merge queue." }
-                        dt { : raw!("<code>r=@username</code>") }
+                        dt { : Raw("<code>r=@username</code>") }
                         dd { : "Add the pull request as \"username.\"" }
-                        dt { : raw!("<code>r-</code>") }
+                        dt { : Raw("<code>r-</code>") }
                         dd { : "Cancel the pull request." }
                     }
                 }

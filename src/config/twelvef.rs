@@ -714,7 +714,8 @@ mod sqlite {
 mod postgres {
     use config::PipelineConfig as TPipelineConfig;
     use pipeline::PipelineId;
-    use postgres::{Connection, ConnectParams, IntoConnectParams, SslMode};
+    use postgres::{Connection, TlsMode};
+    use postgres::params::{ConnectParams, IntoConnectParams};
     use std::borrow::Cow;
     use std::error::Error;
     use ui::github::{self, ProjectsConfig as TGithubProjectsConfig};
@@ -746,7 +747,7 @@ mod postgres {
             Ok(result)
         }
         fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
-            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
+            Ok(try!(Connection::connect(self.params.clone(), TlsMode::None)))
         }
     }
     impl TPipelineConfig for PipelineConfig {
@@ -792,7 +793,7 @@ mod postgres {
             Ok(result)
         }
         fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
-            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
+            Ok(try!(Connection::connect(self.params.clone(), TlsMode::None)))
         }
     }
     impl TGithubProjectsConfig for GithubProjectsConfig {
@@ -878,7 +879,7 @@ mod postgres {
             Ok(result)
         }
         fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
-            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
+            Ok(try!(Connection::connect(self.params.clone(), TlsMode::None)))
         }
     }
     impl TJenkinsPipelinesConfig for JenkinsPipelinesConfig {
@@ -948,7 +949,7 @@ mod postgres {
             Ok(result)
         }
         fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
-            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
+            Ok(try!(Connection::connect(self.params.clone(), TlsMode::None)))
         }
     }
     impl TGithubStatusPipelinesConfig for GithubStatusPipelinesConfig {
@@ -1024,7 +1025,7 @@ mod postgres {
             Ok(result)
         }
         fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
-            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
+            Ok(try!(Connection::connect(self.params.clone(), TlsMode::None)))
         }
     }
     impl TGithubGitPipelinesConfig for GithubGitPipelinesConfig {
@@ -1087,7 +1088,7 @@ mod postgres {
             Ok(result)
         }
         fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
-            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
+            Ok(try!(Connection::connect(self.params.clone(), TlsMode::None)))
         }
     }
     impl TGitPipelinesConfig for GitPipelinesConfig {
@@ -1140,7 +1141,7 @@ mod postgres {
             Ok(result)
         }
         fn conn(&self) -> Result<Connection, Box<Error + Send + Sync>> {
-            Ok(try!(Connection::connect(self.params.clone(), SslMode::None)))
+            Ok(try!(Connection::connect(self.params.clone(), TlsMode::None)))
         }
     }
     impl TViewPipelinesConfig for ViewPipelinesConfig {

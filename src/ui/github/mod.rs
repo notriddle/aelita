@@ -96,11 +96,11 @@ impl Worker {
 }
 
 // JSON API structs
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct IssueCommentPullRequest {
     html_url: String,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct IssueCommentIssue {
     number: u32,
     title: String,
@@ -109,54 +109,54 @@ struct IssueCommentIssue {
     state: String,
     user: UserDesc,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct IssueCommentComment {
     user: UserDesc,
     body: String,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct PostCommentComment {
     body: String,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct CommentDesc {
     issue: IssueCommentIssue,
     comment: IssueCommentComment,
     repository: RepositoryDesc,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct RepositoryDesc {
     name: String,
     owner: OwnerDesc,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct UserDesc {
     login: String,
     // type is a reserved word.
     #[serde(rename="type")]
     user_type: String,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct OwnerDesc {
     login: String,
     // type is a reserved word.
     #[serde(rename="type")]
     owner_type: String,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct PingDesc {
     zen: String,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct TeamDesc {
     slug: String,
     id: u32,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct TeamRepoDesc {
     permissions: Option<TeamRepoPermissions>,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct TeamRepoPermissions {
     admin: bool,
     push: bool,
@@ -1023,7 +1023,7 @@ quick_error! {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Pr(u32);
 
 impl ui::Pr for Pr {

@@ -4,8 +4,7 @@
 //! This is only a test for the happy path, and it's not thorough,
 //! but what it lacks in thorough, it makes up for in broad.
 
-#![feature(custom_derive, plugin)]
-#![plugin(serde_macros)]
+#![feature(proc_macro)]
 
 extern crate crossbeam;
 extern crate env_logger;
@@ -20,6 +19,7 @@ extern crate regex;
 extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
+#[macro_use] extern crate serde_derive;
 extern crate toml;
 extern crate url;
 extern crate void;
@@ -1727,7 +1727,7 @@ fn one_item_github_round_trip_cloud_with_postgres_12f() {
     {
         let conn = postgres::Connection::connect(
             "postgresql://postgres@localhost/postgres",
-            postgres::SslMode::None,
+            postgres::TlsMode::None,
         ).unwrap();
         conn.batch_execute(r###"
             INSERT INTO twelvef_config_pipeline

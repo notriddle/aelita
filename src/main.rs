@@ -3,8 +3,7 @@
 //! An implementation of the Common Sense Rule of Software Engineering
 
 #![feature(mpsc_select)]
-#![feature(custom_derive, plugin)]
-#![plugin(serde_macros)]
+#![feature(proc_macro)]
 #![recursion_limit = "5000"]
 
 #![feature(alloc_system)]
@@ -27,6 +26,7 @@ extern crate rest;
 extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
+#[macro_use] extern crate serde_derive;
 extern crate spmc;
 extern crate toml;
 extern crate url;

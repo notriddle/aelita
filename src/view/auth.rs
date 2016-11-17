@@ -215,7 +215,7 @@ impl<'a> AuthManager<'a> {
                                 .send(),
                             ErrGithubToken, res
                         );
-                        #[derive(Serialize, Deserialize)]
+                        #[derive(Deserialize, Serialize)]
                         struct GithubToken {
                             access_token: String,
                         }
@@ -243,7 +243,7 @@ impl<'a> AuthManager<'a> {
                                 .send(),
                             ErrGithubUsername, res
                         );
-                        #[derive(Serialize, Deserialize)]
+                        #[derive(Deserialize, Serialize)]
                         struct GithubUser {
                             login: String,
                         }

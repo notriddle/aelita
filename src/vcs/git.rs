@@ -278,7 +278,7 @@ quick_error! {
 }
 
 // A git commit is a SHA1 sum. A SHA1 sum is a 160-bit number.
-#[derive(Copy, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Serialize)]
 pub struct Commit(u64, u64, u32);
 
 impl Commit {
@@ -320,7 +320,7 @@ impl FromStr for Commit {
     }
 }
 
-#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Serialize)]
 pub struct Remote(pub String);
 impl Display for Remote {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
