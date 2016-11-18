@@ -1,17 +1,17 @@
 // This file is released under the same terms as Rust itself.
 
-use ci;
+use ci::{self, CiId};
 use crossbeam;
 use rest::{authorization, Authorization, Client, IntoUrl};
-use pipeline::{self, PipelineId};
+use pipeline;
 use serde_json::from_reader as json_from_reader;
 use std::net::TcpListener;
 use std::sync::mpsc::{Sender, Receiver};
 use util::USER_AGENT;
 
 pub trait PipelinesConfig: Send + Sync + 'static {
-    fn job_by_pipeline(&self, PipelineId) -> Option<Job>;
-    fn pipelines_by_job_name(&self, &str) -> Vec<PipelineId>;
+    fn job_by_id(&self, CiId) -> Option<Job>;
+    fn ids_by_job_name(&self, &str) -> Vec<CiId>;
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -111,16 +111,16 @@ impl Worker {
                 info!("Build not completed or started");
                 continue;
             }
-            let pipelines = self.pipelines.pipelines_by_job_name(&desc.name);
-            if pipelines.is_empty() {
+            let ids = self.pipelines.ids_by_job_name(&desc.name);
+            if ids.is_empty() {
                 warn!("Got result of unknown job: {}", desc.name);
             }
-            for pipeline_id in pipelines {
+            for id in ids {
                 let commit = desc.build.scm.commit.clone().into();
                 if desc.build.phase == "STARTED" {
                     send_event.send(
                         ci::Event::BuildStarted(
-                            pipeline_id,
+                            id,
                             commit,
                             desc.build.full_url.into_url().ok(),
                         )
@@ -130,7 +130,7 @@ impl Worker {
                         "SUCCESS" => {
                             send_event.send(
                                 ci::Event::BuildSucceeded(
-                                    pipeline_id,
+                                    id,
                                     commit,
                                     desc.build.full_url.into_url().ok(),
                                 )
@@ -140,7 +140,7 @@ impl Worker {
                             info!("Build failed: {}", e);
                             send_event.send(
                                 ci::Event::BuildFailed(
-                                    pipeline_id,
+                                    id,
                                     commit,
                                     desc.build.full_url.into_url().ok(),
                                 )
@@ -158,13 +158,13 @@ impl Worker {
         send_event: &mut Sender<ci::Event>,
     ) {
         match msg {
-            ci::Message::StartBuild(pipeline_id, commit) => {
-                let job = match self.pipelines.job_by_pipeline(pipeline_id) {
+            ci::Message::StartBuild(id, commit) => {
+                let job = match self.pipelines.job_by_id(id) {
                     Some(job) => job,
                     None => {
                         warn!(
-                            "Got start build for bad pipeline {:?}",
-                            pipeline_id
+                            "Got start build for bad CI instance {:?}",
+                            id
                         );
                         return;
                     },
@@ -182,7 +182,7 @@ impl Worker {
                     Ok(ref res) if !res.is_success() => {
                         warn!("Build refused: {:?}", res.http.status);
                         send_event.send(ci::Event::BuildFailed(
-                            pipeline_id,
+                            id,
                             commit,
                             None,
                         )).expect("Pipeline");
@@ -190,7 +190,7 @@ impl Worker {
                     Err(e) => {
                         warn!("Failed to contact CI: {:?}", e);
                         send_event.send(ci::Event::BuildFailed(
-                            pipeline_id,
+                            id,
                             commit,
                             None,
                         )).expect("Pipeline");

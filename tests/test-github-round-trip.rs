@@ -1739,9 +1739,13 @@ fn one_item_github_round_trip_cloud_with_postgres_12f() {
             VALUES
                 (1, NULL, 'AelitaBot', 'testp');
             INSERT INTO twelvef_github_status_pipelines
-                (pipeline_id, owner, repo, context)
+                (ci_id, owner, repo, context)
             VALUES
-                (1, 'AelitaBot', 'testp', 'ci/test');
+                (2, 'AelitaBot', 'testp', 'ci/test');
+            INSERT INTO twelvef_config_pipeline_ci
+                (ci_id, pipeline_id)
+            VALUES
+                (2, 1);
             INSERT INTO twelvef_github_git_pipelines
                 (
                     pipeline_id,
@@ -2134,9 +2138,13 @@ fn one_item_github_round_trip_cloud_with_sqlite_12f() {
             VALUES
                 (1, NULL, 'AelitaBot', 'testp');
             INSERT INTO twelvef_github_status_pipelines
-                (pipeline_id, owner, repo, context)
+                (ci_id, owner, repo, context)
             VALUES
-                (1, 'AelitaBot', 'testp', 'ci/test');
+                (2, 'AelitaBot', 'testp', 'ci/test');
+            INSERT INTO twelvef_config_pipeline_ci
+                (ci_id, pipeline_id)
+            VALUES
+                (2, 1);
             INSERT INTO twelvef_github_git_pipelines
                 (
                     pipeline_id,

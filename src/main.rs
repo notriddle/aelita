@@ -106,7 +106,7 @@ fn run_workers<B: WorkerBuilder>(builder: B) -> ! {
         let mut pending: Option<Event> = None;
         'outer: loop {
             if let Some(event) = pending.take() {
-                let pipeline_id = event.pipeline_id();
+                let pipeline_id = event.pipeline_id(&*workers.pipelines);
                 let pipeline = workers.pipeline_by_id(pipeline_id);
                 if let Some(pipeline) = pipeline {
                     let result = db.transaction(PipelineTransaction{

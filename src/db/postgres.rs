@@ -1,6 +1,7 @@
 // This file is released under the same terms as Rust itself.
 
-use db::{self, Db, PendingEntry, QueueEntry, RunningEntry};
+use ci::CiId;
+use db::{self, CiState, Db, PendingEntry, QueueEntry, RunningEntry};
 use hyper::Url;
 use postgres::{Connection, TlsMode};
 use postgres::params::{ConnectParams, IntoConnectParams};
@@ -22,6 +23,11 @@ impl PostgresDb {
             params: try!(params.into_connect_params()),
         };
         try!(try!(result.conn()).batch_execute(r###"
+            CREATE TABLE IF NOT EXISTS ci_state (
+                ci_id SERIAL PRIMARY KEY,
+                ci_state INTEGER,
+                ci_commit TEXT
+            );
             CREATE TABLE IF NOT EXISTS queue (
                 id SERIAL PRIMARY KEY,
                 pipeline_id INTEGER,
@@ -193,6 +199,38 @@ impl Db for PostgresDb {
         let result = PostgresTransaction::new(
             try!(conn.transaction())
         ).cancel_by_pr_different_commit(pipeline_id, pr, commit);
+        result
+    }
+    fn set_ci_state(
+        &mut self,
+        ci_id: CiId,
+        ci_state: CiState,
+        commit: &Commit,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).set_ci_state(ci_id, ci_state, commit);
+        result
+    }
+    fn clear_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).clear_ci_state(ci_id);
+        result
+    }
+    fn get_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<Option<(CiState, Commit)>, Box<Error + Send + Sync>> {
+        let conn = try!(self.conn());
+        let result = PostgresTransaction::new(
+            try!(conn.transaction())
+        ).get_ci_state(ci_id);
         result
     }
 }
@@ -540,5 +578,58 @@ impl<'a> Db for PostgresTransaction<'a> {
             &commit.as_str(),
         ]));
         Ok(affected_rows_queue != 0 || affected_rows_running != 0)
+    }
+    fn set_ci_state(
+        &mut self,
+        ci_id: CiId,
+        ci_state: CiState,
+        commit: &Commit,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        let sql = r###"
+            INSERT INTO ci_state (ci_id, ci_state, ci_commit)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (ci_id) DO UPDATE SET
+                ci_state = $2,
+                ci_commit = $3
+        "###;
+        try!(self.conn.execute(sql, &[
+            &ci_id.0,
+            &(ci_state as i32),
+            &commit.as_str(),
+        ]));
+        Ok(())
+    }
+    fn clear_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        let sql = r###"
+            DELETE FROM ci_state
+            WHERE ci_id = $1
+        "###;
+        try!(self.conn.execute(sql, &[
+            &ci_id.0,
+        ]));
+        Ok(())
+    }
+    fn get_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<Option<(CiState, Commit)>, Box<Error + Send + Sync>> {
+        let sql = r###"
+            SELECT 
+                ci_state, ci_commit
+            FROM ci_state
+            WHERE ci_id = $1
+        "###;
+        let stmt = try!(self.conn.prepare(&sql));
+        let rows = try!(stmt.query(&[ &ci_id.0 ]));
+        let rows = rows.iter();
+        let mut rows = rows.map(|row| (
+            CiState::from_i32(row.get::<_, i32>(0)),
+            Commit::from(row.get::<_, String>(1)),
+        ));
+        let value = rows.next();
+        Ok(value)
     }
 }

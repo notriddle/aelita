@@ -1,7 +1,7 @@
 // This file is released under the same terms as Rust itself.
 
-use ci::{self, github_status, jenkins};
-use config::{PipelineConfig, WorkerBuilder};
+use ci::{self, CiId, github_status, jenkins};
+use config::{PipelineConfig, PipelinesConfig, WorkerBuilder};
 use db::{self, DbBox};
 use pipeline::{PipelineId, WorkerManager};
 use pipeline::WorkerThread;
@@ -37,7 +37,13 @@ pub struct GithubBuilder {
         view::Message,
     >>,
     db: DbBox,
-    pipelines: StaticPipelineConfig,
+    pipelines: StaticPipelinesConfig,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum CiType {
+    Jenkins,
+    GithubStatus,
 }
 
 impl GithubBuilder {
@@ -87,6 +93,8 @@ impl GithubBuilder {
         let mut view_pipelines =
             StaticViewPipelinesConfig::new();
         let mut pipeline_id = PipelineId(0);
+        let mut ci_id = CiId(0);
+        let mut ci_to_pipeline: HashMap<CiId, (CiType, PipelineId)> = HashMap::new();
         for (name, def) in config_projects.iter() {
             if def.as_table().is_none() {
                 return Err(GithubBuilderError::Project(
@@ -107,6 +115,8 @@ impl GithubBuilder {
                 config,
                 def,
                 pipeline_id,
+                &mut ci_id,
+                &mut ci_to_pipeline,
             ) {
                 Ok(()) | Err(SetupError::NotFoundConfig) => {},
                 Err(e) =>
@@ -117,6 +127,8 @@ impl GithubBuilder {
                 config,
                 def,
                 pipeline_id,
+                &mut ci_id,
+                &mut ci_to_pipeline,
             ) {
                 Ok(()) | Err(SetupError::NotFoundConfig) => {},
                 Err(e) => return Err(GithubBuilderError::JenkinsProject(e)),
@@ -126,7 +138,7 @@ impl GithubBuilder {
                 config,
                 def,
                 pipeline_id,
-                false
+                false,
             ) {
                 Ok(()) | Err(SetupError::NotFoundConfig) => {},
                 Err(e) => return Err(GithubBuilderError::GitProject(e)),
@@ -157,6 +169,8 @@ impl GithubBuilder {
                     config,
                     def,
                     pipeline_id,
+                    &mut ci_id,
+                    &mut ci_to_pipeline,
                 ) {
                     Ok(()) | Err(SetupError::NotFoundConfig) => {},
                     Err(e) =>
@@ -167,6 +181,8 @@ impl GithubBuilder {
                     config,
                     def,
                     pipeline_id,
+                    &mut ci_id,
+                    &mut ci_to_pipeline,
                 ) {
                     Ok(()) | Err(SetupError::NotFoundConfig) => {},
                     Err(e) =>
@@ -271,23 +287,27 @@ impl GithubBuilder {
         } else {
             None
         };
-        let mut pipelines = StaticPipelineConfig::new();
+        let mut pipelines = StaticPipelinesConfig::new();
         for (_name, def) in config_projects.iter() {
-            let ci_idx = if def.lookup("jenkins").is_some() {
-                if let Some(jenkins_idx) = jenkins_idx {
-                    jenkins_idx
-                } else {
-                    return Err(GithubBuilderError::Dangling);
+            let mut pipeline_id = PipelineId(pipelines.0.len() as i32);
+            let mut ci_idxs = Vec::new();
+            for (&ci_id, &(ci_type, ci_pipeline_id)) in &ci_to_pipeline {
+                if ci_pipeline_id == pipeline_id {
+                    let ci_idx = match ci_type {
+                        CiType::Jenkins => jenkins_idx,
+                        CiType::GithubStatus => github_status_idx,
+                    };
+                    let ci_idx = if let Some(ci_idx) = ci_idx {
+                        ci_idx
+                    } else {
+                        return Err(GithubBuilderError::Dangling);
+                    };
+                    ci_idxs.push((ci_id, ci_idx));
                 }
-            } else if def.lookup("github.status").is_some() {
-                if let Some(github_status_idx) = github_status_idx {
-                    github_status_idx
-                } else {
-                    return Err(GithubBuilderError::Dangling);
-                }
-            } else {
+            }
+            if ci_idxs.len() == 0 {
                 return Err(GithubBuilderError::Dangling);
-            };
+            }
             let ui_idx = if def.lookup("github").is_some() {
                 if let Some(github_idx) = github_idx {
                     github_idx
@@ -313,9 +333,20 @@ impl GithubBuilder {
                 return Err(GithubBuilderError::Dangling);
             };
             if def.lookup("try").is_some() {
-                pipelines.0.push((ci_idx, ui_idx, vcs_idx));
+                pipelines.0.push(PipelineConfig{
+                    pipeline_id: pipeline_id,
+                    ci: ci_idxs.clone(),
+                    ui: ui_idx,
+                    vcs: vcs_idx,
+                });
             }
-            pipelines.0.push((ci_idx, ui_idx, vcs_idx));
+            pipelines.0.push(PipelineConfig{
+                pipeline_id: pipeline_id,
+                ci: ci_idxs,
+                ui: ui_idx,
+                vcs: vcs_idx,
+            });
+            pipeline_id.0 = pipeline_id.0 + 1;
         }
         let db_path = config.lookup("db")
             .and_then(|file| file.as_str())
@@ -606,17 +637,32 @@ fn setup_view(
 
 // Everything under the [projects] section.
 
-struct StaticPipelineConfig(Vec<(usize, usize, usize)>);
+struct StaticPipelinesConfig(Vec<PipelineConfig>);
 
-impl StaticPipelineConfig {
+impl StaticPipelinesConfig {
     fn new() -> Self {
-        StaticPipelineConfig(Vec::new())
+        StaticPipelinesConfig(Vec::new())
     }
 }
 
-impl PipelineConfig for StaticPipelineConfig {
-    fn workers_by_id(&self, id: PipelineId) -> (usize, usize, usize) {
-        self.0[id.0 as usize]
+impl PipelinesConfig for StaticPipelinesConfig {
+    fn by_pipeline_id(&self, id: PipelineId) -> PipelineConfig {
+        for cfg in &self.0 {
+            if cfg.pipeline_id == id {
+                return cfg.clone();
+            }
+        }
+        panic!("Invalid pipeline ID: {:?}", id);
+    }
+    fn by_ci_id(&self, id: CiId) -> PipelineConfig {
+        for cfg in &self.0 {
+            for &ci in &cfg.ci {
+                if ci.0 == id {
+                    return cfg.clone();
+                }
+            }
+        }
+        panic!("Invalid ci ID: {:?}", id);
     }
     fn len(&self) -> usize {
         self.0.len()
@@ -699,7 +745,7 @@ impl github::ProjectsConfig for StaticGithubProjectsConfig {
 
 
 struct StaticGithubStatusPipelinesConfig(
-    HashMap<PipelineId, github_status::Repo>
+    HashMap<CiId, github_status::Repo>
 );
 
 impl StaticGithubStatusPipelinesConfig {
@@ -712,10 +758,58 @@ impl StaticGithubStatusPipelinesConfig {
         config: &toml::Value,
         def: &toml::Value,
         pipeline_id: PipelineId,
+        ci_id: &mut CiId,
+        ci_to_pipeline: &mut HashMap<CiId, (CiType, PipelineId)>,
     ) -> Result<(), SetupError<GithubStatusProjectArg>> {
-        if def.lookup("github.status").is_none() {
-            return Err(SetupError::NotFoundConfig);
+        match def.lookup("github.status") {
+            Some(gh) => match gh {
+                &toml::Value::String(ref context) => {
+                    self.add_item(
+                        name,
+                        config,
+                        def,
+                        context,
+                        pipeline_id,
+                        ci_id,
+                        ci_to_pipeline,
+                    )
+                }
+                &toml::Value::Array(ref contexts) => {
+                    for context in contexts {
+                        if let &toml::Value::String(ref context) = context {
+                            try!(self.add_item(
+                                name,
+                                config,
+                                def,
+                                context,
+                                pipeline_id,
+                                ci_id,
+                                ci_to_pipeline,
+                            ))
+                        } else {
+                            return Err(SetupError::InvalidArg(
+                                GithubStatusProjectArg::Context,
+                                Ty::String,
+                            ));
+                        }
+                    }
+                    Ok(())
+                }
+                _ => Err(SetupError::NotTableConfig)
+            },
+            None => Err(SetupError::NotFoundConfig),
         }
+    }
+    fn add_item(
+        &mut self,
+        name: &str,
+        config: &toml::Value,
+        def: &toml::Value,
+        context: &str,
+        pipeline_id: PipelineId,
+        ci_id: &mut CiId,
+        ci_to_pipeline: &mut HashMap<CiId, (CiType, PipelineId)>,
+    ) -> Result<(), SetupError<GithubStatusProjectArg>> {
         let repo = github_status::Repo{
             owner: toml_arg_default!(
                 def,
@@ -739,32 +833,28 @@ impl StaticGithubStatusPipelinesConfig {
                 GithubStatusProjectArg::Repo,
                 name
             ),
-            context: toml_arg!(
-                def,
-                "github",
-                "status",
-                String,
-                GithubStatusProjectArg::Context
-            ),
+            context: context.to_owned(),
         };
-        self.0.entry(pipeline_id).or_insert(repo);
+        self.0.entry(*ci_id).or_insert(repo);
+        ci_to_pipeline.insert(*ci_id, (CiType::GithubStatus, pipeline_id));
+        ci_id.0 += 1;
         Ok(())
     }
 }
 
 impl github_status::PipelinesConfig for StaticGithubStatusPipelinesConfig {
-    fn repo_by_pipeline(&self, pipeline_id: PipelineId)
+    fn repo_by_id(&self, id: CiId)
             -> Option<github_status::Repo> {
-        return self.0.get(&pipeline_id).map(Clone::clone)
+        return self.0.get(&id).map(Clone::clone)
     }
-    fn pipelines_by_repo(
+    fn ids_by_repo(
         &self,
         repo: &github_status::Repo
-    ) -> Vec<PipelineId> {
+    ) -> Vec<CiId> {
         let mut ret_val = vec![];
-        for (pipeline_id, i_repo) in self.0.iter() {
+        for (id, i_repo) in self.0.iter() {
             if repo == i_repo {
-                ret_val.push(*pipeline_id)
+                ret_val.push(*id)
             }
         }
         ret_val
@@ -773,7 +863,7 @@ impl github_status::PipelinesConfig for StaticGithubStatusPipelinesConfig {
 
 
 struct StaticJenkinsPipelinesConfig(
-    HashMap<PipelineId, jenkins::Job>
+    HashMap<CiId, jenkins::Job>
 );
 
 impl StaticJenkinsPipelinesConfig {
@@ -783,42 +873,88 @@ impl StaticJenkinsPipelinesConfig {
     fn add_pipeline(
         &mut self,
         name: &str,
-        _config: &toml::Value,
+        config: &toml::Value,
         def: &toml::Value,
         pipeline_id: PipelineId,
+        ci_id: &mut CiId,
+        ci_to_pipeline: &mut HashMap<CiId, (CiType, PipelineId)>,
+    ) -> Result<(), SetupError<JenkinsProjectArg>> {
+        match def.lookup("jenkins") {
+            Some(gh) => match gh {
+                jenkins_def @ &toml::Value::Table(_) => {
+                    self.add_item(
+                        name,
+                        config,
+                        def,
+                        jenkins_def,
+                        pipeline_id,
+                        ci_id,
+                        ci_to_pipeline,
+                    )
+                }
+                &toml::Value::Array(ref jenkins_defs) => {
+                    for jenkins_def in jenkins_defs {
+                        try!(self.add_item(
+                            name,
+                            config,
+                            def,
+                            jenkins_def,
+                            pipeline_id,
+                            ci_id,
+                            ci_to_pipeline,
+                        ))
+                    }
+                    Ok(())
+                }
+                _ => Err(SetupError::NotTableConfig)
+            },
+            None => Err(SetupError::NotFoundConfig),
+        }
+    }
+    fn add_item(
+        &mut self,
+        name: &str,
+        _config: &toml::Value,
+        _def: &toml::Value,
+        jenkins_def: &toml::Value,
+        pipeline_id: PipelineId,
+        ci_id: &mut CiId,
+        ci_to_pipeline: &mut HashMap<CiId, (CiType, PipelineId)>,
     ) -> Result<(), SetupError<JenkinsProjectArg>> {
         let job = jenkins::Job{
             name: toml_arg_default!(
-                def,
-                "jenkins",
+                jenkins_def,
+                "",
                 "name",
                 String,
                 JenkinsProjectArg::Name,
                 name
             ),
             token: toml_arg!(
-                def,
-                "jenkins",
+                jenkins_def,
+                "",
                 "token",
                 String,
                 JenkinsProjectArg::Token
             ),
         };
-        self.0.entry(pipeline_id).or_insert(job);
+        self.0.entry(*ci_id).or_insert(job);
+        ci_to_pipeline.insert(*ci_id, (CiType::Jenkins, pipeline_id));
+        ci_id.0 += 1;
         Ok(())
     }
 }
 
 impl jenkins::PipelinesConfig for StaticJenkinsPipelinesConfig {
-    fn job_by_pipeline(&self, pipeline_id: PipelineId)
+    fn job_by_id(&self, id: CiId)
             -> Option<jenkins::Job> {
-        return self.0.get(&pipeline_id).map(Clone::clone)
+        return self.0.get(&id).map(Clone::clone)
     }
-    fn pipelines_by_job_name(&self, job_name: &str) -> Vec<PipelineId> {
+    fn ids_by_job_name(&self, job_name: &str) -> Vec<CiId> {
         let mut ret_val = vec![];
-        for (pipeline_id, i_job) in self.0.iter() {
+        for (id, i_job) in self.0.iter() {
             if job_name == i_job.name {
-                ret_val.push(*pipeline_id)
+                ret_val.push(*id)
             }
         }
         ret_val

@@ -1,7 +1,7 @@
 // This file is released under the same terms as Rust itself.
 
 use ci::{self, github_status, jenkins};
-use config::{PipelineConfig, WorkerBuilder};
+use config::{PipelinesConfig, WorkerBuilder};
 use db::{self, DbBox};
 use pipeline::WorkerManager;
 use pipeline::WorkerThread;
@@ -29,7 +29,7 @@ pub struct GithubBuilder {
         view::Message,
     >,
     db: DbBox,
-    pipelines: Box<PipelineConfig>,
+    pipelines: Box<PipelinesConfig>,
 }
 
 macro_rules! try_env {
@@ -70,11 +70,11 @@ impl GithubBuilder {
             Ok(pj_builder) => pj_builder,
             Err(e) => return Err(GithubBuilderError::PjConnect(e)),
         };
-        let pipelines: Box<PipelineConfig> = match pj_builder {
+        let pipelines: Box<PipelinesConfig> = match pj_builder {
             db::Builder::Sqlite(d) =>
-                Box::new(try!(sqlite::PipelineConfig::new(d))),
+                Box::new(try!(sqlite::PipelinesConfig::new(d))),
             db::Builder::Postgres(d) =>
-                Box::new(try!(postgres::PipelineConfig::new(d))),
+                Box::new(try!(postgres::PipelinesConfig::new(d))),
         };
         Ok(GithubBuilder{
             ci: try!(setup_ci(&env)),
@@ -278,7 +278,8 @@ fn setup_view<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
 }
 
 mod sqlite {
-    use config::PipelineConfig as TPipelineConfig;
+    use config::PipelinesConfig as TPipelinesConfig;
+    use config::PipelineConfig;
     use pipeline::PipelineId;
     use rusqlite::Connection;
     use std::borrow::Cow;
@@ -286,7 +287,9 @@ mod sqlite {
     use std::path::PathBuf;
     use std::sync::Mutex;
     use ui::github::{self, ProjectsConfig as TGithubProjectsConfig};
-    use ci::jenkins::{self, PipelinesConfig as TJenkinsPipelinesConfig};
+    use ci::CiId;
+    use ci::jenkins;
+    use ci::jenkins::PipelinesConfig as TJenkinsPipelinesConfig;
     use ci::github_status;
     use ci::github_status::PipelinesConfig as TGithubStatusPipelinesConfig;
     use vcs::git;
@@ -294,10 +297,10 @@ mod sqlite {
     use vcs::github as github_git;
     use vcs::github::PipelinesConfig as TGithubGitPipelinesConfig;
     use view::{PipelinesConfig as TViewPipelinesConfig};
-    pub struct PipelineConfig {
+    pub struct PipelinesConfig {
         conn: Mutex<Connection>,
     }
-    impl PipelineConfig {
+    impl PipelinesConfig {
         pub fn new(path: PathBuf)
                 -> Result<Self, Box<Error + Send + Sync + 'static>>
         {
@@ -308,15 +311,59 @@ mod sqlite {
                     name TEXT,
                     UNIQUE (name)
                 );
+                CREATE TABLE IF NOT EXISTS twelvef_config_pipeline_ci (
+                    ci_id INTEGER PRIMARY KEY,
+                    pipeline_id INTEGER
+                );
             "###));
-            Ok(PipelineConfig{
+            Ok(PipelinesConfig{
                 conn: Mutex::new(conn),
             })
         }
     }
-    impl TPipelineConfig for PipelineConfig {
-        fn workers_by_id(&self, _: PipelineId) -> (usize, usize, usize) {
-            (0, 0, 0)
+    impl TPipelinesConfig for PipelinesConfig {
+        fn by_pipeline_id(&self, pipeline_id: PipelineId) -> PipelineConfig {
+            let mut ci = Vec::new();
+            let conn = self.conn.lock().unwrap();
+            let sql = r###"
+                SELECT ci_id
+                FROM twelvef_config_pipeline_ci
+                WHERE pipeline_id = ?
+            "###;
+            let mut stmt = conn.prepare(&sql)
+                .expect("Prepare pipeline ci map query");
+            let rows = stmt
+                .query_map(&[ &pipeline_id.0 ], |row| row.get::<_, i32>(0))
+                .expect("Get pipeline ci map");
+            for row in rows {
+                ci.push((CiId(row.expect("Get pipeline value")), 0));
+            }
+            let ui = 0;
+            let vcs = 0;
+            PipelineConfig{
+                pipeline_id: pipeline_id,
+                ci: ci,
+                ui: ui,
+                vcs: vcs,
+            }
+        }
+        fn by_ci_id(&self, ci_id: CiId) -> PipelineConfig {
+            let pipeline_id = {
+                let conn = self.conn.lock().unwrap();
+                let sql = r###"
+                    SELECT pipeline_id
+                    FROM twelvef_config_pipeline_ci
+                    WHERE ci_id = ?
+                "###;
+                let mut stmt = conn.prepare(&sql)
+                    .expect("Prepare ci pipeline map query");
+                let mut rows = stmt
+                    .query_map(&[ &ci_id.0 ], |row| row.get::<_, i32>(0))
+                    .expect("Get ci pipeline map");
+                rows.next().map(|row| row.expect("SQLite to work")).unwrap()
+            };
+            let pipeline_id = PipelineId(pipeline_id);
+            self.by_pipeline_id(pipeline_id)
         }
         fn len(&self) -> usize {
             let conn = self.conn.lock().unwrap();
@@ -421,7 +468,7 @@ mod sqlite {
             let conn = try!(Connection::open(path));
             try!(conn.execute_batch(r###"
                 CREATE TABLE IF NOT EXISTS twelvef_jenkins_pipelines (
-                    pipeline_id INTEGER PRIMARY KEY,
+                    ci_id INTEGER PRIMARY KEY,
                     name TEXT,
                     token TEXT
                 );
@@ -432,19 +479,19 @@ mod sqlite {
         }
     }
     impl TJenkinsPipelinesConfig for JenkinsPipelinesConfig {
-        fn job_by_pipeline(&self, pipeline_id: PipelineId)
+        fn job_by_id(&self, ci_id: CiId)
                 -> Option<jenkins::Job>
         {
             let conn = self.conn.lock().unwrap();
             let sql = r###"
                 SELECT name, token
                 FROM twelvef_jenkins_pipelines
-                WHERE pipeline_id = ?
+                WHERE ci_id = ?
             "###;
             let mut stmt = conn.prepare(&sql)
                 .expect("prepare job query");
             let mut rows = stmt
-                .query_map(&[&pipeline_id.0], |row| {
+                .query_map(&[ &ci_id.0 ], |row| {
                     jenkins::Job{
                         name:
                             row.get::<_, String>(0),
@@ -455,19 +502,19 @@ mod sqlite {
                 .expect("get job");
             rows.next().map(|row| row.expect("sqlite to work"))
         }
-        fn pipelines_by_job_name(&self, job: &str)
-                -> Vec<PipelineId>
+        fn ids_by_job_name(&self, job: &str)
+                -> Vec<CiId>
         {
             let conn = self.conn.lock().unwrap();
             let sql = r###"
-                SELECT pipeline_id
+                SELECT ci_id
                 FROM twelvef_jenkins_pipelines
                 WHERE name = ?
             "###;
             let mut stmt = conn.prepare(&sql)
                 .expect("prepare pipelines query");
             let rows = stmt
-                .query_map(&[&job], |row| PipelineId(row.get::<_, i32>(0)))
+                .query_map(&[&job], |row| CiId(row.get::<_, i32>(0)))
                 .expect("get pipelines");
             let rows = rows.map(|row| row.expect("sqlite to work")).collect();
             rows
@@ -483,7 +530,7 @@ mod sqlite {
             let conn = try!(Connection::open(path));
             try!(conn.execute_batch(r###"
                 CREATE TABLE IF NOT EXISTS twelvef_github_status_pipelines (
-                    pipeline_id INTEGER PRIMARY KEY,
+                    ci_id INTEGER PRIMARY KEY,
                     owner TEXT,
                     repo TEXT,
                     context TEXT
@@ -495,19 +542,19 @@ mod sqlite {
         }
     }
     impl TGithubStatusPipelinesConfig for GithubStatusPipelinesConfig {
-        fn repo_by_pipeline(&self, pipeline_id: PipelineId)
+        fn repo_by_id(&self, id: CiId)
                 -> Option<github_status::Repo>
         {
             let conn = self.conn.lock().unwrap();
             let sql = r###"
                 SELECT owner, repo, context
                 FROM twelvef_github_status_pipelines
-                WHERE pipeline_id = ?
+                WHERE ci_id = ?
             "###;
             let mut stmt = conn.prepare(&sql)
                 .expect("prepare repo query");
             let mut rows = stmt
-                .query_map(&[&pipeline_id.0], |row| {
+                .query_map(&[&id.0], |row| {
                     github_status::Repo{
                         owner:
                             row.get::<_, String>(0),
@@ -520,12 +567,12 @@ mod sqlite {
                 .expect("get repo");
             rows.next().map(|row| row.expect("sqlite to work"))
         }
-        fn pipelines_by_repo(&self, repo: &github_status::Repo)
-                -> Vec<PipelineId>
+        fn ids_by_repo(&self, repo: &github_status::Repo)
+                -> Vec<CiId>
         {
             let conn = self.conn.lock().unwrap();
             let sql = r###"
-                SELECT pipeline_id
+                SELECT ci_id
                 FROM twelvef_github_status_pipelines
                 WHERE owner = ? AND repo = ? AND context = ?
             "###;
@@ -533,7 +580,7 @@ mod sqlite {
                 .expect("prepare pipelines query");
             let rows = stmt
                 .query_map(&[&repo.owner, &repo.repo, &repo.context], |row| {
-                    PipelineId(row.get::<_, i32>(0))
+                    CiId(row.get::<_, i32>(0))
                 })
                 .expect("get pipelines");
             let rows = rows.map(|row| row.expect("sqlite to work")).collect();
@@ -711,14 +758,17 @@ mod sqlite {
 }
 
 mod postgres {
-    use config::PipelineConfig as TPipelineConfig;
+    use config::PipelinesConfig as TPipelinesConfig;
+    use config::PipelineConfig;
     use pipeline::PipelineId;
     use postgres::{Connection, TlsMode};
     use postgres::params::{ConnectParams, IntoConnectParams};
     use std::borrow::Cow;
     use std::error::Error;
     use ui::github::{self, ProjectsConfig as TGithubProjectsConfig};
-    use ci::jenkins::{self, PipelinesConfig as TJenkinsPipelinesConfig};
+    use ci::CiId;
+    use ci::jenkins;
+    use ci::jenkins::PipelinesConfig as TJenkinsPipelinesConfig;
     use ci::github_status;
     use ci::github_status::PipelinesConfig as TGithubStatusPipelinesConfig;
     use vcs::git;
@@ -726,14 +776,14 @@ mod postgres {
     use vcs::github as github_git;
     use vcs::github::PipelinesConfig as TGithubGitPipelinesConfig;
     use view::{PipelinesConfig as TViewPipelinesConfig};
-    pub struct PipelineConfig {
+    pub struct PipelinesConfig {
         params: ConnectParams,
     }
-    impl PipelineConfig {
+    impl PipelinesConfig {
         pub fn new<Q: IntoConnectParams>(params: Q)
                 -> Result<Self, Box<Error + Send + Sync + 'static>>
         {
-            let result = PipelineConfig{
+            let result = PipelinesConfig{
                 params: try!(params.into_connect_params()),
             };
             try!(try!(result.conn()).batch_execute(r###"
@@ -742,6 +792,10 @@ mod postgres {
                     name TEXT,
                     UNIQUE (name)
                 );
+                CREATE TABLE IF NOT EXISTS twelvef_config_pipeline_ci (
+                    ci_id SERIAL PRIMARY KEY,
+                    pipeline_id SERIAL
+                );
             "###));
             Ok(result)
         }
@@ -749,25 +803,69 @@ mod postgres {
             Ok(try!(Connection::connect(self.params.clone(), TlsMode::None)))
         }
     }
-    impl TPipelineConfig for PipelineConfig {
-        fn workers_by_id(&self, _: PipelineId) -> (usize, usize, usize) {
-            (0, 0, 0)
-        }
-        fn len(&self) -> usize {
+    impl TPipelinesConfig for PipelinesConfig {
+        fn by_pipeline_id(&self, pipeline_id: PipelineId) -> PipelineConfig {
             retry!{{
+                let mut ci = Vec::new();
                 let conn = retry_unwrap!(self.conn());
                 let sql = r###"
-                    SELECT COUNT(*)
-                    FROM twelvef_config_pipeline
+                    SELECT ci_id
+                    FROM twelvef_config_pipeline_ci
+                    WHERE pipeline_id = $1
                 "###;
                 let stmt = retry_unwrap!(conn.prepare(&sql));
-                let rows = retry_unwrap!(stmt.query(&[]));
+                let rows = retry_unwrap!(
+                    stmt.query(&[ &pipeline_id.0 ])
+                );
                 let rows = rows.iter();
-                let mut rows = rows.map(|row| {
-                    row.get::<_, i64>(0) as usize
-                });
-                rows.next().unwrap()
+                let rows = rows.map(|row| row.get::<_, i32>(0));
+                for row in rows {
+                    ci.push((CiId(row), 0));
+                }
+                let ui = 0;
+                let vcs = 0;
+                PipelineConfig{
+                    pipeline_id: pipeline_id,
+                    ci: ci,
+                    ui: ui,
+                    vcs: vcs,
+                }
             }}
+        }
+        fn by_ci_id(&self, ci_id: CiId) -> PipelineConfig {
+            let pipeline_id = (|| {
+                retry!{{
+                    let conn = retry_unwrap!(self.conn());
+                    let sql = r###"
+                        SELECT pipeline_id
+                        FROM twelvef_config_pipeline_ci
+                        WHERE ci_id = $1
+                    "###;
+                    let stmt = retry_unwrap!(conn.prepare(&sql));
+                    let rows = retry_unwrap!(
+                        stmt.query(&[ &ci_id.0 ])
+                    );
+                    let rows = rows.iter();
+                    let mut rows = rows.map(|row| PipelineId(row.get::<_, i32>(0)));
+                    rows.next().unwrap()
+                }}
+            })();
+            self.by_pipeline_id(pipeline_id)
+        }
+        fn len(&self) -> usize {
+            let conn = self.conn().unwrap();
+            let sql = r###"
+                SELECT COUNT(*)
+                FROM twelvef_config_pipeline
+            "###;
+            let stmt = conn.prepare(&sql)
+                .expect("Prepare pipeline count query");
+            let rows = stmt
+                .query(&[])
+                .expect("Get pipeline count");
+            let rows = rows.iter();
+            let mut rows = rows.map(|row| row.get::<_, i64>(0) as usize);
+            rows.next().unwrap()
         }
     }
     pub struct GithubProjectsConfig {
@@ -870,7 +968,7 @@ mod postgres {
             };
             try!(try!(result.conn()).batch_execute(r###"
                 CREATE TABLE IF NOT EXISTS twelvef_jenkins_pipelines (
-                    pipeline_id INTEGER PRIMARY KEY,
+                    ci_id SERIAL PRIMARY KEY,
                     name TEXT,
                     token TEXT
                 );
@@ -882,7 +980,7 @@ mod postgres {
         }
     }
     impl TJenkinsPipelinesConfig for JenkinsPipelinesConfig {
-        fn job_by_pipeline(&self, pipeline_id: PipelineId)
+        fn job_by_id(&self, id: CiId)
                 -> Option<jenkins::Job>
         {
             retry!{{
@@ -890,10 +988,10 @@ mod postgres {
                 let sql = r###"
                     SELECT name, token
                     FROM twelvef_jenkins_pipelines
-                    WHERE pipeline_id = $1
+                    WHERE ci_id = $1
                 "###;
                 let stmt = retry_unwrap!(conn.prepare(&sql));
-                let rows = retry_unwrap!(stmt.query(&[&pipeline_id.0]));
+                let rows = retry_unwrap!(stmt.query(&[&id.0]));
                 let rows = rows.iter();
                 let mut rows = rows.map(|row| {
                     jenkins::Job{
@@ -906,13 +1004,13 @@ mod postgres {
                 rows.next()
             }}
         }
-        fn pipelines_by_job_name(&self, job: &str)
-                -> Vec<PipelineId>
+        fn ids_by_job_name(&self, job: &str)
+                -> Vec<CiId>
         {
             retry!{{
                 let conn = retry_unwrap!(self.conn());
                 let sql = r###"
-                    SELECT pipeline_id
+                    SELECT ci_id
                     FROM twelvef_jenkins_pipelines
                     WHERE name = $1
                 "###;
@@ -920,7 +1018,7 @@ mod postgres {
                 let rows = retry_unwrap!(stmt.query(&[&job]));
                 let rows = rows.iter();
                 let rows = rows.map(|row| {
-                    PipelineId(row.get::<_, i32>(0))
+                    CiId(row.get::<_, i32>(0))
                 });
                 let rows = rows.collect();
                 rows
@@ -939,7 +1037,7 @@ mod postgres {
             };
             try!(try!(result.conn()).batch_execute(r###"
                 CREATE TABLE IF NOT EXISTS twelvef_github_status_pipelines (
-                    pipeline_id INTEGER PRIMARY KEY,
+                    ci_id SERIAL PRIMARY KEY,
                     owner TEXT,
                     repo TEXT,
                     context TEXT
@@ -952,7 +1050,7 @@ mod postgres {
         }
     }
     impl TGithubStatusPipelinesConfig for GithubStatusPipelinesConfig {
-        fn repo_by_pipeline(&self, pipeline_id: PipelineId)
+        fn repo_by_id(&self, id: CiId)
                 -> Option<github_status::Repo>
         {
             retry!{{
@@ -960,10 +1058,10 @@ mod postgres {
                 let sql = r###"
                     SELECT owner, repo, context
                     FROM twelvef_github_status_pipelines
-                    WHERE pipeline_id = $1
+                    WHERE ci_id = $1
                 "###;
                 let stmt = retry_unwrap!(conn.prepare(&sql));
-                let rows = retry_unwrap!(stmt.query(&[&pipeline_id.0]));
+                let rows = retry_unwrap!(stmt.query(&[&id.0]));
                 let rows = rows.iter();
                 let mut rows = rows.map(|row| {
                     github_status::Repo{
@@ -978,13 +1076,13 @@ mod postgres {
                 rows.next()
             }}
         }
-        fn pipelines_by_repo(&self, repo: &github_status::Repo)
-                -> Vec<PipelineId>
+        fn ids_by_repo(&self, repo: &github_status::Repo)
+                -> Vec<CiId>
         {
             retry!{{
                 let conn = retry_unwrap!(self.conn());
                 let sql = r###"
-                    SELECT pipeline_id
+                    SELECT ci_id
                     FROM twelvef_github_status_pipelines
                     WHERE owner = $1 AND repo = $2 AND context = $3
                 "###;
@@ -994,7 +1092,7 @@ mod postgres {
                 );
                 let rows = rows.iter();
                 let rows = rows.map(|row| {
-                    PipelineId(row.get::<_, i32>(0))
+                    CiId(row.get::<_, i32>(0))
                 });
                 let rows = rows.collect();
                 rows

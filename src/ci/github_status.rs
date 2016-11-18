@@ -1,6 +1,6 @@
 // This file is released under the same terms as Rust itself.
 
-use ci;
+use ci::{self, CiId};
 use crossbeam;
 use hyper::Url;
 use hyper::buffer::BufReader;
@@ -8,15 +8,15 @@ use hyper::header::Headers;
 use hyper::net::{HttpListener, NetworkListener, NetworkStream};
 use hyper::server::{Request, Response};
 use hyper::status::StatusCode;
-use pipeline::{self, PipelineId};
+use pipeline;
 use serde_json::{from_slice as json_from_slice};
 use std::io::BufWriter;
 use std::sync::mpsc::{Sender, Receiver};
 use util::github_headers;
 
 pub trait PipelinesConfig: Send + Sync + 'static {
-    fn repo_by_pipeline(&self, PipelineId) -> Option<Repo>;
-    fn pipelines_by_repo(&self, &Repo) -> Vec<PipelineId>;
+    fn repo_by_id(&self, CiId) -> Option<Repo>;
+    fn ids_by_repo(&self, &Repo) -> Vec<CiId>;
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -148,15 +148,15 @@ impl Worker {
                         owner: desc.repository.owner.login,
                         context: desc.context,
                     };
-                    let pipelines = self.pipelines.pipelines_by_repo(&repo);
-                    if pipelines.is_empty() {
+                    let ids = self.pipelines.ids_by_repo(&repo);
+                    if ids.is_empty() {
                         warn!("Got status for unknown repo: {:?}", repo);
                     }
-                    for pipeline_id in pipelines {
+                    for id in ids {
                         let commit = desc.sha.clone().into();
                         let event = match &desc.state[..] {
                             "pending" => ci::Event::BuildStarted(
-                                pipeline_id,
+                                id,
                                 commit,
                                 desc.target_url.as_ref().and_then(|u|
                                     Url::parse(&u[..]).ok()
@@ -164,14 +164,14 @@ impl Worker {
                             ),
                             "failure" |
                             "error" => ci::Event::BuildFailed(
-                                pipeline_id,
+                                id,
                                 commit,
                                 desc.target_url.as_ref().and_then(|u|
                                     Url::parse(&u[..]).ok()
                                 ),
                             ),
                             "success" => ci::Event::BuildSucceeded(
-                                pipeline_id,
+                                id,
                                 commit,
                                 desc.target_url.as_ref().and_then(|u|
                                     Url::parse(&u[..]).ok()

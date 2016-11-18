@@ -1,13 +1,13 @@
 // This file is released under the same terms as Rust itself.
 
 use super::{Ci, Vcs, Ui};
-use ci;
-use db::{Db, PendingEntry, QueueEntry, RunningEntry};
+use ci::{self, CiId};
+use db::{CiState, Db, PendingEntry, QueueEntry, RunningEntry};
 use hyper::Url;
 use hyper::client::IntoUrl;
 use pipeline::{Event, Pipeline, PipelineId};
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 use std::mem;
 use ui::{self, Pr};
@@ -17,6 +17,7 @@ struct MemoryDb {
     queue: VecDeque<QueueEntry>,
     running: Option<RunningEntry>,
     pending: Vec<PendingEntry>,
+    cis: HashMap<CiId, (CiState, Commit)>,
 }
 
 impl MemoryDb {
@@ -25,6 +26,7 @@ impl MemoryDb {
             queue: VecDeque::new(),
             running: None,
             pending: Vec::new(),
+            cis: HashMap::new(),
         }
     }
 }
@@ -156,6 +158,28 @@ impl Db for MemoryDb {
         }
         Ok(canceled)
     }
+    fn set_ci_state(
+        &mut self,
+        ci_id: CiId,
+        ci_state: CiState,
+        commit: &Commit,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        self.cis.insert(ci_id, (ci_state, commit.clone()));
+        Ok(())
+    }
+    fn clear_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        self.cis.remove(&ci_id);
+        Ok(())
+    }
+    fn get_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<Option<(CiState, Commit)>, Box<Error + Send + Sync>> {
+        Ok(self.cis.get(&ci_id).cloned())
+    }
 }
 
 struct MemoryUi {
@@ -217,7 +241,7 @@ impl MemoryCi {
     }
 }
 impl Ci for RefCell<MemoryCi> {
-    fn start_build(&self, _: PipelineId, commit: Commit) {
+    fn start_build(&self, _: CiId, commit: Commit) {
         self.borrow_mut().build = Some(commit);
     }
 }
@@ -232,7 +256,7 @@ fn handle_event(
     Pipeline{
         ui: ui,
         vcs: vcs,
-        ci: ci,
+        ci: vec![(CiId(1), ci)],
         id: PipelineId(0),
     }.handle_event(db, event).unwrap();
 }
@@ -662,7 +686,7 @@ fn handle_ci_failed_notify_user() {
         &mut ci,
         &mut db,
         Event::CiEvent(ci::Event::BuildFailed(
-            PipelineId(0),
+            CiId(1),
             memory_commit_b(),
             None,
         ))
@@ -707,7 +731,7 @@ fn handle_ci_failed_notify_user_next_commit() {
         &mut ci,
         &mut db,
         Event::CiEvent(ci::Event::BuildFailed(
-            PipelineId(0),
+            CiId(1),
             memory_commit_b(),
             None,
         ))
@@ -754,7 +778,7 @@ fn handle_ci_started_notify_user() {
         &mut ci,
         &mut db,
         Event::CiEvent(ci::Event::BuildStarted(
-            PipelineId(0),
+            CiId(1),
             memory_commit_b(),
             Some("http://example.com/".into_url().expect("this to be valid")),
         ))
@@ -792,7 +816,7 @@ fn handle_ci_succeeded_move_to_master() {
         &mut ci,
         &mut db,
         Event::CiEvent(ci::Event::BuildSucceeded(
-            PipelineId(0),
+            CiId(1),
             memory_commit_b(),
             None,
         ))
@@ -833,7 +857,7 @@ fn handle_ci_double_succeeded_move_to_master() {
         &mut ci,
         &mut db,
         Event::CiEvent(ci::Event::BuildSucceeded(
-            PipelineId(0),
+            CiId(1),
             memory_commit_b(),
             None,
         ))
@@ -857,7 +881,7 @@ fn handle_ci_double_succeeded_move_to_master() {
         &mut ci,
         &mut db,
         Event::CiEvent(ci::Event::BuildSucceeded(
-            PipelineId(0),
+            CiId(1),
             memory_commit_b(),
             None,
         ))
@@ -1351,7 +1375,7 @@ fn handle_runthrough() {
         &mut ci,
         &mut db,
         Event::CiEvent(ci::Event::BuildSucceeded(
-            PipelineId(0),
+            CiId(1),
             memory_commit_b(),
             None,
         ))
@@ -1505,7 +1529,7 @@ fn handle_runthrough_next_commit() {
         &mut ci,
         &mut db,
         Event::CiEvent(ci::Event::BuildSucceeded(
-            PipelineId(0),
+            CiId(1),
             memory_commit_b(),
             None,
         ))

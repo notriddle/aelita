@@ -6,6 +6,7 @@
 pub mod sqlite;
 pub mod postgres;
 
+use ci::CiId;
 use db::postgres::PostgresDb;
 use db::sqlite::SqliteDb;
 use hyper::Url;
@@ -185,6 +186,41 @@ impl Db for DbBox {
                 d.cancel_by_pr_different_commit(pipeline_id, pr, commit),
         }
     }
+    fn set_ci_state(
+        &mut self,
+        ci_id: CiId,
+        ci_state: CiState,
+        commit: &Commit,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        match *self {
+            DbBox::Sqlite(ref mut d) =>
+                d.set_ci_state(ci_id, ci_state, commit),
+            DbBox::Postgres(ref mut d) =>
+                d.set_ci_state(ci_id, ci_state, commit),
+        }
+    }
+    fn clear_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        match *self {
+            DbBox::Sqlite(ref mut d) =>
+                d.clear_ci_state(ci_id),
+            DbBox::Postgres(ref mut d) =>
+                d.clear_ci_state(ci_id),
+        }
+    }
+    fn get_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<Option<(CiState, Commit)>, Box<Error + Send + Sync>> {
+        match *self {
+            DbBox::Sqlite(ref mut d) =>
+                d.get_ci_state(ci_id),
+            DbBox::Postgres(ref mut d) =>
+                d.get_ci_state(ci_id),
+        }
+    }
 }
 
 
@@ -255,6 +291,23 @@ pub trait Db: Sized {
         &Pr,
         &Commit,
     ) -> Result<bool, Box<Error + Send + Sync>>;
+    /// Set the state of a CI job.
+    fn set_ci_state(
+        &mut self,
+        CiId,
+        CiState,
+        &Commit,
+    ) -> Result<(), Box<Error + Send + Sync>>;
+    /// Set the state of a CI job.
+    fn clear_ci_state(
+        &mut self,
+        CiId,
+    ) -> Result<(), Box<Error + Send + Sync>>;
+    /// Get a count of completed / remaining CI jobs.
+    fn get_ci_state(
+        &mut self,
+        CiId,
+    ) -> Result<Option<(CiState, Commit)>, Box<Error + Send + Sync>>;
 }
 
 pub trait Transaction {
@@ -263,6 +316,23 @@ pub trait Transaction {
         self,
         &mut D,
     ) -> Result<Self::Return, Box<Error + Send + Sync>>;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(i32)]
+pub enum CiState {
+    Succeeded = 1,
+    Failed = 2,
+}
+
+impl CiState {
+    pub fn from_i32(this: i32) -> CiState {
+        match this {
+            1 => CiState::Succeeded,
+            2 => CiState::Failed,
+            x => panic!("Invalid CI state: {}", x),
+        }
+    }
 }
 
 /// An item not yet in the build queue

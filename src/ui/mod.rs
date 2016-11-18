@@ -8,6 +8,7 @@
 pub mod github;
 mod comments;
 
+use config::PipelinesConfig;
 use hyper::Url;
 use pipeline::{GetPipelineId, PipelineId};
 use std::fmt::{self, Display};
@@ -73,7 +74,7 @@ impl Pr {
 }
 
 impl GetPipelineId for Event {
-    fn pipeline_id(&self) -> PipelineId {
+    fn pipeline_id<C: PipelinesConfig + ?Sized>(&self, _: &C) -> PipelineId {
         match *self {
             Event::Approved(i, _, _, _) => i,
             Event::Canceled(i, _) => i,

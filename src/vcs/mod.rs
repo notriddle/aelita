@@ -3,6 +3,7 @@
 pub mod git;
 pub mod github;
 
+use config::PipelinesConfig;
 use pipeline::{GetPipelineId, PipelineId};
 use std::fmt::{self, Display};
 
@@ -69,7 +70,7 @@ impl Display for Remote {
 }
 
 impl GetPipelineId for Event {
-    fn pipeline_id(&self) -> PipelineId {
+    fn pipeline_id<C: PipelinesConfig + ?Sized>(&self, _: &C) -> PipelineId {
         match *self {
         	Event::MergedToStaging(i, _, _) => i,
     		Event::FailedMergeToStaging(i, _) => i,

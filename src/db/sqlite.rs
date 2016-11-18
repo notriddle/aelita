@@ -1,6 +1,7 @@
 // This file is released under the same terms as Rust itself.
 
-use db::{self, Db, PendingEntry, QueueEntry, RunningEntry};
+use ci::CiId;
+use db::{self, CiState, Db, PendingEntry, QueueEntry, RunningEntry};
 use hyper::Url;
 use pipeline::PipelineId;
 use rusqlite::{self, Connection};
@@ -18,6 +19,11 @@ impl SqliteDb {
     pub fn open<Q: AsRef<Path>>(path: Q) -> rusqlite::Result<Self> {
         let conn = try!(Connection::open(path));
         try!(conn.execute_batch(r###"
+            CREATE TABLE IF NOT EXISTS ci_state (
+                ci_id INTEGER,
+                ci_state INTEGER,
+                ci_commit STRING
+            );
             CREATE TABLE IF NOT EXISTS queue (
                 id INTEGER PRIMARY KEY,
                 pipeline_id INTEGER,
@@ -165,6 +171,32 @@ impl Db for SqliteDb {
         SqliteTransaction::new(
             try!(self.conn.transaction())
         ).cancel_by_pr_different_commit(pipeline_id, pr, commit)
+    }
+    fn set_ci_state(
+        &mut self,
+        ci_id: CiId,
+        ci_state: CiState,
+        commit: &Commit,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        SqliteTransaction::new(
+            try!(self.conn.transaction())
+        ).set_ci_state(ci_id, ci_state, commit)
+    }
+    fn clear_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        SqliteTransaction::new(
+            try!(self.conn.transaction())
+        ).clear_ci_state(ci_id)
+    }
+    fn get_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<Option<(CiState, Commit)>, Box<Error + Send + Sync>> {
+        SqliteTransaction::new(
+            try!(self.conn.transaction())
+        ).get_ci_state(ci_id)
     }
 }
 
@@ -526,5 +558,68 @@ impl<'a> Db for SqliteTransaction<'a> {
             &commit.as_str(),
         ]));
         Ok(affected_rows_queue != 0 || affected_rows_running != 0)
+    }
+    fn set_ci_state(
+        &mut self,
+        ci_id: CiId,
+        ci_state: CiState,
+        commit: &Commit,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        let sql = r###"
+            REPLACE INTO ci_state
+                (
+                    ci_id,
+                    ci_state,
+                    ci_commit
+                )
+            VALUES
+                (?, ?, ?)
+        "###;
+        try!(self.conn.execute(sql, &[
+            &ci_id.0,
+            &(ci_state as i32),
+            &commit.as_str(),
+        ]));
+        Ok(())
+    }
+    fn clear_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<(), Box<Error + Send + Sync>> {
+        let sql = r###"
+            DELETE FROM ci_state
+            WHERE ci_id = ?
+        "###;
+        try!(self.conn.execute(sql, &[
+            &ci_id.0,
+        ]));
+        Ok(())
+    }
+    fn get_ci_state(
+        &mut self,
+        ci_id: CiId,
+    ) -> Result<Option<(CiState, Commit)>, Box<Error + Send + Sync>> {
+        let sql = r###"
+            SELECT ci_state, ci_commit
+            FROM ci_state
+            WHERE ci_id = ?
+        "###;
+        let entry = {
+            let mut stmt = try!(self.conn.prepare(&sql));
+            let mut rows = try!(stmt
+                .query_map(&[
+                    &ci_id.0,
+                ], |row| (
+                    CiState::from_i32(row.get::<_, i32>(0)),
+                    Commit::from(row.get::<_, String>(1)),
+                ))
+            );
+            match rows.next() {
+                Some(Err(e)) => return Err(e.into()),
+                Some(Ok(item)) => Some(item),
+                None => None,
+            }
+        };
+        Ok(entry)
     }
 }

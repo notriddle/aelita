@@ -1,8 +1,8 @@
 // This file is released under the same terms as Rust itself.
 
-use ci;
-use config::PipelineConfig;
-use db::{Db, PendingEntry, QueueEntry, RunningEntry};
+use ci::{self, CiId};
+use config::{PipelineConfig, PipelinesConfig};
+use db::{CiState, Db, PendingEntry, QueueEntry, RunningEntry};
 use std::error::Error;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
@@ -27,7 +27,7 @@ pub struct WorkerManager {
         view::Event,
         view::Message,
     >>,
-    pub pipelines: Box<PipelineConfig>,
+    pub pipelines: Box<PipelinesConfig>,
 }
 
 impl WorkerManager {
@@ -42,12 +42,12 @@ impl WorkerManager {
             WorkerThread<vcs::Event, vcs::Message>,
         >
     > {
-        let (ci, ui, vcs) = self.pipelines.workers_by_id(pipeline_id);
-        if let (Some(ci), Some(ui), Some(vcs)) = (
-            self.cis.get(ci),
+        let PipelineConfig{ci, ui, vcs, pipeline_id: _} = self.pipelines.by_pipeline_id(pipeline_id);
+        if let (Some(ui), Some(vcs)) = (
             self.uis.get(ui),
             self.vcss.get(vcs)
         ) {
+            let ci = ci.iter().flat_map(|&(id, idx)| self.cis.get(idx).map(|ci| (id, ci))).collect();
             Some(Pipeline::new(pipeline_id, ci, ui, vcs))
         } else {
             None
@@ -82,12 +82,12 @@ impl<E: Send + Clone + 'static, M: Send + Clone + 'static> WorkerThread<E, M> {
 pub struct PipelineId(pub i32);
 
 pub trait Ci {
-    fn start_build(&self, pipeline_id: PipelineId, commit: Commit);
+    fn start_build(&self, ci_id: CiId, commit: Commit);
 }
 
 impl Ci for WorkerThread<ci::Event, ci::Message> {
-    fn start_build(&self, pipeline_id: PipelineId, commit: Commit) {
-        self.send_msg.send(ci::Message::StartBuild(pipeline_id, commit))
+    fn start_build(&self, ci_id: CiId, commit: Commit) {
+        self.send_msg.send(ci::Message::StartBuild(ci_id, commit))
             .unwrap();
     }
 }
@@ -154,7 +154,7 @@ where C: Ci + 'cntx,
       V: Vcs + 'cntx
 {
     pub id: PipelineId,
-    pub ci: &'cntx C,
+    pub ci: Vec<(CiId, &'cntx C)>,
     pub ui: &'cntx U,
     pub vcs: &'cntx V,
 }
@@ -167,15 +167,15 @@ pub enum Event {
 }
 
 pub trait GetPipelineId {
-    fn pipeline_id(&self) -> PipelineId;
+    fn pipeline_id<C: PipelinesConfig + ?Sized>(&self, config: &C) -> PipelineId;
 }
 
 impl GetPipelineId for Event {
-    fn pipeline_id(&self) -> PipelineId {
+    fn pipeline_id<C: PipelinesConfig + ?Sized>(&self, config: &C) -> PipelineId {
         match *self {
-            Event::UiEvent(ref e) => e.pipeline_id(),
-            Event::CiEvent(ref e) => e.pipeline_id(),
-            Event::VcsEvent(ref e) => e.pipeline_id(),
+            Event::UiEvent(ref e) => e.pipeline_id(config),
+            Event::CiEvent(ref e) => e.pipeline_id(config),
+            Event::VcsEvent(ref e) => e.pipeline_id(config),
         }
     }
 }
@@ -187,7 +187,7 @@ where C: Ci + 'cntx,
 {
     pub fn new(
         id: PipelineId,
-        ci: &'cntx C,
+        ci: Vec<(CiId, &'cntx C)>,
         ui: &'cntx U,
         vcs: &'cntx V,
     ) -> Self {
@@ -316,10 +316,13 @@ where C: Ci + 'cntx,
                         warn!("Got merge finished after finished building!");
                     } else {
                         running.merge_commit = Some(merge_commit.clone());
-                        self.ci.start_build(
-                            pipeline_id,
-                            merge_commit.clone(),
-                        );
+                        for &(ci_id, ci) in &self.ci {
+                            try!(db.clear_ci_state(ci_id));
+                            ci.start_build(
+                                ci_id,
+                                merge_commit.clone(),
+                            );
+                        }
                         self.ui.send_result(
                             self.id,
                             running.pr.clone(),
@@ -360,11 +363,10 @@ where C: Ci + 'cntx,
                 }
             },
             Event::CiEvent(ci::Event::BuildStarted(
-                pipeline_id,
+                _ci_id,
                 building_commit,
                 url,
             )) => {
-                assert_eq!(&pipeline_id, &self.id);
                 if let Some(running) = try!(db.peek_running(self.id)) {
                     if let Some(merged_commit) = running.merge_commit {
                         if merged_commit != building_commit {
@@ -392,11 +394,10 @@ where C: Ci + 'cntx,
                 }
             },
             Event::CiEvent(ci::Event::BuildFailed(
-                pipeline_id,
+                _ci_id,
                 built_commit,
                 url,
             )) => {
-                assert_eq!(&pipeline_id, &self.id);
                 if let Some(running) = try!(db.take_running(self.id)) {
                     if let Some(ref merged_commit) = running.merge_commit {
                         if merged_commit != &built_commit {
@@ -409,6 +410,12 @@ where C: Ci + 'cntx,
                             // Put it back
                             try!(db.put_running(self.id, running.clone()));
                         } else {
+                            for &(ci_id, _) in &self.ci {
+                                if let Some((_state, commit)) = try!(db.get_ci_state(ci_id)) {
+                                    assert_eq!(built_commit, commit);
+                                    try!(db.clear_ci_state(ci_id));
+                                }
+                            }
                             self.ui.send_result(
                                 self.id,
                                 running.pr.clone(),
@@ -427,11 +434,10 @@ where C: Ci + 'cntx,
                 }
             },
             Event::CiEvent(ci::Event::BuildSucceeded(
-                pipeline_id,
+                ci_id,
                 built_commit,
                 url,
             )) => {
-                assert_eq!(&pipeline_id, &self.id);
                 if let Some(mut running) = try!(db.take_running(self.id)) {
                     if let Some(ref merged_commit) = running.merge_commit {
                         if merged_commit != &built_commit {
@@ -444,26 +450,42 @@ where C: Ci + 'cntx,
                             // Put it back.
                             try!(db.put_running(self.id, running.clone()));
                         } else {
-                            self.vcs.move_staging_to_master(
-                                self.id,
-                                merged_commit.clone(),
-                            );
-                            self.ui.send_result(
-                                self.id,
-                                running.pr.clone(),
-                                ui::Status::Success(
-                                    running.pull_commit.clone(),
+                            try!(db.set_ci_state(
+                                ci_id,
+                                CiState::Succeeded,
+                                &built_commit,
+                            ));
+                            let not_succeeded_count = self.ci.iter()
+                                .filter(|&&(ci_id, _)| retry!{{
+                                    if let Some((state, commit)) = retry_unwrap!(db.get_ci_state(ci_id)) {
+                                        assert_eq!(built_commit, commit);
+                                        state != CiState::Succeeded
+                                    } else {
+                                        true
+                                    }
+                                }}).count();
+                            if not_succeeded_count == 0 {
+                                self.vcs.move_staging_to_master(
+                                    self.id,
                                     merged_commit.clone(),
-                                    url,
-                                ),
-                            );
-                            // Put it back with it marked as built.
-                            running.built = true;
-                            try!(db.put_running(self.id, running.clone()));
+                                );
+                                self.ui.send_result(
+                                    self.id,
+                                    running.pr.clone(),
+                                    ui::Status::Success(
+                                        running.pull_commit.clone(),
+                                        merged_commit.clone(),
+                                        url,
+                                    ),
+                                );
+                                // Put it back with it marked as built.
+                                running.built = true;
+                            }
                         }
                     } else {
                         warn!("Finished building a commit that never merged");
                     }
+                    try!(db.put_running(self.id, running.clone()));
                 } else {
                     warn!("CI build succeeded event with no queued PR");
                 }
