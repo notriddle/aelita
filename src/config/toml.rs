@@ -21,22 +21,22 @@ use view;
 
 pub struct GithubBuilder {
     cis: Vec<WorkerThread<
-        ci::Event<git::Commit>,
-        ci::Message<git::Commit>,
+        ci::Event,
+        ci::Message,
     >>,
     uis: Vec<WorkerThread<
-        ui::Event<github::Pr>,
-        ui::Message<github::Pr>,
+        ui::Event,
+        ui::Message,
     >>,
     vcss: Vec<WorkerThread<
-        vcs::Event<git::Commit>,
-        vcs::Message<git::Commit>,
+        vcs::Event,
+        vcs::Message,
     >>,
     view: Option<WorkerThread<
         view::Event,
         view::Message,
     >>,
-    db: DbBox<github::Pr>,
+    db: DbBox,
     pipelines: StaticPipelineConfig,
 }
 
@@ -337,8 +337,7 @@ impl GithubBuilder {
 }
 
 impl WorkerBuilder for GithubBuilder {
-    type Pr = github::Pr;
-    fn start(self) -> (WorkerManager<Self::Pr>, DbBox<Self::Pr>) {
+    fn start(self) -> (WorkerManager, DbBox) {
         (
             WorkerManager {
                 cis: self.cis,
@@ -567,7 +566,7 @@ fn setup_github_git(
 fn setup_view(
     config: &toml::Value,
     pipelines: StaticViewPipelinesConfig
-) -> Result<view::Worker<github::Pr>, SetupError<ViewArg>> {
+) -> Result<view::Worker, SetupError<ViewArg>> {
     let auth = if let Some(auth) = config.lookup("view.auth") {
         if auth.as_table().is_none() {
             return Err(SetupError::InvalidArg(ViewArg::Auth, Ty::Table));

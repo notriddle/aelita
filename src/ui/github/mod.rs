@@ -20,17 +20,15 @@ use serde_json::{
 use std;
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::fmt::{self, Display, Formatter};
 use std::io::BufWriter;
 use std::iter;
-use std::num::ParseIntError;
-use std::str::FromStr;
 use std::sync::Mutex;
 use std::sync::mpsc::{Sender, Receiver};
-use ui::{self, comments};
+use ui::{self, comments, Pr};
 use util::USER_AGENT;
 use util::github_headers;
-use vcs::git::{Commit, Remote};
+use vcs::Commit;
+use vcs::git::ToShortString;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct TeamId(pub u32);
@@ -192,14 +190,11 @@ struct TeamAddDesc {
     repository: RepositoryDesc,
 }
 
-impl pipeline::Worker<
-    ui::Event<Pr>,
-    ui::Message<Pr>,
-> for Worker {
+impl pipeline::Worker<ui::Event, ui::Message> for Worker {
     fn run(
         &self,
-        recv_msg: Receiver<ui::Message<Pr>>,
-        mut send_event: Sender<ui::Event<Pr>>
+        recv_msg: Receiver<ui::Message>,
+        mut send_event: Sender<ui::Event>
     ) {
         crossbeam::scope(|scope| {
             let s2 = &*self;
@@ -220,7 +215,7 @@ impl pipeline::Worker<
 impl Worker {
     fn run_webhook(
         &self,
-        send_event: Sender<ui::Event<Pr>>,
+        send_event: Sender<ui::Event>,
     ) {
         let mut listener = HttpListener::new(&self.listen[..])
             .expect("webhook");
@@ -249,7 +244,7 @@ impl Worker {
         &self,
         mut req: Request,
         mut res: Response,
-        send_event: &Sender<ui::Event<Pr>>
+        send_event: &Sender<ui::Event>
     ) {
         let head = github_headers::parse(&mut req, self.secret.as_bytes());
         let (x_github_event, body) = match head {
@@ -302,7 +297,7 @@ impl Worker {
                         owner: desc.repository.owner.login,
                         repo: desc.repository.name,
                     };
-                    let pr = Pr(desc.pull_request.number);
+                    let pr = Pr::from(desc.pull_request.number.to_string());
                     let repo_pipelines =
                         match self.projects.pipelines_by_repo(&repo) {
                             Some(repo_pipelines) => repo_pipelines,
@@ -314,22 +309,16 @@ impl Worker {
                                 return;
                             }
                         };
-                    let commit = match Commit::from_str(
-                        &desc.pull_request.head.sha
-                    ) {
-                        Ok(commit) => commit,
-                        Err(e) => {
-                            warn!("Invalid commit sha with PR event: {:?}", e);
-                            return;
-                        }
-                    };
+                    let commit = Commit::from(
+                        desc.pull_request.head.sha
+                    );
                     if let Some(pipeline_id) = repo_pipelines.try_pipeline_id {
                         self.handle_pr_update(
                             &desc.action[..],
                             send_event,
                             pipeline_id,
-                            commit,
-                            pr,
+                            commit.clone(),
+                            pr.clone(),
                             desc.pull_request.title.clone(),
                             desc.pull_request.html_url.clone(),
                         );
@@ -427,7 +416,7 @@ impl Worker {
     fn handle_pr_update(
         &self,
         action: &str,
-        send_event: &Sender<ui::Event<Pr>>,
+        send_event: &Sender<ui::Event>,
         pipeline_id: PipelineId,
         commit: Commit,
         pr: Pr,
@@ -462,14 +451,14 @@ impl Worker {
 
     fn handle_pr_comment(
         &self,
-        send_event: &Sender<ui::Event<Pr>>,
+        send_event: &Sender<ui::Event>,
         desc: CommentDesc,
     ) {
         let repo = Repo{
             owner: desc.repository.owner.login,
             repo: desc.repository.name,
         };
-        let pr = Pr(desc.issue.number);
+        let pr = Pr::from(desc.issue.number.to_string());
         let repo_pipelines = match self.projects.pipelines_by_repo(&repo) {
             Some(repo_pipelines) => repo_pipelines,
             None => {
@@ -496,7 +485,7 @@ impl Worker {
                 command,
                 &desc.issue,
                 &repo_pipelines,
-                &pr,
+                pr,
             );
         } else {
             info!("Pull request comment is not a command");
@@ -505,11 +494,11 @@ impl Worker {
 
     fn handle_comment_command(
         &self,
-        send_event: &Sender<ui::Event<Pr>>,
-        command: comments::Command<Commit>,
+        send_event: &Sender<ui::Event>,
+        command: comments::Command,
         issue: &IssueCommentIssue,
         repo_pipelines: &RepoPipelines,
-        pr: &Pr,
+        pr: Pr,
     ) {
         match command {
             comments::Command::Approved(user, commit) => {
@@ -556,9 +545,9 @@ impl Worker {
     fn handle_approved_pr(
         &self,
         pipeline_id: PipelineId,
-        send_event: &Sender<ui::Event<Pr>>,
+        send_event: &Sender<ui::Event>,
         issue: &IssueCommentIssue,
-        pr: &Pr,
+        pr: Pr,
         user: &str,
         commit: Option<Commit>,
     ) {
@@ -573,7 +562,7 @@ impl Worker {
         );
         send_event.send(ui::Event::Approved(
             pipeline_id,
-            *pr,
+            pr,
             commit,
             message,
         )).expect("PR Approved: Pipeline error");
@@ -582,23 +571,23 @@ impl Worker {
     fn handle_canceled_pr(
         &self,
         pipeline_id: PipelineId,
-        send_event: &Sender<ui::Event<Pr>>,
-        pr: &Pr,
+        send_event: &Sender<ui::Event>,
+        pr: Pr,
     ) {
         send_event.send(ui::Event::Canceled(
             pipeline_id,
-            *pr,
+            pr,
         )).expect("PR Canceled: Pipeline error");
     }
 
     fn handle_message(
         &self,
-        msg: ui::Message<Pr>,
-        _: &mut Sender<ui::Event<Pr>>,
+        msg: ui::Message,
+        _: &mut Sender<ui::Event>,
     ) {
         match msg {
             ui::Message::SendResult(pipeline_id, pr, status) => {
-                let result = self.send_result_to_pr(pipeline_id, pr, &status);
+                let result = self.send_result_to_pr(pipeline_id, &pr, &status);
                 if let Err(e) = result {
                     warn!("Failed to send {:?} to pr {}: {:?}", status, pr, e)
                 }
@@ -651,8 +640,8 @@ impl Worker {
     fn send_result_to_pr(
         &self,
         pipeline_id: PipelineId,
-        pr: Pr,
-        status: &ui::Status<Pr>,
+        pr: &Pr,
+        status: &ui::Status,
     ) -> Result<(), GithubRequestError> {
         let (repo, pipeline_type) =
             match self.projects.repo_by_pipeline(pipeline_id) {
@@ -1020,34 +1009,5 @@ quick_error! {
         }
         /// Repo not found for pipeline
         Pipeline(pipeline_id: PipelineId) {}
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct Pr(u32);
-
-impl ui::Pr for Pr {
-    type C = Commit;
-    fn remote(&self) -> <Commit as ::vcs::Commit>::Remote {
-        Remote(format!("pull/{}/head", self.0))
-    }
-}
-
-impl Display for Pr {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        <u32 as Display>::fmt(&self.0, f)
-    }
-}
-
-impl FromStr for Pr {
-    type Err = ParseIntError;
-    fn from_str(s: &str) -> Result<Pr, ParseIntError> {
-        s.parse().map(|st| Pr(st))
-    }
-}
-
-impl Into<String> for Pr {
-    fn into(self) -> String {
-        self.0.to_string()
     }
 }

@@ -47,8 +47,6 @@ use pipeline::{Ci, Event, GetPipelineId, Pipeline, Ui, Vcs};
 use std::borrow::Cow;
 use std::env::args;
 use std::error::Error;
-use std::str::FromStr;
-use ui::Pr;
 
 fn main() {
     env_logger::init().unwrap();
@@ -71,11 +69,7 @@ fn main() {
     }
 }
 
-fn run_workers<B: WorkerBuilder>(builder: B) -> !
-    where B::Pr: Pr + 'static,
-          <<B::Pr as Pr>::C as FromStr>::Err: Error,
-          <B::Pr as FromStr>::Err: Error,
-{
+fn run_workers<B: WorkerBuilder>(builder: B) -> ! {
     use std::sync::mpsc::{Select, Handle};
     let (workers, mut db) = builder.start();
     debug!(
@@ -88,15 +82,15 @@ fn run_workers<B: WorkerBuilder>(builder: B) -> !
     );
     unsafe {
         let select = Select::new();
-        let mut ci_handles: Vec<Handle<ci::Event<<B::Pr as Pr>::C>>> =
+        let mut ci_handles: Vec<Handle<ci::Event>> =
             workers.cis.iter().map(|worker| {
                 select.handle(&worker.recv_event)
             }).collect();
-        let mut ui_handles: Vec<Handle<ui::Event<B::Pr>>> =
+        let mut ui_handles: Vec<Handle<ui::Event>> =
             workers.uis.iter().map(|worker| {
                 select.handle(&worker.recv_event)
             }).collect();
-        let mut vcs_handles: Vec<Handle<vcs::Event<<B::Pr as Pr>::C>>> =
+        let mut vcs_handles: Vec<Handle<vcs::Event>> =
             workers.vcss.iter().map(|worker| {
                 select.handle(&worker.recv_event)
             }).collect();
@@ -109,7 +103,7 @@ fn run_workers<B: WorkerBuilder>(builder: B) -> !
         for h in &mut ui_handles { h.add(); }
         for h in &mut vcs_handles { h.add(); }
         if let Some(ref mut h) = view_handle { h.add(); }
-        let mut pending: Option<Event<B::Pr>> = None;
+        let mut pending: Option<Event> = None;
         'outer: loop {
             if let Some(event) = pending.take() {
                 let pipeline_id = event.pipeline_id();
@@ -147,23 +141,21 @@ fn run_workers<B: WorkerBuilder>(builder: B) -> !
     }
 }
 
-struct PipelineTransaction<'cntx, P, B, U, V>
-    where P: Pr + 'static,
-          B: Ci<P::C> + 'cntx,
-          U: Ui<P> + 'cntx,
-          V: Vcs<P::C> + 'cntx {
-    pipeline: Pipeline<'cntx, P, B, U, V>,
-    event: Event<P>,
+struct PipelineTransaction<'cntx, C, U, V>
+    where C: Ci + 'cntx,
+          U: Ui + 'cntx,
+          V: Vcs + 'cntx {
+    pipeline: Pipeline<'cntx, C, U, V>,
+    event: Event,
 }
 
-impl<'cntx, P, B, U, V> db::Transaction<P>
-        for PipelineTransaction<'cntx, P, B, U, V>
-    where P: Pr + 'static,
-          B: Ci<P::C> + 'cntx,
-          U: Ui<P> + 'cntx,
-          V: Vcs<P::C> + 'cntx {
+impl<'cntx, C, U, V> db::Transaction
+        for PipelineTransaction<'cntx, C, U, V>
+    where C: Ci + 'cntx,
+          U: Ui + 'cntx,
+          V: Vcs + 'cntx {
     type Return = ();
-    fn run<D: Db<P>>(
+    fn run<D: Db>(
         mut self,
         db: &mut D
     ) -> Result<(), Box<Error + Send + Sync>> {

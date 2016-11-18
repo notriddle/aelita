@@ -5,13 +5,11 @@ pub mod twelvef;
 
 use db::DbBox;
 use pipeline::{PipelineId, WorkerManager};
-use ui::Pr;
 
 pub trait WorkerBuilder {
-    type Pr: Pr + 'static;
     fn start(
         self
-    ) -> (WorkerManager<Self::Pr>, DbBox<Self::Pr>);
+    ) -> (WorkerManager, DbBox);
 }
 
 pub trait PipelineConfig {

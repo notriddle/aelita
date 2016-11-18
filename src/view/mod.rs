@@ -19,10 +19,7 @@ use std::convert::AsRef;
 use std::error::Error;
 use std::fmt::{self, Formatter};
 use std::io::{BufWriter, Write};
-use std::marker::PhantomData;
-use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender};
-use ui::Pr;
 use view::auth::AuthManager;
 
 pub trait PipelinesConfig: Send + Sync + 'static {
@@ -34,19 +31,15 @@ pub use view::auth::{Auth, AuthRef};
 
 const THREAD_COUNT: usize = 3;
 
-pub struct Worker<P: Pr + 'static> {
+pub struct Worker {
     listen: String,
     db_build: db::Builder,
     pipelines: Box<PipelinesConfig>,
     secret: String,
     auth: Auth,
-    _pr: PhantomData<P>,
 }
 
-impl<P: Pr + 'static> Worker<P>
-    where <P::C as FromStr>::Err: Error,
-          <P as FromStr>::Err: Error,
-{
+impl Worker {
     pub fn new(
         listen: String,
         db_build: db::Builder,
@@ -60,7 +53,6 @@ impl<P: Pr + 'static> Worker<P>
             pipelines: pipelines,
             secret: secret,
             auth: auth.into(),
-            _pr: PhantomData,
         }
     }
 }
@@ -71,10 +63,7 @@ pub enum Event {}
 #[derive(Clone)]
 pub enum Message {}
 
-impl<P: Pr + 'static> pipeline::Worker<Event, Message> for Worker<P>
-    where <P::C as FromStr>::Err: Error,
-          <P as FromStr>::Err: Error,
-{
+impl pipeline::Worker<Event, Message> for Worker {
     fn run(&self, _recv: Receiver<Message>, _send: Sender<Event>) {
         let listen: &str = self.listen.as_ref();
         let secret: &str = self.secret.as_ref();
@@ -94,7 +83,6 @@ impl<P: Pr + 'static> pipeline::Worker<Event, Message> for Worker<P>
                             auth: auth,
                             secret: secret,
                         },
-                        _pr: PhantomData::<P>,
                     };
                     thread.run(recv)
                 });
@@ -111,19 +99,13 @@ impl<P: Pr + 'static> pipeline::Worker<Event, Message> for Worker<P>
     }
 }
 
-struct Thread<'a, P>
-    where P: Pr
-{
-    db: DbBox<P>,
+struct Thread<'a> {
+    db: DbBox,
     pipelines: &'a PipelinesConfig,
     auth_manager: AuthManager<'a>,
-    _pr: PhantomData<P>,
 }
 
-impl<'a, P: Pr> Thread<'a, P>
-    where <P::C as FromStr>::Err: Error,
-          <P as FromStr>::Err: Error,
-{
+impl<'a> Thread<'a> {
     fn run(&mut self, recv: spmc::Receiver<HttpStream>) {
         while let Ok(mut stream) = recv.recv() {
             let addr = stream.peer_addr()
@@ -347,13 +329,13 @@ struct InfoTransaction {
     pipeline_id: PipelineId,
 }
 
-impl<P: Pr> Transaction<P> for InfoTransaction {
+impl Transaction for InfoTransaction {
     type Return = (
-        Vec<PendingEntry<P>>,
-        Vec<QueueEntry<P>>,
-        Option<RunningEntry<P>>,
+        Vec<PendingEntry>,
+        Vec<QueueEntry>,
+        Option<RunningEntry>,
     );
-    fn run<D: Db<P>>(
+    fn run<D: Db>(
         self,
         db: &mut D
     ) -> Result<Self::Return, Box<Error + Send + Sync>> {
@@ -410,9 +392,9 @@ enum State {
     Pending,
 }
 
-fn render_entry<P: Pr>(
+fn render_entry(
     state: State,
-    entry: PendingEntry<P>,
+    entry: PendingEntry,
     t: &mut TemplateBuffer,
 ) {
     t << html!{

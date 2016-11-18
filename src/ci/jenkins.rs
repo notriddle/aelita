@@ -8,7 +8,6 @@ use serde_json::from_reader as json_from_reader;
 use std::net::TcpListener;
 use std::sync::mpsc::{Sender, Receiver};
 use util::USER_AGENT;
-use vcs::Commit;
 
 pub trait PipelinesConfig: Send + Sync + 'static {
     fn job_by_pipeline(&self, PipelineId) -> Option<Job>;
@@ -52,13 +51,11 @@ impl Worker {
     }
 }
 
-impl<C> pipeline::Worker<ci::Event<C>, ci::Message<C>> for Worker
-    where C: 'static + Commit + Sync
-{
+impl pipeline::Worker<ci::Event, ci::Message> for Worker {
     fn run(
         &self,
-        recv_msg: Receiver<ci::Message<C>>,
-        mut send_event: Sender<ci::Event<C>>
+        recv_msg: Receiver<ci::Message>,
+        mut send_event: Sender<ci::Event>
     ) {
         crossbeam::scope(|scope| {
             let s2 = &*self;
@@ -78,9 +75,9 @@ impl<C> pipeline::Worker<ci::Event<C>, ci::Message<C>> for Worker
 
 
 impl Worker {
-    fn run_listen<C: 'static + Commit + Sync>(
+    fn run_listen(
         &self,
-        send_event: Sender<ci::Event<C>>,
+        send_event: Sender<ci::Event>,
     ) {
         let listener = TcpListener::bind(&self.listen[..]).expect("TCP");
         let mut incoming = listener.incoming();
@@ -119,16 +116,7 @@ impl Worker {
                 warn!("Got result of unknown job: {}", desc.name);
             }
             for pipeline_id in pipelines {
-                let commit = match C::from_str(&desc.build.scm.commit) {
-                    Ok(commit) => commit,
-                    Err(_) => {
-                        warn!(
-                            "Result commit parse failed: {}",
-                            desc.build.scm.commit
-                        );
-                        continue;
-                    }
-                };
+                let commit = desc.build.scm.commit.clone().into();
                 if desc.build.phase == "STARTED" {
                     send_event.send(
                         ci::Event::BuildStarted(
@@ -164,10 +152,10 @@ impl Worker {
         }
     }
 
-    fn handle_message<C: 'static + Commit + Sync>(
+    fn handle_message(
         &self,
-        msg: ci::Message<C>,
-        send_event: &mut Sender<ci::Event<C>>,
+        msg: ci::Message,
+        send_event: &mut Sender<ci::Event>,
     ) {
         match msg {
             ci::Message::StartBuild(pipeline_id, commit) => {

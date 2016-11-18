@@ -62,23 +62,21 @@ fn parse_try_canceled(body: &str) -> bool {
     TRY_CANCEL_SELF.is_match(body)
 }
 
-fn parse_specific_commit<C: Commit>(body: &str) -> Option<C> {
+fn parse_specific_commit(body: &str) -> Option<Commit> {
     SPECIFIC_COMMIT.captures(body)
         .and_then(|capture| capture.at(1))
-        .and_then(|commit| C::from_str(commit).ok())
+        .map(|commit| Commit::from(commit.to_owned()))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Command<'a, C: Commit> {
-    Approved(&'a str, Option<C>),
+pub enum Command<'a> {
+    Approved(&'a str, Option<Commit>),
     Canceled,
-    TryApproved(&'a str, Option<C>),
+    TryApproved(&'a str, Option<Commit>),
     TryCanceled,
 }
 
-pub fn parse<'a, C>(body: &'a str, def_user: &'a str) -> Option<Command<'a, C>>
-    where C: Commit
-{
+pub fn parse<'a>(body: &'a str, def_user: &'a str) -> Option<Command<'a>> {
     let approved_behalf = parse_approved_behalf(body);
     let approved_default = parse_approved_default(body);
     let canceled = parse_canceled(body);
@@ -116,7 +114,7 @@ mod test {
     use super::Command;
     use vcs::git;
     fn parse<'a>(body: &'a str, def_user: &'a str)
-        -> Option<Command<'a, git::Commit>> {
+        -> Option<Command<'a>> {
         super::parse(body, def_user)
     }
     #[test] fn test_empty_comment() {
