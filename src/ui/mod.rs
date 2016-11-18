@@ -10,48 +10,69 @@ mod comments;
 
 use hyper::Url;
 use pipeline::{GetPipelineId, PipelineId};
-use std::cmp::Eq;
-use std::fmt::{Debug, Display};
-use std::str::FromStr;
-use vcs::Commit;
+use std::fmt::{self, Display};
+use vcs::{Commit, Remote};
 
 #[derive(Clone, Debug)]
-pub enum Message<P: Pr> {
-    SendResult(PipelineId, P, Status<P>)
+pub enum Message {
+    SendResult(PipelineId, Pr, Status)
 }
 
 #[derive(Clone, Debug)]
-pub enum Event<P: Pr> {
-    Approved(PipelineId, P, Option<P::C>, String),
-    Canceled(PipelineId, P),
-    Opened(PipelineId, P, P::C, String, Url),
-    Changed(PipelineId, P, P::C, String, Url),
-    Closed(PipelineId, P),
+pub enum Event {
+    Approved(PipelineId, Pr, Option<Commit>, String),
+    Canceled(PipelineId, Pr),
+    Opened(PipelineId, Pr, Commit, String, Url),
+    Changed(PipelineId, Pr, Commit, String, Url),
+    Closed(PipelineId, Pr),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Status<P: Pr> {
-    Approved(P::C),
+pub enum Status {
+    Approved(Commit),
     Invalidated,
     NoCommit,
-    Unmergeable(P::C),
-    StartingBuild(P::C, P::C),
-    Testing(P::C, P::C, Option<Url>),
-    Success(P::C, P::C, Option<Url>),
-    Failure(P::C, P::C, Option<Url>),
-    Unmoveable(P::C, P::C),
-    Completed(P::C, P::C),
+    Unmergeable(Commit),
+    StartingBuild(Commit, Commit),
+    Testing(Commit, Commit, Option<Url>),
+    Success(Commit, Commit, Option<Url>),
+    Failure(Commit, Commit, Option<Url>),
+    Unmoveable(Commit, Commit),
+    Completed(Commit, Commit),
 }
 
-/// A series of reviewable changesets and other messages
-pub trait Pr: Clone + Debug + Display + Eq + FromStr + Into<String> +
-              PartialEq + Send
-{
-    type C: Commit;
-    fn remote(&self) -> <Self::C as Commit>::Remote;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Pr(String);
+
+impl Display for Pr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt(&self.0, f)
+    }
 }
 
-impl<P: Pr> GetPipelineId for Event<P> {
+impl From<String> for Pr {
+    fn from(s: String) -> Pr {
+        Pr(s)
+    }
+}
+
+impl Into<String> for Pr {
+    fn into(self) -> String {
+        self.0
+    }
+}
+
+impl Pr {
+    pub fn remote(&self) -> Remote {
+        Remote::from(format!("pull/{}/head", self.0))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl GetPipelineId for Event {
     fn pipeline_id(&self) -> PipelineId {
         match *self {
             Event::Approved(i, _, _, _) => i,

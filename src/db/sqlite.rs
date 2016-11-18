@@ -2,25 +2,19 @@
 
 use db::{self, Db, PendingEntry, QueueEntry, RunningEntry};
 use hyper::Url;
+use pipeline::PipelineId;
 use rusqlite::{self, Connection};
 use std::convert::AsRef;
 use std::error::Error;
-use std::marker::PhantomData;
 use std::path::Path;
-use std::str::FromStr;
 use ui::Pr;
-use pipeline::PipelineId;
+use vcs::Commit;
 
-pub struct SqliteDb<P>
-    where P: Pr + Into<String> + FromStr
-{
-    _pr: PhantomData<P>,
+pub struct SqliteDb {
     conn: Connection,
 }
 
-impl<P> SqliteDb<P>
-    where P: Pr + Into<String> + FromStr
-{
+impl SqliteDb {
     pub fn open<Q: AsRef<Path>>(path: Q) -> rusqlite::Result<Self> {
         let conn = try!(Connection::open(path));
         try!(conn.execute_batch(r###"
@@ -51,18 +45,13 @@ impl<P> SqliteDb<P>
         "###));
         Ok(SqliteDb{
             conn: conn,
-            _pr: PhantomData,
         })
     }
 }
 
 
-impl<P> Db<P> for SqliteDb<P>
-    where P: Pr + Into<String> + FromStr,
-          <P::C as FromStr>::Err: ::std::error::Error,
-          <P as FromStr>::Err: ::std::error::Error,
-{
-    fn transaction<T: db::Transaction<P>>(
+impl Db for SqliteDb {
+    fn transaction<T: db::Transaction>(
         &mut self,
         t: T,
     ) -> Result<T::Return, Box<Error + Send + Sync>> {
@@ -76,7 +65,7 @@ impl<P> Db<P> for SqliteDb<P>
     fn push_queue(
         &mut self,
         pipeline_id: PipelineId,
-        queue_entry: QueueEntry<P>
+        queue_entry: QueueEntry,
     ) -> Result<(), Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
@@ -85,7 +74,7 @@ impl<P> Db<P> for SqliteDb<P>
     fn pop_queue(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Result<Option<QueueEntry<P>>, Box<Error + Send + Sync>> {
+    ) -> Result<Option<QueueEntry>, Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
         ).pop_queue(pipeline_id)
@@ -93,7 +82,7 @@ impl<P> Db<P> for SqliteDb<P>
     fn list_queue(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Result<Vec<QueueEntry<P>>, Box<Error + Send + Sync>> {
+    ) -> Result<Vec<QueueEntry>, Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
         ).list_queue(pipeline_id)
@@ -101,7 +90,7 @@ impl<P> Db<P> for SqliteDb<P>
     fn put_running(
         &mut self,
         pipeline_id: PipelineId,
-        running_entry: RunningEntry<P>
+        running_entry: RunningEntry,
     ) -> Result<(), Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
@@ -110,7 +99,7 @@ impl<P> Db<P> for SqliteDb<P>
     fn take_running(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
+    ) -> Result<Option<RunningEntry>, Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
         ).take_running(pipeline_id)
@@ -118,7 +107,7 @@ impl<P> Db<P> for SqliteDb<P>
     fn peek_running(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
+    ) -> Result<Option<RunningEntry>, Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
         ).peek_running(pipeline_id)
@@ -126,7 +115,7 @@ impl<P> Db<P> for SqliteDb<P>
     fn add_pending(
         &mut self,
         pipeline_id: PipelineId,
-        entry: PendingEntry<P>,
+        entry: PendingEntry,
     ) -> Result<(), Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
@@ -135,8 +124,8 @@ impl<P> Db<P> for SqliteDb<P>
     fn take_pending_by_pr(
         &mut self,
         pipeline_id: PipelineId,
-        pr: &P,
-    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
+        pr: &Pr,
+    ) -> Result<Option<PendingEntry>, Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
         ).take_pending_by_pr(pipeline_id, pr)
@@ -144,8 +133,8 @@ impl<P> Db<P> for SqliteDb<P>
     fn peek_pending_by_pr(
         &mut self,
         pipeline_id: PipelineId,
-        pr: &P,
-    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
+        pr: &Pr,
+    ) -> Result<Option<PendingEntry>, Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
         ).peek_pending_by_pr(pipeline_id, pr)
@@ -153,7 +142,7 @@ impl<P> Db<P> for SqliteDb<P>
     fn list_pending(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Result<Vec<PendingEntry<P>>, Box<Error + Send + Sync>> {
+    ) -> Result<Vec<PendingEntry>, Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
         ).list_pending(pipeline_id)
@@ -161,7 +150,7 @@ impl<P> Db<P> for SqliteDb<P>
     fn cancel_by_pr(
         &mut self,
         pipeline_id: PipelineId,
-        pr: &P,
+        pr: &Pr,
     ) -> Result<(), Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
@@ -170,8 +159,8 @@ impl<P> Db<P> for SqliteDb<P>
     fn cancel_by_pr_different_commit(
         &mut self,
         pipeline_id: PipelineId,
-        pr: &P,
-        commit: &P::C,
+        pr: &Pr,
+        commit: &Commit,
     ) -> Result<bool, Box<Error + Send + Sync>> {
         SqliteTransaction::new(
             try!(self.conn.transaction())
@@ -180,42 +169,32 @@ impl<P> Db<P> for SqliteDb<P>
 }
 
 
-pub struct SqliteTransaction<'a, P>
-    where P: Pr + Into<String> + FromStr
-{
-    _pr: PhantomData<P>,
+pub struct SqliteTransaction<'a> {
     conn: rusqlite::Transaction<'a>,
 }
 
-impl<'a, P> SqliteTransaction<'a, P>
-    where P: Pr + Into<String> + FromStr
-{
+impl<'a> SqliteTransaction<'a> {
     pub fn new(conn: rusqlite::Transaction<'a>) -> Self {
         SqliteTransaction {
-            _pr: PhantomData,
             conn: conn,
         }
     }
 }
 
-impl<'a, P> Db<P> for SqliteTransaction<'a, P>
-    where P: Pr + Into<String> + FromStr,
-          <P::C as FromStr>::Err: ::std::error::Error,
-          <P as FromStr>::Err: ::std::error::Error,
-{
+impl<'a> Db for SqliteTransaction<'a> {
     fn push_queue(
         &mut self,
         pipeline_id: PipelineId,
-        QueueEntry{pr, commit, message}: QueueEntry<P>,
+        QueueEntry{pr, commit, message}: QueueEntry,
     ) -> Result<(), Box<Error + Send + Sync>> {
         let sql = r###"
             INSERT INTO queue (pr, pipeline_id, pull_commit, message)
             VALUES (?, ?, ?, ?)
         "###;
         try!(self.conn.execute(sql, &[
-            &pr.into(),
+            &pr.as_str(),
             &pipeline_id.0,
-            &commit.into(),
+            &commit.as_str(),
             &message,
         ]));
         Ok(())
@@ -223,7 +202,7 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
     fn pop_queue(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Result<Option<QueueEntry<P>>, Box<Error + Send + Sync>> {
+    ) -> Result<Option<QueueEntry>, Box<Error + Send + Sync>> {
         let sql = r###"
             SELECT id, pr, pull_commit, message
             FROM queue
@@ -236,8 +215,8 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
             .query_map(&[&pipeline_id.0], |row| (
                 row.get::<_, i32>(0),
                 QueueEntry {
-                    pr: P::from_str(&row.get::<_, String>(1)).unwrap(),
-                    commit: P::C::from_str(&row.get::<_, String>(2)).unwrap(),
+                    pr: Pr::from(row.get::<_, String>(1)),
+                    commit: Commit::from(row.get::<_, String>(2)),
                     message: row.get::<_, String>(3),
                 },
             )));
@@ -258,7 +237,7 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
     fn list_queue(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Result<Vec<QueueEntry<P>>, Box<Error + Send + Sync>> {
+    ) -> Result<Vec<QueueEntry>, Box<Error + Send + Sync>> {
         let sql = r###"
             SELECT pr, pull_commit, message
             FROM queue
@@ -267,8 +246,8 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
         "###;
         let mut stmt = try!(self.conn.prepare(&sql));
         let rows = try!(stmt.query_map(&[&pipeline_id.0], |row| QueueEntry {
-                pr: P::from_str(&row.get::<_, String>(0)).unwrap(),
-                commit: P::C::from_str(&row.get::<_, String>(1)).unwrap(),
+                pr: Pr::from(row.get::<_, String>(0)),
+                commit: Commit::from(row.get::<_, String>(1)),
                 message: row.get::<_, String>(2),
             })
         );
@@ -291,7 +270,7 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
             message,
             canceled,
             built,
-        }: RunningEntry<P>
+        }: RunningEntry
     ) -> Result<(), Box<Error + Send + Sync>> {
         let sql = r###"
             REPLACE INTO running
@@ -309,9 +288,9 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
         "###;
         try!(self.conn.execute(sql, &[
             &pipeline_id.0,
-            &<P as Into<String>>::into(pr),
-            &<P::C as Into<String>>::into(pull_commit),
-            &merge_commit.map(|m| <P::C as Into<String>>::into(m)),
+            &pr.as_str(),
+            &pull_commit.as_str(),
+            &merge_commit.as_ref().map(Commit::as_str),
             &message,
             &canceled,
             &built,
@@ -321,7 +300,7 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
     fn take_running(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
+    ) -> Result<Option<RunningEntry>, Box<Error + Send + Sync>> {
         let sql = r###"
             SELECT pr, pull_commit, merge_commit, message, canceled, built
             FROM running
@@ -331,12 +310,10 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
             let mut stmt = try!(self.conn.prepare(&sql));
             let mut rows = try!(stmt
                 .query_map(&[&pipeline_id.0], |row| RunningEntry {
-                    pr: P::from_str(&row.get::<_, String>(0)[..]).unwrap(),
-                    pull_commit: P::C::from_str(&row.get::<_, String>(1)[..])
-                        .unwrap(),
-                    merge_commit: row.get::<_, Option<String>>(2).map(
-                        |v| P::C::from_str(&v).unwrap()
-                    ),
+                    pr: Pr::from(row.get::<_, String>(0)),
+                    pull_commit: Commit::from(row.get::<_, String>(1)),
+                    merge_commit: row.get::<_, Option<String>>(2)
+                        .map(Commit::from),
                     message: row.get(3),
                     canceled: row.get(4),
                     built: row.get(5),
@@ -357,7 +334,7 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
     fn peek_running(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Result<Option<RunningEntry<P>>, Box<Error + Send + Sync>> {
+    ) -> Result<Option<RunningEntry>, Box<Error + Send + Sync>> {
         let sql = r###"
             SELECT pr, pull_commit, merge_commit, message, canceled, built
             FROM running
@@ -366,12 +343,10 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
         let mut stmt = try!(self.conn.prepare(&sql));
         let mut rows = try!(stmt
             .query_map(&[&pipeline_id.0], |row| RunningEntry {
-                pr: P::from_str(&row.get::<_, String>(0)[..]).unwrap(),
-                pull_commit: P::C::from_str(&row.get::<_, String>(1)[..])
-                    .unwrap(),
-                merge_commit: row.get::<_, Option<String>>(2).map(
-                    |v| P::C::from_str(&v).unwrap()
-                ),
+                pr: Pr::from(row.get::<_, String>(0)),
+                pull_commit: Commit::from(row.get::<_, String>(1)),
+                merge_commit: row.get::<_, Option<String>>(2)
+                    .map(Commit::from),
                 message: row.get(3),
                 canceled: row.get(4),
                 built: row.get(5),
@@ -386,14 +361,14 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
     fn add_pending(
         &mut self,
         pipeline_id: PipelineId,
-        entry: PendingEntry<P>,
+        entry: PendingEntry,
     ) -> Result<(), Box<Error + Send + Sync>> {
         let sql = r###"
             DELETE FROM pending WHERE pipeline_id = ? AND pr = ?
         "###;
         self.conn.execute(sql, &[
             &pipeline_id.0,
-            &<P as Into<String>>::into(entry.pr.clone()),
+            &entry.pr.as_str(),
         ]).expect("Remove pending entry");
         let sql = r###"
             INSERT INTO pending (pipeline_id, pr, pull_commit, title, url)
@@ -401,8 +376,8 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
         "###;
         try!(self.conn.execute(sql, &[
             &pipeline_id.0,
-            &<P as Into<String>>::into(entry.pr.clone()),
-            &<P::C as Into<String>>::into(entry.commit.clone()),
+            &entry.pr.as_str(),
+            &entry.commit.as_str(),
             &entry.title,
             &entry.url.as_str(),
         ]));
@@ -411,8 +386,8 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
     fn take_pending_by_pr(
         &mut self,
         pipeline_id: PipelineId,
-        pr: &P,
-    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
+        pr: &Pr,
+    ) -> Result<Option<PendingEntry>, Box<Error + Send + Sync>> {
         let sql = r###"
             SELECT id, pr, pull_commit, title, url
             FROM pending
@@ -423,11 +398,10 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
             let mut rows = try!(stmt
                 .query_map(&[
                     &pipeline_id.0,
-                    &<P as Into<String>>::into(pr.clone()),
+                    &pr.as_str(),
                 ], |row| (row.get::<_, i64>(0), PendingEntry {
-                    pr: P::from_str(&row.get::<_, String>(1)[..]).unwrap(),
-                    commit: P::C::from_str(&row.get::<_, String>(2)[..])
-                        .unwrap(),
+                    pr: Pr::from(row.get::<_, String>(1)),
+                    commit: Commit::from(row.get::<_, String>(2)),
                     title: row.get(3),
                     url: Url::parse(&row.get::<_, String>(4)).unwrap(),
                 }))
@@ -451,8 +425,8 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
     fn peek_pending_by_pr(
         &mut self,
         pipeline_id: PipelineId,
-        pr: &P,
-    ) -> Result<Option<PendingEntry<P>>, Box<Error + Send + Sync>> {
+        pr: &Pr,
+    ) -> Result<Option<PendingEntry>, Box<Error + Send + Sync>> {
         let sql = r###"
             SELECT pr, pull_commit, title, url
             FROM pending
@@ -462,11 +436,10 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
         let mut rows = try!(stmt
             .query_map(&[
                 &pipeline_id.0,
-                &<P as Into<String>>::into(pr.clone()),
+                &pr.as_str(),
             ], |row| PendingEntry {
-                pr: P::from_str(&row.get::<_, String>(0)[..]).unwrap(),
-                commit: P::C::from_str(&row.get::<_, String>(1)[..])
-                    .unwrap(),
+                pr: Pr::from(row.get::<_, String>(0)),
+                commit: Commit::from(row.get::<_, String>(1)),
                 title: row.get(2),
                 url: Url::parse(&row.get::<_, String>(3)).unwrap(),
             })
@@ -480,7 +453,7 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
     fn list_pending(
         &mut self,
         pipeline_id: PipelineId,
-    ) -> Result<Vec<PendingEntry<P>>, Box<Error + Send + Sync>> {
+    ) -> Result<Vec<PendingEntry>, Box<Error + Send + Sync>> {
         let sql = r###"
             SELECT pr, pull_commit, title, url
             FROM pending
@@ -488,9 +461,8 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
         "###;
         let mut stmt = try!(self.conn.prepare(&sql));
         let rows = try!(stmt.query_map(&[&pipeline_id.0], |row| PendingEntry {
-                pr: P::from_str(&row.get::<_, String>(0)[..]).unwrap(),
-                commit: P::C::from_str(&row.get::<_, String>(1)[..])
-                    .unwrap(),
+                pr: Pr::from(row.get::<_, String>(0)),
+                commit: Commit::from(row.get::<_, String>(1)),
                 title: row.get(2),
                 url: Url::parse(&row.get::<_, String>(3)).unwrap(),
             })
@@ -507,7 +479,7 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
     fn cancel_by_pr(
         &mut self,
         pipeline_id: PipelineId,
-        pr: &P,
+        pr: &Pr,
     ) -> Result<(), Box<Error + Send + Sync>> {
         let sql = r###"
             UPDATE running
@@ -516,7 +488,7 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
         "###;
         try!(self.conn.execute(sql, &[
             &pipeline_id.0,
-            &<P as Into<String>>::into(pr.clone()),
+            &pr.as_str(),
         ]));
         let sql = r###"
             DELETE FROM queue
@@ -524,15 +496,15 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
         "###;
         try!(self.conn.execute(sql, &[
             &pipeline_id.0,
-            &<P as Into<String>>::into(pr.clone()),
+            &pr.as_str(),
         ]));
         Ok(())
     }
     fn cancel_by_pr_different_commit(
         &mut self,
         pipeline_id: PipelineId,
-        pr: &P,
-        commit: &P::C,
+        pr: &Pr,
+        commit: &Commit,
     ) -> Result<bool, Box<Error + Send + Sync>> {
         let sql = r###"
             UPDATE running
@@ -541,8 +513,8 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
         "###;
         let affected_rows_running = try!(self.conn.execute(sql, &[
             &pipeline_id.0,
-            &<P as Into<String>>::into(pr.clone()),
-            &<P::C as Into<String>>::into(commit.clone()),
+            &pr.as_str(),
+            &commit.as_str(),
         ]));
         let sql = r###"
             DELETE FROM queue
@@ -550,8 +522,8 @@ impl<'a, P> Db<P> for SqliteTransaction<'a, P>
         "###;
         let affected_rows_queue = try!(self.conn.execute(sql, &[
             &pipeline_id.0,
-            &<P as Into<String>>::into(pr.clone()),
-            &<P::C as Into<String>>::into(commit.clone()),
+            &pr.as_str(),
+            &commit.as_str(),
         ]));
         Ok(affected_rows_queue != 0 || affected_rows_running != 0)
     }

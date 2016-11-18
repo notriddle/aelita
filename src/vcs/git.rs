@@ -2,18 +2,13 @@
 
 use pipeline::{self, PipelineId};
 use std;
-use std::convert::{From, Into};
-use std::fmt::{self, Debug, Display, Formatter};
+use std::convert::From;
 use std::fs::File;
 use std::io::Read;
-use std::num::ParseIntError;
 use std::path::Path;
 use std::process::Command;
-use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
-use util::crypto::SHA1_LEN;
-use vcs;
-use void::Void;
+use vcs::{self, Commit};
 
 pub trait PipelinesConfig: Send + Sync + 'static {
     fn repo_by_pipeline(&self, PipelineId) -> Option<Repo>;
@@ -51,11 +46,11 @@ impl Worker {
     }
 }
 
-impl pipeline::Worker<vcs::Event<Commit>, vcs::Message<Commit>> for Worker {
+impl pipeline::Worker<vcs::Event, vcs::Message> for Worker {
     fn run(
         &self,
-        recv_msg: Receiver<vcs::Message<Commit>>,
-        mut send_event: Sender<vcs::Event<Commit>>
+        recv_msg: Receiver<vcs::Message>,
+        mut send_event: Sender<vcs::Event>
     ) {
         loop {
             self.handle_message(
@@ -85,8 +80,8 @@ macro_rules! try_cmd {
 impl Worker {
     fn handle_message(
         &self,
-        msg: vcs::Message<Commit>,
-        send_event: &mut Sender<vcs::Event<Commit>>
+        msg: vcs::Message,
+        send_event: &mut Sender<vcs::Event>
     ) {
         match msg {
             vcs::Message::MergeToStaging(
@@ -101,7 +96,7 @@ impl Worker {
                 };
                 info!("Merging {} ...", pull_commit);
                 match self.merge_to_staging(
-                    &repo, pull_commit, &message, &remote.0
+                    &repo, &pull_commit, &message, &remote.0
                 ) {
                     Err(e) => {
                         warn!(
@@ -133,7 +128,7 @@ impl Worker {
                     }
                 };
                 info!("Moving {} ...", merge_commit);
-                match self.move_staging_to_master(&repo, merge_commit) {
+                match self.move_staging_to_master(&repo, &merge_commit) {
                     Err(e) => {
                         warn!(
                             "Failed to move {} to master: {:?}",
@@ -159,7 +154,7 @@ impl Worker {
     fn merge_to_staging(
         &self,
         repo: &Repo,
-        pull_commit: Commit,
+        pull_commit: &Commit,
         message: &str,
         remote: &str,
     ) -> Result<Commit, GitError> {
@@ -208,12 +203,12 @@ impl Worker {
                 .join(&repo.staging_branch)
         )).read_to_string(&mut commit_string));
         commit_string = commit_string.replace("\n", "").replace("\r", "");
-        Commit::from_str(&commit_string).map_err(|e| e.into())
+        Ok(Commit::from(commit_string))
     }
     fn move_staging_to_master(
         &self,
         repo: &Repo,
-        merge_commit: Commit,
+        merge_commit: &Commit,
     ) -> Result<(), GitError> {
         if !repo.push_to_master {
             return Ok(());
@@ -277,78 +272,14 @@ quick_error! {
     }
 }
 
-// A git commit is a SHA1 sum. A SHA1 sum is a 160-bit number.
-#[derive(Copy, Clone, Eq, PartialEq, Serialize)]
-pub struct Commit(u64, u64, u32);
+pub trait ToShortString {
+    fn to_short_string(&self) -> String;
+}
 
-impl Commit {
-    pub fn to_short_string(&self) -> String {
+impl ToShortString for Commit {
+    fn to_short_string(&self) -> String {
         let mut string = self.to_string();
         string.truncate(5);
         string
-    }
-}
-
-impl vcs::Commit for Commit {
-    type Remote = Remote;
-}
-
-impl Display for Commit {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{:016x}{:016x}{:08x}", self.0, self.1, self.2)
-    }
-}
-
-impl Debug for Commit {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Commit({:016x}{:016x}{:08x})", self.0, self.1, self.2)
-    }
-}
-
-// It should be easy to get from hexadecimal.
-
-impl FromStr for Commit {
-    type Err = ParseIntError;
-    fn from_str(mut s: &str) -> Result<Commit, ParseIntError> {
-        if s.len() != SHA1_LEN {
-            s = "THIS_IS_NOT_A_NUMBER_BUT_I_CANT_MAKE_PARSEINTERROR_MYSELF";
-        }
-        let a = try!(u64::from_str_radix(&s[0..16], 16));
-        let b = try!(u64::from_str_radix(&s[16..32], 16));
-        let c = try!(u32::from_str_radix(&s[32..40], 16));
-        Ok(Commit(a, b, c))
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Serialize)]
-pub struct Remote(pub String);
-impl Display for Remote {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl Debug for Remote {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Remote({})", self.0)
-    }
-}
-
-impl FromStr for Remote {
-    type Err = Void;
-    fn from_str(s: &str) -> Result<Remote, Void> {
-        Ok(Remote(s.to_owned()))
-    }
-}
-
-impl Into<String> for Commit {
-    fn into(self) -> String {
-        self.to_string()
-    }
-}
-
-impl Into<String> for Remote {
-    fn into(self) -> String {
-        self.0
     }
 }

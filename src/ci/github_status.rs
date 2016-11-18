@@ -11,10 +11,8 @@ use hyper::status::StatusCode;
 use pipeline::{self, PipelineId};
 use serde_json::{from_slice as json_from_slice};
 use std::io::BufWriter;
-use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
 use util::github_headers;
-use vcs::git::Commit;
 
 pub trait PipelinesConfig: Send + Sync + 'static {
     fn repo_by_pipeline(&self, PipelineId) -> Option<Repo>;
@@ -72,13 +70,13 @@ struct OwnerDesc {
 }
 
 impl pipeline::Worker<
-    ci::Event<Commit>,
-    ci::Message<Commit>,
+    ci::Event,
+    ci::Message,
 > for Worker {
     fn run(
         &self,
-        recv_msg: Receiver<ci::Message<Commit>>,
-        mut send_event: Sender<ci::Event<Commit>>
+        recv_msg: Receiver<ci::Message>,
+        mut send_event: Sender<ci::Event>
     ) {
         crossbeam::scope(|scope| {
             let s2 = &*self;
@@ -99,7 +97,7 @@ impl pipeline::Worker<
 impl Worker {
     fn run_webhook(
         &self,
-        send_event: Sender<ci::Event<Commit>>,
+        send_event: Sender<ci::Event>,
     ) {
         let mut listener = HttpListener::new(&self.listen[..])
             .expect("webhook");
@@ -128,7 +126,7 @@ impl Worker {
         &self,
         mut req: Request,
         mut res: Response,
-        send_event: &Sender<ci::Event<Commit>>
+        send_event: &Sender<ci::Event>
     ) {
         let head = github_headers::parse(&mut req, self.secret.as_bytes());
         let (x_github_event, body) = match head {
@@ -155,17 +153,7 @@ impl Worker {
                         warn!("Got status for unknown repo: {:?}", repo);
                     }
                     for pipeline_id in pipelines {
-                        let commit = match Commit::from_str(&desc.sha) {
-                            Ok(commit) => commit,
-                            Err(e) => {
-                                warn!(
-                                    "Invalid commit {}: {:?}",
-                                    desc.sha,
-                                    e
-                                );
-                                return;
-                            }
-                        };
+                        let commit = desc.sha.clone().into();
                         let event = match &desc.state[..] {
                             "pending" => ci::Event::BuildStarted(
                                 pipeline_id,
@@ -240,8 +228,8 @@ impl Worker {
 
     fn handle_message(
         &self,
-        msg: ci::Message<Commit>,
-        _: &mut Sender<ci::Event<Commit>>,
+        msg: ci::Message,
+        _: &mut Sender<ci::Event>,
     ) {
         match msg {
             // The build is triggered by Github itself on push.

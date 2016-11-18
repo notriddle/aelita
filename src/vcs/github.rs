@@ -8,11 +8,9 @@ use rest::{authorization, Authorization, Client, Mime};
 use serde_json;
 use std;
 use std::convert::From;
-use std::str::FromStr;
 use std::sync::mpsc::{Sender, Receiver};
 use util::USER_AGENT;
-use vcs;
-use vcs::git::Commit;
+use vcs::{self, Commit};
 
 pub trait PipelinesConfig: Send + Sync + 'static {
     fn repo_by_pipeline(&self, PipelineId) -> Option<Repo>;
@@ -49,11 +47,11 @@ impl Worker {
     }
 }
 
-impl pipeline::Worker<vcs::Event<Commit>, vcs::Message<Commit>> for Worker {
+impl pipeline::Worker<vcs::Event, vcs::Message> for Worker {
     fn run(
         &self,
-        recv_msg: Receiver<vcs::Message<Commit>>,
-        mut send_event: Sender<vcs::Event<Commit>>
+        recv_msg: Receiver<vcs::Message>,
+        mut send_event: Sender<vcs::Event>
     ) {
         loop {
             self.handle_message(
@@ -67,15 +65,15 @@ impl pipeline::Worker<vcs::Event<Commit>, vcs::Message<Commit>> for Worker {
 impl Worker {
     fn handle_message(
         &self,
-        msg: vcs::Message<Commit>,
-        send_event: &mut Sender<vcs::Event<Commit>>
+        msg: vcs::Message,
+        send_event: &mut Sender<vcs::Event>,
     ) {
         match msg {
             vcs::Message::MergeToStaging(
                 pipeline_id, pull_commit, message, _
             ) => {
                 match self.merge_to_staging(
-                    pipeline_id, pull_commit, message
+                    pipeline_id, &pull_commit, message
                 ) {
                     Ok(merge_commit) => {
                         send_event.send(vcs::Event::MergedToStaging(
@@ -94,7 +92,7 @@ impl Worker {
                 }
             }
             vcs::Message::MoveStagingToMaster(pipeline_id, merge_commit) => {
-                match self.move_to_master(pipeline_id, merge_commit) {
+                match self.move_to_master(pipeline_id, &merge_commit) {
                     Ok(()) => {
                         send_event.send(vcs::Event::MovedToMaster(
                             pipeline_id,
@@ -115,7 +113,7 @@ impl Worker {
     fn move_to_master(
         &self,
         pipeline_id: PipelineId,
-        merge_commit: Commit,
+        merge_commit: &Commit,
     ) -> Result<(), GithubRequestError> {
         let repo = match self.pipelines.repo_by_pipeline(pipeline_id) {
             Some(repo) => repo,
@@ -185,7 +183,7 @@ impl Worker {
     fn merge_to_staging(
         &self,
         pipeline_id: PipelineId,
-        pull_commit: Commit,
+        pull_commit: &Commit,
         message: String,
     ) -> Result<Commit, GithubRequestError> {
         let repo = match self.pipelines.repo_by_pipeline(pipeline_id) {
@@ -329,7 +327,7 @@ impl Worker {
             return Err(GithubRequestError::HttpStatus(resp.http.status));
         }
         let resp_desc: MergeResultDesc = try!(resp.json());
-        Ok(try!(Commit::from_str(&resp_desc.sha)))
+        Ok(Commit::from(resp_desc.sha))
     }
     fn accept() -> Accept {
         let mime: Mime = "application/vnd.github.v3+json"

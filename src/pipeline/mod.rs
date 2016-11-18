@@ -4,25 +4,24 @@ use ci;
 use config::PipelineConfig;
 use db::{Db, PendingEntry, QueueEntry, RunningEntry};
 use std::error::Error;
-use std::marker::PhantomData;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use ui::{self, Pr};
-use vcs::{self, Commit};
+use vcs::{self, Commit, Remote};
 use view;
 
-pub struct WorkerManager<P: Pr + 'static> {
+pub struct WorkerManager {
     pub cis: Vec<WorkerThread<
-        ci::Event<<P as Pr>::C>,
-        ci::Message<<P as Pr>::C>,
+        ci::Event,
+        ci::Message,
     >>,
     pub uis: Vec<WorkerThread<
-        ui::Event<P>,
-        ui::Message<P>,
+        ui::Event,
+        ui::Message,
     >>,
     pub vcss: Vec<WorkerThread<
-        vcs::Event<<P as Pr>::C>,
-        vcs::Message<<P as Pr>::C>,
+        vcs::Event,
+        vcs::Message,
     >>,
     pub view: Option<WorkerThread<
         view::Event,
@@ -31,17 +30,16 @@ pub struct WorkerManager<P: Pr + 'static> {
     pub pipelines: Box<PipelineConfig>,
 }
 
-impl<P: Pr + 'static> WorkerManager<P> {
+impl WorkerManager {
     pub fn pipeline_by_id<'a>(
         &'a self,
         pipeline_id: PipelineId,
     ) -> Option<
         Pipeline<
             'a,
-            P,
-            WorkerThread<ci::Event<<P as Pr>::C>, ci::Message<<P as Pr>::C>>,
-            WorkerThread<ui::Event<P>, ui::Message<P>>,
-            WorkerThread<vcs::Event<<P as Pr>::C>, vcs::Message<<P as Pr>::C>>,
+            WorkerThread<ci::Event, ci::Message>,
+            WorkerThread<ui::Event, ui::Message>,
+            WorkerThread<vcs::Event, vcs::Message>,
         >
     > {
         let (ci, ui, vcs) = self.pipelines.workers_by_id(pipeline_id);
@@ -83,47 +81,45 @@ impl<E: Send + Clone + 'static, M: Send + Clone + 'static> WorkerThread<E, M> {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct PipelineId(pub i32);
 
-pub trait Ci<C: Commit> {
-    fn start_build(&self, pipeline_id: PipelineId, commit: C);
+pub trait Ci {
+    fn start_build(&self, pipeline_id: PipelineId, commit: Commit);
 }
 
-impl<C: Commit> Ci<C> for WorkerThread<ci::Event<C>, ci::Message<C>> {
-    fn start_build(&self, pipeline_id: PipelineId, commit: C) {
+impl Ci for WorkerThread<ci::Event, ci::Message> {
+    fn start_build(&self, pipeline_id: PipelineId, commit: Commit) {
         self.send_msg.send(ci::Message::StartBuild(pipeline_id, commit))
             .unwrap();
     }
 }
 
-pub trait Ui<P: Pr> {
-    fn send_result(&self, PipelineId, P, ui::Status<P>);
+pub trait Ui {
+    fn send_result(&self, PipelineId, Pr, ui::Status);
 }
 
-impl<P> Ui<P> for WorkerThread<ui::Event<P>, ui::Message<P>>
-where P: Pr
-{
+impl Ui for WorkerThread<ui::Event, ui::Message> {
     fn send_result(
         &self,
         pipeline_id: PipelineId,
-        pr: P,
-        status: ui::Status<P>,
+        pr: Pr,
+        status: ui::Status,
     ) {
         self.send_msg.send(ui::Message::SendResult(pipeline_id, pr, status))
             .unwrap();
     }
 }
 
-pub trait Vcs<C: Commit> {
-    fn merge_to_staging(&self, PipelineId, C, String, C::Remote);
-    fn move_staging_to_master(&self, PipelineId, C);
+pub trait Vcs {
+    fn merge_to_staging(&self, PipelineId, Commit, String, Remote);
+    fn move_staging_to_master(&self, PipelineId, Commit);
 }
 
-impl<C: Commit> Vcs<C> for WorkerThread<vcs::Event<C>, vcs::Message<C>> {
+impl Vcs for WorkerThread<vcs::Event, vcs::Message> {
     fn merge_to_staging(
         &self,
         pipeline_id: PipelineId,
-        pull_commit: C,
+        pull_commit: Commit,
         message: String,
-        remote: C::Remote
+        remote: Remote,
     ) {
         self.send_msg.send(vcs::Message::MergeToStaging(
             pipeline_id, pull_commit, message, remote
@@ -132,7 +128,7 @@ impl<C: Commit> Vcs<C> for WorkerThread<vcs::Event<C>, vcs::Message<C>> {
     fn move_staging_to_master(
         &self,
         pipeline_id: PipelineId,
-        merge_commit: C
+        merge_commit: Commit,
     ) {
         self.send_msg.send(vcs::Message::MoveStagingToMaster(
             pipeline_id, merge_commit
@@ -143,41 +139,38 @@ impl<C: Commit> Vcs<C> for WorkerThread<vcs::Event<C>, vcs::Message<C>> {
 // TODO: When Rust starts enforcing lifetimes on type aliases,
 // use a type alias with something like:
 //
-//     pub type WorkerPipeline<'cntx, P: Pr + 'static> =
+//     pub type WorkerPipeline<'cntx> =
 //         Pipeline<
 //             'cntx,
-//             P,
-//             WorkerThread<ci::Event<P::C>, ci::Message<P::C>>,
-//             WorkerThread<ui::Event<P::C, P>, ui::Message<P>>,
-//             WorkerThread<vcs::Event<P::C>, vcs::Message<P>>,
+//             WorkerThread<ci::Event, ci::Message>,
+//             WorkerThread<ui::Event, ui::Message>,
+//             WorkerThread<vcs::Event, vcs::Message>,
 //         >;
 //
 // That way, we can avoid all these ackward generics in main.
-pub struct Pipeline<'cntx, P, B, U, V>
-where P: Pr + 'static,
-      B: Ci<P::C> + 'cntx,
-      U: Ui<P> + 'cntx,
-      V: Vcs<P::C> + 'cntx
+pub struct Pipeline<'cntx, C, U, V>
+where C: Ci + 'cntx,
+      U: Ui + 'cntx,
+      V: Vcs + 'cntx
 {
-    pub _pr: PhantomData<P>,
     pub id: PipelineId,
-    pub ci: &'cntx B,
+    pub ci: &'cntx C,
     pub ui: &'cntx U,
     pub vcs: &'cntx V,
 }
 
 #[derive(Clone)]
-pub enum Event<P: Pr + 'static> {
-    UiEvent(ui::Event<P>),
-    VcsEvent(vcs::Event<P::C>),
-    CiEvent(ci::Event<P::C>),
+pub enum Event {
+    UiEvent(ui::Event),
+    VcsEvent(vcs::Event),
+    CiEvent(ci::Event),
 }
 
 pub trait GetPipelineId {
     fn pipeline_id(&self) -> PipelineId;
 }
 
-impl<P: Pr + 'static> GetPipelineId for Event<P> {
+impl GetPipelineId for Event {
     fn pipeline_id(&self) -> PipelineId {
         match *self {
             Event::UiEvent(ref e) => e.pipeline_id(),
@@ -187,30 +180,28 @@ impl<P: Pr + 'static> GetPipelineId for Event<P> {
     }
 }
 
-impl<'cntx, P, B, U, V> Pipeline<'cntx, P, B, U, V>
-where P: Pr + 'static,
-      B: Ci<P::C> + 'cntx,
-      U: Ui<P> + 'cntx,
-      V: Vcs<P::C> + 'cntx
+impl<'cntx, C, U, V> Pipeline<'cntx, C, U, V>
+where C: Ci + 'cntx,
+      U: Ui + 'cntx,
+      V: Vcs + 'cntx
 {
     pub fn new(
         id: PipelineId,
-        ci: &'cntx B,
+        ci: &'cntx C,
         ui: &'cntx U,
         vcs: &'cntx V,
     ) -> Self {
         Pipeline {
-            _pr: PhantomData,
             id: id,
             ci: ci,
             ui: ui,
             vcs: vcs,
         }
     }
-    pub fn handle_event<D: Db<P>>(
+    pub fn handle_event<D: Db>(
         &mut self,
         db: &mut D,
-        event: Event<P>,
+        event: Event,
     ) -> Result<(), Box<Error + Send + Sync>> {
         match event {
             Event::UiEvent(ui::Event::Approved(

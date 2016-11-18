@@ -4,32 +4,71 @@ pub mod git;
 pub mod github;
 
 use pipeline::{GetPipelineId, PipelineId};
-use std::cmp::Eq;
-use std::fmt::{Debug, Display};
-use std::str::FromStr;
+use std::fmt::{self, Display};
 
 #[derive(Clone, Debug)]
-pub enum Message<C: Commit> {
-    MergeToStaging(PipelineId, C, String, C::Remote),
-    MoveStagingToMaster(PipelineId, C),
+pub enum Message {
+    MergeToStaging(PipelineId, Commit, String, Remote),
+    MoveStagingToMaster(PipelineId, Commit),
 }
 
 #[derive(Clone, Debug)]
-pub enum Event<C: Commit> {
-    MergedToStaging(PipelineId, C, C),
-    FailedMergeToStaging(PipelineId, C),
-    MovedToMaster(PipelineId, C),
-    FailedMoveToMaster(PipelineId, C),
+pub enum Event {
+    MergedToStaging(PipelineId, Commit, Commit),
+    FailedMergeToStaging(PipelineId, Commit),
+    MovedToMaster(PipelineId, Commit),
+    FailedMoveToMaster(PipelineId, Commit),
 }
 
-/// A reviewable changeset
-pub trait Commit: Clone + Debug + Display + Eq + FromStr + Into<String> +
-                  PartialEq + Send {
-    type Remote: Clone + Debug + Display + Eq + FromStr + Into<String> +
-                 PartialEq + Send;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Commit(String);
+
+impl Display for Commit {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt(&self.0, f)
+    }
 }
 
-impl<C: Commit + 'static> GetPipelineId for Event<C> {
+impl From<String> for Commit {
+    fn from(s: String) -> Commit {
+        Commit(s)
+    }
+}
+
+impl Into<String> for Commit {
+    fn into(self) -> String {
+        self.0
+    }
+}
+
+impl Commit {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Remote(String);
+
+impl From<String> for Remote {
+    fn from(s: String) -> Remote {
+        Remote(s)
+    }
+}
+
+impl Into<String> for Remote {
+    fn into(self) -> String {
+        self.0
+    }
+}
+
+impl Display for Remote {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl GetPipelineId for Event {
     fn pipeline_id(&self) -> PipelineId {
         match *self {
         	Event::MergedToStaging(i, _, _) => i,

@@ -8,18 +8,18 @@ use pipeline::{GetPipelineId, PipelineId};
 use vcs::Commit;
 
 #[derive(Clone, Debug)]
-pub enum Message<C: Commit> {
-    StartBuild(PipelineId, C),
+pub enum Message {
+    StartBuild(PipelineId, Commit),
 }
 
 #[derive(Clone, Debug)]
-pub enum Event<C: Commit> {
-    BuildStarted(PipelineId, C, Option<Url>),
-    BuildSucceeded(PipelineId, C, Option<Url>),
-    BuildFailed(PipelineId, C, Option<Url>),
+pub enum Event {
+    BuildStarted(PipelineId, Commit, Option<Url>),
+    BuildSucceeded(PipelineId, Commit, Option<Url>),
+    BuildFailed(PipelineId, Commit, Option<Url>),
 }
 
-impl<C: Commit + 'static> GetPipelineId for Event<C> {
+impl GetPipelineId for Event {
     fn pipeline_id(&self) -> PipelineId {
         match *self {
             Event::BuildStarted(i, _, _) => i,

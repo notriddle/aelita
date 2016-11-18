@@ -13,22 +13,22 @@ use view;
 
 pub struct GithubBuilder {
     ci: WorkerThread<
-        ci::Event<git::Commit>,
-        ci::Message<git::Commit>,
+        ci::Event,
+        ci::Message,
     >,
     ui: WorkerThread<
-        ui::Event<github::Pr>,
-        ui::Message<github::Pr>,
+        ui::Event,
+        ui::Message,
     >,
     vcs: WorkerThread<
-        vcs::Event<git::Commit>,
-        vcs::Message<git::Commit>,
+        vcs::Event,
+        vcs::Message,
     >,
     view: WorkerThread<
         view::Event,
         view::Message,
     >,
-    db: DbBox<github::Pr>,
+    db: DbBox,
     pipelines: Box<PipelineConfig>,
 }
 
@@ -88,8 +88,7 @@ impl GithubBuilder {
 }
 
 impl WorkerBuilder for GithubBuilder {
-    type Pr = github::Pr;
-    fn start(self) -> (WorkerManager<Self::Pr>, DbBox<Self::Pr>) {
+    fn start(self) -> (WorkerManager, DbBox) {
         (
             WorkerManager {
                 cis: vec![self.ci],
@@ -104,7 +103,7 @@ impl WorkerBuilder for GithubBuilder {
 }
 
 fn setup_github<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
-    WorkerThread<ui::Event<github::Pr>, ui::Message<github::Pr>>,
+    WorkerThread<ui::Event, ui::Message>,
     GithubBuilderError,
 > {
     let pj_key = try_env!(env, "PROJECT_DB", ProjectDb);
@@ -135,7 +134,7 @@ fn setup_github<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
 }
 
 fn setup_ci<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
-    WorkerThread<ci::Event<git::Commit>, ci::Message<git::Commit>>,
+    WorkerThread<ci::Event, ci::Message>,
     GithubBuilderError,
 > {
     match &try_env!(env, "CI_TYPE", CiType)[..] {
@@ -146,7 +145,7 @@ fn setup_ci<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
 }
 
 fn setup_jenkins<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
-    WorkerThread<ci::Event<git::Commit>, ci::Message<git::Commit>>,
+    WorkerThread<ci::Event, ci::Message>,
     GithubBuilderError,
 > {
     let pj_key = try_env!(env, "PROJECT_DB", ProjectDb);
@@ -172,7 +171,7 @@ fn setup_jenkins<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
 }
 
 fn setup_github_status<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
-    WorkerThread<ci::Event<git::Commit>, ci::Message<git::Commit>>,
+    WorkerThread<ci::Event, ci::Message>,
     GithubBuilderError,
 > {
     let pj_key = try_env!(env, "PROJECT_DB", ProjectDb);
@@ -194,7 +193,7 @@ fn setup_github_status<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
 }
 
 fn setup_vcs<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
-    WorkerThread<vcs::Event<git::Commit>, vcs::Message<git::Commit>>,
+    WorkerThread<vcs::Event, vcs::Message>,
     GithubBuilderError,
 > {
     match &try_env!(env, "VCS_TYPE", VcsType)[..] {
@@ -205,7 +204,7 @@ fn setup_vcs<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
 }
 
 fn setup_github_git<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
-    WorkerThread<vcs::Event<git::Commit>, vcs::Message<git::Commit>>,
+    WorkerThread<vcs::Event, vcs::Message>,
     GithubBuilderError,
 > {
     let pj_key = try_env!(env, "PROJECT_DB", ProjectDb);
@@ -227,7 +226,7 @@ fn setup_github_git<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
 }
 
 fn setup_git<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
-    WorkerThread<vcs::Event<git::Commit>, vcs::Message<git::Commit>>,
+    WorkerThread<vcs::Event, vcs::Message>,
     GithubBuilderError,
 > {
     let pj_key = try_env!(env, "PROJECT_DB", ProjectDb);
@@ -269,7 +268,7 @@ fn setup_view<F: Fn(&str) -> Option<String>>(env: &F) -> Result<
         db::Builder::Postgres(d) =>
             Box::new(try!(postgres::ViewPipelinesConfig::new(d))),
     };
-    Ok(WorkerThread::start(view::Worker::<github::Pr>::new(
+    Ok(WorkerThread::start(view::Worker::new(
         try_env!(env, "VIEW_LISTEN", ViewListen),
         db_builder,
         pipelines,
