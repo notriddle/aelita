@@ -110,9 +110,8 @@ pub fn parse<'a>(body: &'a str, def_user: &'a str) -> Option<Command<'a>> {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
     use super::Command;
-    use vcs::git;
+    use vcs::Commit;
     fn parse<'a>(body: &'a str, def_user: &'a str)
         -> Option<Command<'a>> {
         super::parse(body, def_user)
@@ -191,9 +190,9 @@ mod test {
             parse("r+ (a4068472538866d0b603793539875dac1f962c2e)", "luser"),
             Some(Command::Approved(
                 "luser",
-                Some(git::Commit::from_str(
-                    "a4068472538866d0b603793539875dac1f962c2e"
-                ).unwrap())
+                Some(Commit::from(
+                    "a4068472538866d0b603793539875dac1f962c2e".to_owned()
+                ))
             ))
         );
     }
