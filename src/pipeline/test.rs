@@ -246,6 +246,7 @@ impl Ci for RefCell<MemoryCi> {
     }
 }
 
+
 fn handle_event(
     ui: &mut RefCell<MemoryUi>,
     vcs: &mut RefCell<MemoryVcs>,
@@ -257,6 +258,22 @@ fn handle_event(
         ui: ui,
         vcs: vcs,
         ci: vec![(CiId(1), ci)],
+        id: PipelineId(0),
+    }.handle_event(db, event).unwrap();
+}
+
+fn handle_event_2_ci(
+    ui: &mut RefCell<MemoryUi>,
+    vcs: &mut RefCell<MemoryVcs>,
+    ci1: &mut RefCell<MemoryCi>,
+    ci2: &mut RefCell<MemoryCi>,
+    db: &mut MemoryDb,
+    event: Event,
+) {
+    Pipeline{
+        ui: ui,
+        vcs: vcs,
+        ci: vec![(CiId(1), ci1), (CiId(2), ci2)],
         id: PipelineId(0),
     }.handle_event(db, event).unwrap();
 }
@@ -1621,6 +1638,690 @@ fn handle_runthrough_next_commit() {
         (memory_pr_a(), ui::Status::Completed(
             memory_commit_a(),
             memory_commit_b(),
+        )),
+        (memory_pr_c(), ui::Status::StartingBuild(
+            memory_commit_c(),
+            memory_commit_d(),
+        )),
+    ]);
+}
+
+#[test]
+fn handle_runthrough_2_ci() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci1 = MemoryCi::new();
+    let mut ci2 = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    // Add a first item to the queue. This one should be built first.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::UiEvent(ui::Event::Approved(
+            PipelineId(0),
+            memory_pr_a(),
+            Some(memory_commit_a()),
+            "MSG!".to_owned(),
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_a(),
+        merge_commit: None,
+        pr: memory_pr_a(),
+        canceled: false,
+        built: false,
+        message: "MSG!".to_owned(),
+    }));
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_a()));
+    assert!(vcs.borrow().master.is_none());
+    assert!(ci1.borrow().build.is_none());
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+    ]);
+    // Add a second item to the queue. Since the first is not done merging
+    // into the staging area, the build state should not have changed.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::UiEvent(ui::Event::Approved(
+            PipelineId(0),
+            memory_pr_c(),
+            Some(memory_commit_c()),
+            "Message!".to_owned(),
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_a(),
+        merge_commit: None,
+        pr: memory_pr_a(),
+        canceled: false,
+        built: false,
+        message: "MSG!".to_owned(),
+    }));
+    assert_eq!(db.queue.len(), 1);
+    // The first is now done merging. It should now be sent to the CI.
+    vcs.borrow_mut().staging = Some(memory_commit_b());
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::VcsEvent(vcs::Event::MergedToStaging(
+            PipelineId(0),
+            memory_commit_a(),
+            memory_commit_b(),
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_a(),
+        merge_commit: Some(memory_commit_b()),
+        pr: memory_pr_a(),
+        canceled: false,
+        built: false,
+        message: "MSG!".to_owned(),
+    }));
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_b()));
+    assert!(vcs.borrow().master.is_none());
+    assert_eq!(ci1.borrow().build, Some(memory_commit_b()));
+    assert_eq!(ci2.borrow().build, Some(memory_commit_b()));
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+    ]);
+    // The first CI successfully built it. It should still be running.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::CiEvent(ci::Event::BuildSucceeded(
+            CiId(1),
+            memory_commit_b(),
+            None,
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_a(),
+        merge_commit: Some(memory_commit_b()),
+        pr: memory_pr_a(),
+        canceled: false,
+        built: false,
+        message: "MSG!".to_owned(),
+    }));
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_b()));
+    assert!(vcs.borrow().master.is_none());
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+    ]);
+    // The second CI successfully built it. It should now be moved to master.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::CiEvent(ci::Event::BuildSucceeded(
+            CiId(2),
+            memory_commit_b(),
+            None,
+        ))
+    );
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_b()));
+    assert_eq!(vcs.borrow().master, Some(memory_commit_b()));
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+        (memory_pr_a(), ui::Status::Success(
+            memory_commit_a(),
+            memory_commit_b(),
+            None,
+        )),
+    ]);
+    // It has been successfully moved to master. The next build should
+    // start, and this one should be reported complete.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::VcsEvent(vcs::Event::MovedToMaster(
+            PipelineId(0),
+            memory_commit_b()
+        ))
+    );
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_c()));
+    assert_eq!(vcs.borrow().master, Some(memory_commit_b()));
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+        (memory_pr_a(), ui::Status::Success(
+            memory_commit_a(),
+            memory_commit_b(),
+            None,
+        )),
+        (memory_pr_a(), ui::Status::Completed(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+    ]);
+    // The second one is now merged into staging; let's start building.
+    vcs.borrow_mut().staging = Some(memory_commit_d());
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::VcsEvent(vcs::Event::MergedToStaging(
+            PipelineId(0),
+            memory_commit_c(),
+            memory_commit_d(),
+        ))
+    );
+    assert_eq!(ci1.borrow().build, Some(memory_commit_d()));
+    assert_eq!(ci2.borrow().build, Some(memory_commit_d()));
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+        (memory_pr_a(), ui::Status::Success(
+            memory_commit_a(),
+            memory_commit_b(),
+            None,
+        )),
+        (memory_pr_a(), ui::Status::Completed(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+        (memory_pr_c(), ui::Status::StartingBuild(
+            memory_commit_c(),
+            memory_commit_d(),
+        )),
+    ]);
+}
+
+#[test]
+fn handle_runthrough_2_ci_first_failed() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci1 = MemoryCi::new();
+    let mut ci2 = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    // Add a first item to the queue. This one should be built first.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::UiEvent(ui::Event::Approved(
+            PipelineId(0),
+            memory_pr_a(),
+            Some(memory_commit_a()),
+            "MSG!".to_owned(),
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_a(),
+        merge_commit: None,
+        pr: memory_pr_a(),
+        canceled: false,
+        built: false,
+        message: "MSG!".to_owned(),
+    }));
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_a()));
+    assert!(vcs.borrow().master.is_none());
+    assert!(ci1.borrow().build.is_none());
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+    ]);
+    // Add a second item to the queue. Since the first is not done merging
+    // into the staging area, the build state should not have changed.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::UiEvent(ui::Event::Approved(
+            PipelineId(0),
+            memory_pr_c(),
+            Some(memory_commit_c()),
+            "Message!".to_owned(),
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_a(),
+        merge_commit: None,
+        pr: memory_pr_a(),
+        canceled: false,
+        built: false,
+        message: "MSG!".to_owned(),
+    }));
+    assert_eq!(db.queue.len(), 1);
+    // The first is now done merging. It should now be sent to the CI.
+    vcs.borrow_mut().staging = Some(memory_commit_b());
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::VcsEvent(vcs::Event::MergedToStaging(
+            PipelineId(0),
+            memory_commit_a(),
+            memory_commit_b(),
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_a(),
+        merge_commit: Some(memory_commit_b()),
+        pr: memory_pr_a(),
+        canceled: false,
+        built: false,
+        message: "MSG!".to_owned(),
+    }));
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_b()));
+    assert!(vcs.borrow().master.is_none());
+    assert_eq!(ci1.borrow().build, Some(memory_commit_b()));
+    assert_eq!(ci2.borrow().build, Some(memory_commit_b()));
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+    ]);
+    // The first CI failed. It should start the second one, stopping the first.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::CiEvent(ci::Event::BuildFailed(
+            CiId(1),
+            memory_commit_b(),
+            None,
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_c(),
+        merge_commit: None,
+        pr: memory_pr_c(),
+        canceled: false,
+        built: false,
+        message: "Message!".to_owned(),
+    }));
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_c()));
+    assert!(vcs.borrow().master.is_none());
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+        (memory_pr_a(), ui::Status::Failure(
+            memory_commit_a(),
+            memory_commit_b(),
+            None,
+        )),
+    ]);
+    // The second CI successfully built it. It should not affect the state of anything.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::CiEvent(ci::Event::BuildSucceeded(
+            CiId(2),
+            memory_commit_b(),
+            None,
+        ))
+    );
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_c()));
+    assert!(vcs.borrow().master.is_none());
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+        (memory_pr_a(), ui::Status::Failure(
+            memory_commit_a(),
+            memory_commit_b(),
+            None,
+        )),
+    ]);
+    // The second one is now merged into staging; let's start building.
+    vcs.borrow_mut().staging = Some(memory_commit_d());
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::VcsEvent(vcs::Event::MergedToStaging(
+            PipelineId(0),
+            memory_commit_c(),
+            memory_commit_d(),
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_c(),
+        merge_commit: Some(memory_commit_d()),
+        pr: memory_pr_c(),
+        canceled: false,
+        built: false,
+        message: "Message!".to_owned(),
+    }));
+    assert_eq!(ci1.borrow().build, Some(memory_commit_d()));
+    assert_eq!(ci2.borrow().build, Some(memory_commit_d()));
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+        (memory_pr_a(), ui::Status::Failure(
+            memory_commit_a(),
+            memory_commit_b(),
+            None,
+        )),
+        (memory_pr_c(), ui::Status::StartingBuild(
+            memory_commit_c(),
+            memory_commit_d(),
+        )),
+    ]);
+}
+
+#[test]
+fn handle_runthrough_2_ci_second_failed() {
+    let mut ui = MemoryUi::new();
+    let mut vcs = MemoryVcs::new();
+    let mut ci1 = MemoryCi::new();
+    let mut ci2 = MemoryCi::new();
+    let mut db = MemoryDb::new();
+    // Add a first item to the queue. This one should be built first.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::UiEvent(ui::Event::Approved(
+            PipelineId(0),
+            memory_pr_a(),
+            Some(memory_commit_a()),
+            "MSG!".to_owned(),
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_a(),
+        merge_commit: None,
+        pr: memory_pr_a(),
+        canceled: false,
+        built: false,
+        message: "MSG!".to_owned(),
+    }));
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_a()));
+    assert!(vcs.borrow().master.is_none());
+    assert!(ci1.borrow().build.is_none());
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+    ]);
+    // Add a second item to the queue. Since the first is not done merging
+    // into the staging area, the build state should not have changed.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::UiEvent(ui::Event::Approved(
+            PipelineId(0),
+            memory_pr_c(),
+            Some(memory_commit_c()),
+            "Message!".to_owned(),
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_a(),
+        merge_commit: None,
+        pr: memory_pr_a(),
+        canceled: false,
+        built: false,
+        message: "MSG!".to_owned(),
+    }));
+    assert_eq!(db.queue.len(), 1);
+    // The first is now done merging. It should now be sent to the CI.
+    vcs.borrow_mut().staging = Some(memory_commit_b());
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::VcsEvent(vcs::Event::MergedToStaging(
+            PipelineId(0),
+            memory_commit_a(),
+            memory_commit_b(),
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_a(),
+        merge_commit: Some(memory_commit_b()),
+        pr: memory_pr_a(),
+        canceled: false,
+        built: false,
+        message: "MSG!".to_owned(),
+    }));
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_b()));
+    assert!(vcs.borrow().master.is_none());
+    assert_eq!(ci1.borrow().build, Some(memory_commit_b()));
+    assert_eq!(ci2.borrow().build, Some(memory_commit_b()));
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+    ]);
+    // The first CI succeeded.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::CiEvent(ci::Event::BuildSucceeded(
+            CiId(1),
+            memory_commit_b(),
+            None,
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_a(),
+        merge_commit: Some(memory_commit_b()),
+        pr: memory_pr_a(),
+        canceled: false,
+        built: false,
+        message: "MSG!".to_owned(),
+    }));
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_b()));
+    assert!(vcs.borrow().master.is_none());
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+    ]);
+    // The second CI failed. It should start on the second PR.
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::CiEvent(ci::Event::BuildFailed(
+            CiId(2),
+            memory_commit_b(),
+            None,
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_c(),
+        merge_commit: None,
+        pr: memory_pr_c(),
+        canceled: false,
+        built: false,
+        message: "Message!".to_owned(),
+    }));
+    assert_eq!(vcs.borrow().staging, Some(memory_commit_c()));
+    assert!(vcs.borrow().master.is_none());
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+        (memory_pr_a(), ui::Status::Failure(
+            memory_commit_a(),
+            memory_commit_b(),
+            None,
+        )),
+    ]);
+    // The second one is now merged into staging; let's start building.
+    vcs.borrow_mut().staging = Some(memory_commit_d());
+    handle_event_2_ci(
+        &mut ui,
+        &mut vcs,
+        &mut ci1,
+        &mut ci2,
+        &mut db,
+        Event::VcsEvent(vcs::Event::MergedToStaging(
+            PipelineId(0),
+            memory_commit_c(),
+            memory_commit_d(),
+        ))
+    );
+    assert_eq!(db.running, Some(RunningEntry{
+        pull_commit: memory_commit_c(),
+        merge_commit: Some(memory_commit_d()),
+        pr: memory_pr_c(),
+        canceled: false,
+        built: false,
+        message: "Message!".to_owned(),
+    }));
+    assert_eq!(ci1.borrow().build, Some(memory_commit_d()));
+    assert_eq!(ci2.borrow().build, Some(memory_commit_d()));
+    assert_eq!(ui.borrow().results, vec![
+        (memory_pr_a(), ui::Status::Approved(
+            memory_commit_a(),
+        )),
+        (memory_pr_c(), ui::Status::Approved(
+            memory_commit_c(),
+        )),
+        (memory_pr_a(), ui::Status::StartingBuild(
+            memory_commit_a(),
+            memory_commit_b(),
+        )),
+        (memory_pr_a(), ui::Status::Failure(
+            memory_commit_a(),
+            memory_commit_b(),
+            None,
         )),
         (memory_pr_c(), ui::Status::StartingBuild(
             memory_commit_c(),
