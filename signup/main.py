@@ -93,16 +93,27 @@ class GithubProjects(Base):
 class GithubStatusPipelines(Base):
     __tablename__ = 'twelvef_github_status_pipelines'
 
-    pipeline_id = Column(Integer, primary_key=True)
+    ci_id = Column(Integer, primary_key=True)
     owner = Column(String(200))
     repo = Column(String(200))
     context = Column(String(200))
 
-    def __init__(self, pipeline_id, owner, repo, context):
-        self.pipeline_id = pipeline_id
+    def __init__(self, ci_id, owner, repo, context):
+        self.ci_id = ci_id
         self.owner = owner
         self.repo = repo
         self.context = context
+
+
+class PipelineCi(Base):
+    __tablename__ = 'twelvef_config_pipeline_ci'
+
+    pipeline_id = Column(Integer, primary_key=True)
+    ci_id = Column(Integer)
+
+    def __init__(self, pipeline_id, ci_id):
+        self.ci_id = ci_id
+        self.pipeline_id = pipeline_id
 
 
 class GithubGitPipelines(Base):
@@ -248,13 +259,18 @@ def manage():
             if request.args.get('edit') and \
                     request.args.get('edit') == str(repo['id']):
                 edit = repo_def
-                on_status = GithubStatusPipelines.query \
-                    .filter_by(pipeline_id=on_repo.pipeline_id) \
-                    .first()
+                cis = PipelineCi.query.filter_by(pipeline_id=pipeline_id)
+                contexts = ""
+                for ci in cis:
+                    on_status = GithubStatusPipelines.query \
+                        .filter_by(ci_id=ci.ci_id) \
+                        .first()
+                    if contexts != "": contexts = contexts + ","
+                    contexts = contexts + on_status.context
                 on_git = GithubGitPipelines.query \
                     .filter_by(pipeline_id=on_repo.pipeline_id) \
                     .first()
-                edit['context'] = on_status.context
+                edit['contexts'] = contexts
                 edit['master_branch'] = on_git.master_branch
                 edit['staging_branch'] = on_git.staging_branch
     # Order: <me> <other users> <orgs>
@@ -286,8 +302,18 @@ def add_repo(repo, context):
     # Add repository to our database
     pipeline = Pipeline(None, repo['full_name'])
     db_session.add(pipeline)
+    status = GithubStatusPipelines(
+        None,
+        repo['owner']['login'],
+        repo['name'],
+        context
+    )
+    db_session.add(status)
     db_session.flush()
     pipeline_id = pipeline.pipeline_id
+    ci_id = status.ci_id
+    ci = PipelineCi(pipeline_id, ci_id)
+    db_session.add(ci)
     on_repo = GithubProjects(
         pipeline_id,
         None,
@@ -295,13 +321,6 @@ def add_repo(repo, context):
         repo['name']
     )
     db_session.add(on_repo)
-    status = GithubStatusPipelines(
-        pipeline_id,
-        repo['owner']['login'],
-        repo['name'],
-        context
-    )
-    db_session.add(status)
     git = GithubGitPipelines(
         pipeline_id,
         repo['owner']['login'],
@@ -368,10 +387,13 @@ def remove_repo(repo, on_repo):
     db_session.delete(on_repo)
     pipeline = Pipeline.query.filter_by(pipeline_id=pipeline_id).first()
     if not pipeline is None: db_session.delete(pipeline)
-    status = GithubStatusPipelines.query \
-            .filter_by(pipeline_id=pipeline_id) \
-            .first();
-    if not status is None: db_session.delete(status)
+    cis = PipelineCi.query.filter_by(pipeline_id=pipeline_id)
+    for ci in cis:
+        status = GithubStatusPipelines.query \
+                .filter_by(ci_id=ci.ci_id) \
+                .first();
+        if not status is None: db_session.delete(status)
+        db_session.delete(ci)
     git = GithubGitPipelines.query \
             .filter_by(pipeline_id=pipeline_id) \
             .first();
@@ -403,12 +425,20 @@ def remove_repo(repo, on_repo):
 
 def edit_repo(project):
     user = get_user()
-    # Remove from our database
     pipeline_id = project.pipeline_id
-    status = GithubStatusPipelines.query \
-            .filter_by(pipeline_id=pipeline_id) \
-            .first();
-    status.context = request.form['context']
+    cis = PipelineCi.query.filter_by(pipeline_id=pipeline_id)
+    for ci in cis:
+        db_session.delete(ci)
+        status = GithubStatusPipelines.query \
+                .filter_by(ci_id=ci.ci_id) \
+                .first();
+        db_session.delete(status)
+    for context in request.form['contexts'].split(",").replace(" ",""):
+        status = GithubStatusPipelines(None, project.owner, project.repo, context)
+        db_session.add(status)
+        db_session.flush()
+        ci = PipelineCi(pipeline_id, status.ci_id)
+        db_session.add(ci)
     git = GithubGitPipelines.query \
             .filter_by(pipeline_id=pipeline_id) \
             .first();

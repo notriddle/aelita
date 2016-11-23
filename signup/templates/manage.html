@@ -66,13 +66,15 @@
 <form action="" method="POST">
 <table class=blank aria-role="main">
 <tr>
-<td align=right><label for=context>Required context</label></td>
-<td width="100%"><input
-    type=text
-    name=context
-    id=context
-    value="{{ edit.context }}"
-></td>
+<td align=right><label for=contexts>Required context(s)</label></td>
+<td width="100%">
+    <input
+        type=text
+        name="contexts"
+        id="contexts"
+        value="{{ edit.contexts }}"
+    >
+</td>
 </tr>
 <tr>
 <td align=right><label for=master>Master branch</label></td>
