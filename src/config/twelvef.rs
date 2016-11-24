@@ -794,7 +794,7 @@ mod postgres {
                 );
                 CREATE TABLE IF NOT EXISTS twelvef_config_pipeline_ci (
                     ci_id SERIAL PRIMARY KEY,
-                    pipeline_id SERIAL
+                    pipeline_id INTEGER
                 );
             "###));
             Ok(result)
