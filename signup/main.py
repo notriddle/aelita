@@ -259,7 +259,7 @@ def manage():
             if request.args.get('edit') and \
                     request.args.get('edit') == str(repo['id']):
                 edit = repo_def
-                cis = PipelineCi.query.filter_by(pipeline_id=pipeline_id)
+                cis = PipelineCi.query.filter_by(pipeline_id=on_repo.pipeline_id)
                 contexts = ""
                 for ci in cis:
                     on_status = GithubStatusPipelines.query \
@@ -433,7 +433,7 @@ def edit_repo(project):
                 .filter_by(ci_id=ci.ci_id) \
                 .first();
         db_session.delete(status)
-    for context in request.form['contexts'].split(",").replace(" ",""):
+    for context in request.form['contexts'].replace(" ","").split(","):
         status = GithubStatusPipelines(None, project.owner, project.repo, context)
         db_session.add(status)
         db_session.flush()
